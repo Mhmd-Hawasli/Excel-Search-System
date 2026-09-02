@@ -72,7 +72,7 @@ detail → app/(protected)/records/[id] reads ONLY original sf_*/data values; re
 ### Setup & commands
 
 ```bash
-cp .env.example .env        # then set SESSION_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD
+cp .env.example .env        # then set ADMIN_USERNAME, ADMIN_PASSWORD
 docker compose up -d        # OR use a local PostgreSQL 16+ (what this machine actually does)
 npm install
 npm run db:push             # prisma db push + prisma/search-indexes.sql (pg_trgm + 11 GIN indexes)
@@ -89,7 +89,7 @@ npm run dev                 # http://localhost:3000
 | `npm run db:migrate` | `prisma migrate deploy` (preferred for a stable server) |
 | `npm run db:seed` | Arabic seed data (2 groups, 2 files, 4 records, cross-file person link) |
 
-**Env vars** (`.env`, gitignored): `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `NEXT_PUBLIC_APP_NAME`. Defaults `admin` / `admin123` are documented as **development-only**.
+**Env vars** (`.env`, gitignored): `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_APP_NAME`. Defaults `admin` / `admin123` are documented as **development-only**. As of 2026-09-02, `SESSION_SECRET` is no longer used: Web Crypto PBKDF2 derives a cached HMAC key from the credentials; changing credentials invalidates existing sessions. Both server scripts bind to `0.0.0.0`; LAN clients can sign in independently using the configured credentials over HTTP or HTTPS.
 
 ---
 
@@ -120,7 +120,7 @@ Also: `app/(protected)/error.tsx` (per-page error boundary), `app/global-error.t
 
 | Endpoint | Method | Source | Purpose |
 |---|---|---|---|
-| `/api/auth/login` | POST | `app/api/auth/login/route.ts` | Timing-safe credential check → signed `excel_archive_session` cookie (httpOnly, sameSite=lax, secure in prod, 12h). |
+| `/api/auth/login` | POST | `app/api/auth/login/route.ts` | Timing-safe credential check → signed `excel_archive_session` cookie (httpOnly, sameSite=lax, Secure for HTTPS including forwarded HTTPS, 12h). |
 | `/api/auth/logout` | POST | `app/api/auth/logout/route.ts` | Clears the session (header logout button posts here). |
 | `/api/workbooks/inspect` | POST | `app/api/workbooks/inspect/route.ts` | Saves upload to `tmp/uploads/<uuid>.xlsx`, returns sheet names. |
 | `/api/workbooks/sheet` | POST | `app/api/workbooks/sheet/route.ts` | Headers + 20-row preview + signature for the chosen sheet. |

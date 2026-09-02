@@ -34,7 +34,7 @@
 
 - لا مستخدمين ولا أدوار ولا تسجيل ولا استعادة كلمة مرور ولا جدول مستخدمين.
 - اسم مستخدم وكلمة مرور وحيدان من `ADMIN_USERNAME` و`ADMIN_PASSWORD`، بقيم افتراضية `admin` و`admin123` موثقة في `.env.example`.
-- صفحة دخول عربية تنشئ cookie جلسة موقّعة، `httpOnly` و`sameSite=lax` و`secure` في الإنتاج.
+- صفحة دخول عربية تنشئ cookie جلسة موقّعة، `httpOnly` و`sameSite=lax` و`secure` عند استخدام HTTPS؛ تدعم HTTP على الشبكة المحلية حتى في الإنتاج. يعتمد الدخول على `ADMIN_USERNAME` و`ADMIN_PASSWORD` دون إعداد `SESSION_SECRET`، ويُشتق مفتاح التوقيع تلقائياً من بيانات الدخول.
 - middleware يحمي جميع صفحات التطبيق ونقاط API عدا صفحة/إجراء الدخول والملفات العامة اللازمة، ويحتوي الرأس على تسجيل خروج.
 
 ### 2.4 التطبيع العربي
@@ -304,7 +304,7 @@ The normative algorithm, matching semantics, and all fourteen mandatory bidirect
 - 2026-08-31 — Use UUID strings rather than auto-increment IDs so backup/restore can preserve stable references without sequence repair.
 - 2026-08-31 — Add `mapping_templates`, which is required behavior but absent from the supplied table list; the JSON mapping preserves dynamic header keys.
 - 2026-08-31 — Keep the requested local Next.js/PostgreSQL/auth architecture. Cloud Sites hosting and D1 are incompatible with the explicit PostgreSQL, raw TCP, Excel streaming, and local-network deployment requirements.
-- 2026-08-31 — Use signed HMAC session payloads with `jose` and a required `SESSION_SECRET`; defaults are allowed only in development and documented as insecure.
+- 2026-08-31 — Originally used signed HMAC sessions with `jose` and `SESSION_SECRET`; superseded on 2026-09-02 by the user's request to require only username/password for LAN access. The signing key now derives from those credentials, cookies support HTTP LAN access in production, and dev/start explicitly bind to all interfaces.
 - 2026-08-31 — Represent background work with a persisted DB job plus an in-process worker and local temp workbook. This supports navigating away/back without introducing a separate service.
 - 2026-08-31 — Seed categories, groups, files and records through Prisma with Arabic examples; never seed production automatically.
 - 2026-08-31 — Reject a selected sheet with duplicate non-empty header labels. JSONB keys and reusable header-keyed templates cannot represent two exact identical headers without data loss; the Arabic error asks the administrator to make headers unique in Excel.

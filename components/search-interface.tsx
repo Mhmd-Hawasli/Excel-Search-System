@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   LoaderCircle,
   Search,
 } from "lucide-react";
@@ -405,6 +406,31 @@ export function SearchInterface({
           </div>
         ),
       }),
+      helper.display({
+        id: "open_in_new_tab",
+        header: () => <span className="sr-only">فتح في علامة تبويب جديدة</span>,
+        enableSorting: false,
+        cell: (info) => (
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-primary"
+          >
+            <a
+              href={`/records/${info.row.original.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="فتح في علامة تبويب جديدة"
+              aria-label={`فتح ${info.row.original.sfFullName || "السجل"} في علامة تبويب جديدة`}
+              onClick={(event) => event.stopPropagation()}
+              onAuxClick={(event) => event.stopPropagation()}
+            >
+              <ExternalLink className="size-4" aria-hidden="true" />
+            </a>
+          </Button>
+        ),
+      }),
     ],
     [debounced],
   );
@@ -539,16 +565,25 @@ export function SearchInterface({
                     {headerGroup.headers.map((header) => (
                       <th
                         key={header.id}
-                        className="p-0 text-right font-bold"
+                        className={
+                          header.column.id === "open_in_new_tab"
+                            ? "w-14 p-0 text-right font-bold"
+                            : "p-0 text-right font-bold"
+                        }
                         aria-sort={
-                          sorting?.key === header.column.id
-                            ? sorting.direction === "asc"
-                              ? "ascending"
-                              : "descending"
-                            : "none"
+                          header.column.columnDef.enableSorting === false
+                            ? undefined
+                            : sorting?.key === header.column.id
+                              ? sorting.direction === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : "none"
                         }
                       >
-                        {header.isPlaceholder ? null : (
+                        {header.isPlaceholder ? null : header.column.columnDef.enableSorting ===
+                          false ? (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        ) : (
                           <button
                             type="button"
                             className="group flex w-full items-center gap-2 p-3 text-right transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
@@ -596,8 +631,11 @@ export function SearchInterface({
                     className="cursor-pointer border-t transition hover:bg-muted/50 focus:bg-muted focus:outline-none"
                     onClick={() => router.push(`/records/${row.original.id}`)}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ")
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
                         router.push(`/records/${row.original.id}`);
+                      }
                     }}
                   >
                     {row.getVisibleCells().map((cell) => (
