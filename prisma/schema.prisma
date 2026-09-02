@@ -139,7 +139,7 @@ model Record {
   sfFatherName            String?  @map("sf_father_name")
   sfLastName              String?  @map("sf_last_name")
   sfFullName              String?  @map("sf_full_name")
-  sfNationalId            String?  @map("sf_national_id")
+  sfNationalId            BigInt?  @map("sf_national_id")
   sfShamCash              BigInt?  @map("sf_sham_cash")
   sfPersonalNo            String?  @map("sf_personal_no")
   sfMotherName            String?  @map("sf_mother_name")

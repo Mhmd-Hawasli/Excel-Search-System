@@ -1,14 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { digitsOnly, matchesNormalizedText, matchesNumeric, nationalIdAsBigInt, normalizeNationalId, normalizeQuery, normalizeStored } from "./arabic";
+import {
+  digitsOnly,
+  matchesNormalizedText,
+  matchesNumeric,
+  nationalIdAsBigInt,
+  normalizeNationalId,
+  normalizeQuery,
+  normalizeStored,
+} from "./arabic";
 
 describe("Arabic normalization mandatory matching cases", () => {
   it.each([
-    ["احمد", "أحمد"], ["احمد", "إحمد"], ["احمد", "آحمد"],
-    ["فاطمه", "فاطمة"], ["فاطمة", "فاطمه"],
-    ["مصطفي", "مصطفى"], ["يحيى", "يحيي"],
-    ["عبدالله", "عبد الله"], ["عبد الله", "عبدالله"],
-    ["قاسم", "القاسم"], ["القاسم", "قاسم"],
-    ["احمد محمد", "أحمد علي محمد"], ["الله", "عبدالله"],
+    ["احمد", "أحمد"],
+    ["احمد", "إحمد"],
+    ["احمد", "آحمد"],
+    ["فاطمه", "فاطمة"],
+    ["فاطمة", "فاطمه"],
+    ["مصطفي", "مصطفى"],
+    ["يحيى", "يحيي"],
+    ["عبدالله", "عبد الله"],
+    ["عبد الله", "عبدالله"],
+    ["قاسم", "القاسم"],
+    ["القاسم", "قاسم"],
+    ["احمد محمد", "أحمد علي محمد"],
+    ["الله", "عبدالله"],
     ["مُحَمَّــد", "محمد"],
   ])("matches query %s against stored value %s", (query, stored) => {
     expect(matchesNormalizedText(query, stored)).toBe(true);
@@ -29,6 +44,6 @@ describe("normalization helpers", () => {
     expect(digitsOnly(" ١٢-۳ ")).toBe("123");
     expect(normalizeNationalId("123")).toBe("00000000123");
     expect(nationalIdAsBigInt("00000000123")).toBe(123n);
-    expect(nationalIdAsBigInt("123456789012")).toBeNull();
+    expect(nationalIdAsBigInt("123456789012")).toBe(123456789012n);
   });
 });

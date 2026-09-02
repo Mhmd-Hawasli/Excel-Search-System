@@ -5,13 +5,37 @@ import { buildSearchPlan, type SearchMode } from "@/lib/search/plan";
 import type { SearchField } from "@/lib/search/fields";
 import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
 
-export type SearchRequest = { query: string; mode: SearchMode; field?: StandardFieldKey; groupIds?: string[]; page: number; pageSize: number; sortBy?: SearchSortKey; sortDirection?: SearchSortDirection };
+export type SearchRequest = {
+  query: string;
+  mode: SearchMode;
+  field?: StandardFieldKey;
+  groupIds?: string[];
+  page: number;
+  pageSize: number;
+  sortBy?: SearchSortKey;
+  sortDirection?: SearchSortDirection;
+};
 type SearchDatabaseRow = {
-  id: string; groupId: string; groupName: string; fileId: string; fileName: string;
-  sfFullName: string | null; sfNationalId: string | null; dNationalId: string | null;
-  sfMotherName: string | null; sfShamCash: string | null; sfPersonalNo: string | null;
-  sfFirstName: string | null; sfFatherName: string | null; sfLastName: string | null;
-  sfPhone: string | null; sfContractCode: string | null; sfSecondaryContractCode: string | null; matchedField: StandardFieldKey | null; matchedValue: string | null; matchRank: number;
+  id: string;
+  groupId: string;
+  groupName: string;
+  fileId: string;
+  fileName: string;
+  sfFullName: string | null;
+  sfNationalId: string | null;
+  dNationalId: string | null;
+  sfMotherName: string | null;
+  sfShamCash: string | null;
+  sfPersonalNo: string | null;
+  sfFirstName: string | null;
+  sfFatherName: string | null;
+  sfLastName: string | null;
+  sfPhone: string | null;
+  sfContractCode: string | null;
+  sfSecondaryContractCode: string | null;
+  matchedField: StandardFieldKey | null;
+  matchedValue: string | null;
+  matchRank: number;
 };
 
 export type SearchResultRow = SearchDatabaseRow;
@@ -23,9 +47,15 @@ function column(field: SearchField) {
 
 function conditionFor(field: SearchField, textTokens: string[], numericNeedle: string) {
   const fieldColumn = column(field);
-  if (field.type === "numeric") return numericNeedle ? Prisma.sql`${fieldColumn} ILIKE ${`%${numericNeedle}%`}` : Prisma.sql`FALSE`;
+  if (field.type === "numeric")
+    return numericNeedle
+      ? Prisma.sql`${fieldColumn} ILIKE ${`%${numericNeedle}%`}`
+      : Prisma.sql`FALSE`;
   if (!textTokens.length) return Prisma.sql`FALSE`;
-  return Prisma.sql`(${Prisma.join(textTokens.map((token) => Prisma.sql`${fieldColumn} ILIKE ${`%${token}%`}`), " AND ")})`;
+  return Prisma.sql`(${Prisma.join(
+    textTokens.map((token) => Prisma.sql`${fieldColumn} ILIKE ${`%${token}%`}`),
+    " AND ",
+  )})`;
 }
 
 function exactFor(field: SearchField, normalizedText: string, numericNeedle: string) {
@@ -81,22 +111,37 @@ export async function searchRecords(input: SearchRequest) {
   const page = Math.max(1, input.page);
   const pageSize = Math.min(100, Math.max(10, input.pageSize));
   const plan = buildSearchPlan(input);
-  if (!input.query.trim() || plan.fields.length === 0) return { rows: [] as SearchResultRow[], total: 0, page, pageSize, pageCount: 0 };
-  const conditions = plan.fields.map((field) => conditionFor(field, plan.textTokens, plan.numericNeedle));
-  const exact = plan.fields.map((field) => exactFor(field, plan.normalizedText, plan.numericNeedle));
-  const prefix = plan.fields.map((field) => prefixFor(field, plan.normalizedText, plan.numericNeedle));
+  if (!input.query.trim() || plan.fields.length === 0)
+    return { rows: [] as SearchResultRow[], total: 0, page, pageSize, pageCount: 0 };
+  const conditions = plan.fields.map((field) =>
+    conditionFor(field, plan.textTokens, plan.numericNeedle),
+  );
+  const exact = plan.fields.map((field) =>
+    exactFor(field, plan.normalizedText, plan.numericNeedle),
+  );
+  const prefix = plan.fields.map((field) =>
+    prefixFor(field, plan.normalizedText, plan.numericNeedle),
+  );
   const groupIds = Array.from(new Set(input.groupIds ?? []));
-  const groupScope = groupIds.length ? Prisma.sql`AND f."group_id" IN (${Prisma.join(groupIds.map((groupId) => Prisma.sql`${groupId}::uuid`))})` : Prisma.empty;
+  const groupScope = groupIds.length
+    ? Prisma.sql`AND f."group_id" IN (${Prisma.join(groupIds.map((groupId) => Prisma.sql`${groupId}::uuid`))})`
+    : Prisma.empty;
   const where = Prisma.sql`(${Prisma.join(conditions, " OR ")}) ${groupScope}`;
-  const fieldCases = plan.fields.map((field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${field.key}`);
-  const matchedValueCases = plan.fields.map((field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${displayColumn(field)}`);
+  const fieldCases = plan.fields.map(
+    (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${field.key}`,
+  );
+  const matchedValueCases = plan.fields.map(
+    (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${displayColumn(field)}`,
+  );
   const order = searchOrder(input.sortBy, input.sortDirection);
   const offset = (page - 1) * pageSize;
   const [countRows, databaseRows] = await prisma.$transaction([
-    prisma.$queryRaw<{ total: bigint }[]>(Prisma.sql`SELECT COUNT(*)::bigint AS total FROM "records" r JOIN "files" f ON f.id = r."file_id" WHERE ${where}`),
+    prisma.$queryRaw<{ total: bigint }[]>(
+      Prisma.sql`SELECT COUNT(*)::bigint AS total FROM "records" r JOIN "files" f ON f.id = r."file_id" WHERE ${where}`,
+    ),
     prisma.$queryRaw<SearchDatabaseRow[]>(Prisma.sql`
       SELECT r.id, g.id AS "groupId", g.name AS "groupName", f.id AS "fileId", f.name AS "fileName",
-        r."sf_full_name" AS "sfFullName", r."sf_national_id" AS "sfNationalId", r."d_national_id" AS "dNationalId",
+        r."sf_full_name" AS "sfFullName", r."sf_national_id"::text AS "sfNationalId", r."d_national_id" AS "dNationalId",
         r."sf_mother_name" AS "sfMotherName", r."sf_sham_cash"::text AS "sfShamCash", r."sf_personal_no" AS "sfPersonalNo",
         r."sf_first_name" AS "sfFirstName", r."sf_father_name" AS "sfFatherName", r."sf_last_name" AS "sfLastName",
         r."sf_phone" AS "sfPhone", r."sf_contract_code" AS "sfContractCode", r."sf_secondary_contract_code" AS "sfSecondaryContractCode",

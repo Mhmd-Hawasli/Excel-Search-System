@@ -1,4 +1,16 @@
-export const STANDARD_FIELD_KEYS = ["first_name", "father_name", "last_name", "full_name", "national_id", "sham_cash", "personal_no", "mother_name", "phone", "contract_code", "secondary_contract_code"] as const;
+export const STANDARD_FIELD_KEYS = [
+  "first_name",
+  "father_name",
+  "last_name",
+  "full_name",
+  "national_id",
+  "sham_cash",
+  "personal_no",
+  "mother_name",
+  "phone",
+  "contract_code",
+  "secondary_contract_code",
+] as const;
 export type StandardFieldKey = (typeof STANDARD_FIELD_KEYS)[number];
 
 export type InspectedColumn = {
@@ -6,6 +18,12 @@ export type InspectedColumn = {
   headerNormalized: string;
   columnIndex: number;
   suggestedField: StandardFieldKey | null;
+  sourceSheetName?: string;
+};
+
+export type LinkedSheetsConfig = {
+  sheetNames: string[];
+  nationalIdColumnIndex: number;
 };
 
 export type SheetInspection = {
@@ -15,6 +33,8 @@ export type SheetInspection = {
   columnCount: number;
   columns: InspectedColumn[];
   preview: string[][];
+  linkedSheets?: LinkedSheetsConfig;
+  linkedSummary?: { sheetName: string; matchedRows: number; missingRows: number }[];
 };
 
 export type WorkbookInspection = {

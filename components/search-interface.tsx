@@ -25,6 +25,7 @@ import { SEARCH_FIELDS } from "@/lib/search/fields";
 import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
 import { digitsOnly, normalizeQuery, normalizeStored } from "@/lib/normalization/arabic";
 import { formatShamCash } from "@/lib/format/sham-cash";
+import { formatNationalId } from "@/lib/format/national-id";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -359,7 +360,9 @@ export function SearchInterface({
       helper.accessor("dNationalId", {
         id: "national_id",
         header: "الرقم الوطني",
-        cell: (info) => <span className="ltr-numbers">{info.getValue() || "—"}</span>,
+        cell: (info) => (
+          <span className="ltr-numbers">{formatNationalId(info.getValue()) || "—"}</span>
+        ),
       }),
       helper.accessor("sfMotherName", {
         id: "mother_name",
@@ -369,7 +372,9 @@ export function SearchInterface({
       helper.accessor("sfShamCash", {
         id: "sham_cash",
         header: "الشام كاش",
-        cell: (info) => <span className="ltr-numbers">{formatShamCash(info.getValue()) || "—"}</span>,
+        cell: (info) => (
+          <span className="ltr-numbers">{formatShamCash(info.getValue()) || "—"}</span>
+        ),
       }),
       helper.accessor("sfPersonalNo", {
         id: "personal_no",
@@ -559,9 +564,15 @@ export function SearchInterface({
                             </span>
                             {sorting?.key === header.column.id ? (
                               sorting.direction === "asc" ? (
-                                <ArrowUp aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                                <ArrowUp
+                                  aria-hidden="true"
+                                  className="size-4 shrink-0 text-primary"
+                                />
                               ) : (
-                                <ArrowDown aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                                <ArrowDown
+                                  aria-hidden="true"
+                                  className="size-4 shrink-0 text-primary"
+                                />
                               )
                             ) : (
                               <ArrowUpDown

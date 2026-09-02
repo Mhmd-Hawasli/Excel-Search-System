@@ -23,6 +23,7 @@ import {
   type ConflictResponse,
 } from "@/lib/conflicts/catalog";
 import { toLatinDigits } from "@/lib/normalization/arabic";
+import { formatNationalId } from "@/lib/format/national-id";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -197,13 +198,13 @@ export function ConflictsInterface() {
             </div>
             <p className="text-xs leading-6 text-muted-foreground">
               {filters.category === "invalid" &&
-                "يُفحص الرقم الوطني والشام كاش كما وردا في المصدر، مع قبول الأرقام العربية. يُقارن الاسم الثلاثي بالاسم + اسم الأب + النسبة بعد التطبيع عند ربط الأعمدة. تُفحص القيم غير الفارغة في كل عمود يحتوي اسمه على «تاريخ»."}
+                "تُقبل الأرقام العربية وتُحذف الفراغات من الرقم الوطني والشام كاش. يُفحص طول الرقم الوطني كرقم قبل تعبئة الأصفار: 8 أرقام أو أقل، و12 رقماً أو أكثر، مشكلة تكامل. يُعرض بـ11 خانة دون اقتطاع الأرقام الأطول. الشام كاش مطلوب 16 خانة. يُقارن الاسم الثلاثي بالاسم + اسم الأب + النسبة بعد التطبيع. تُفحص القيم غير الفارغة في أعمدة «تاريخ»."}
               {filters.category === "missing" &&
                 "يُفحص الرقم الوطني والشام كاش والرقم الذاتي واسم الأم في جميع السجلات. يُفحص الاسم الثلاثي والاسم واسم الأب والنسبة عندما تكون مربوطة بأعمدة Excel؛ ويُعتمد فراغ الخلية الأصلية حتى لو ركّب النظام اسماً للعرض."}
               {filters.category === "similar" &&
                 "التشابه هنا هو تطابق الاسم الثلاثي بعد التطبيع مع اختلاف اسم الأم. تظهر جميع السجلات المعنية مرتبة بالاسم الثلاثي؛ اسم الأم الفارغ يُراجع في البيانات الناقصة."}
               {filters.category === "conflicting" &&
-                "التكرار يُفحص داخل الملف نفسه، والارتباطات تُفحص عبر جميع الملفات. الشخص = الاسم الثلاثي + اسم الأم بعد التطبيع. القيم الفارغة والمعرّفات ذات المحارف تُراجع في البيانات الناقصة والخاطئة."}
+                "التكرار يُفحص داخل الملف نفسه، والارتباطات تُفحص عبر جميع الملفات. الشخص = الاسم الثلاثي + اسم الأم بعد التطبيع. تُقارن الأرقام الوطنية والشام كاش بقيمتها الرقمية بعد حذف الفراغات، دون تأثير لأصفار العرض. القيم الفارغة والمعرّفات ذات المحارف تُراجع في البيانات الناقصة والخاطئة."}
             </p>
           </CardContent>
         </Card>
@@ -328,7 +329,7 @@ export function ConflictsInterface() {
                     <td className="min-w-28 p-4">{row.motherName || "—"}</td>
                     <td className="p-4">
                       <bdi className="break-all font-mono">
-                        {toLatinDigits(row.nationalId) || "—"}
+                        {formatNationalId(row.nationalId) || "—"}
                       </bdi>
                     </td>
                     <td className="min-w-80 max-w-xl p-4">

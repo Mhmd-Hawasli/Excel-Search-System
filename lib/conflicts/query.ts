@@ -39,18 +39,27 @@ const rawFields = [
 const trimCharacters =
   " \t\n\r\f\v\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 
+function numericInputSql(value: Prisma.Sql) {
+  // Ignore formatting whitespace, but retain nonnumeric characters for validation.
+  // Keep digit text exact: Number conversion can round 16-digit identifiers.
+  return Prisma.sql`translate(${latinDigitsSql(value)}, ${trimCharacters}, '')`;
+}
+
 function rawField(field: (typeof rawFields)[number]) {
   const fallback =
     field === "sham_cash"
       ? Prisma.sql`lpad(r.sf_sham_cash::text, 16, '0')`
-      : Prisma.raw(`r.sf_${field}`);
+      : field === "national_id"
+        ? Prisma.sql`COALESCE(r.data ->> '__national_id_original', r.sf_national_id::text)`
+        : Prisma.raw(`r.sf_${field}`);
   const originalCell = Prisma.sql`r.data ->> (m.mapping ->> ${field})`;
-  // Other sf_* text columns already contain the original cell. Only full_name
-  // can be synthesized and sham_cash is converted to bigint during import.
+  // Read originals for synthesized names and numeric standardized identifiers.
   const original =
-    field === "full_name" || field === "sham_cash"
-      ? Prisma.sql`CASE WHEN m.mapping ? ${field} THEN ${originalCell} ELSE ${fallback} END`
-      : Prisma.sql`COALESCE(${fallback}, ${originalCell})`;
+    field === "national_id"
+      ? Prisma.sql`CASE WHEN r.data ? (m.mapping ->> ${field}) THEN ${originalCell} ELSE ${fallback} END`
+      : field === "full_name" || field === "sham_cash"
+        ? Prisma.sql`CASE WHEN m.mapping ? ${field} THEN ${originalCell} ELSE ${fallback} END`
+        : Prisma.sql`COALESCE(${fallback}, ${originalCell})`;
   return Prisma.sql`btrim(COALESCE(${original}, ''), ${trimCharacters}) AS ${Prisma.raw(field)}`;
 }
 
@@ -70,8 +79,8 @@ const baseCtes = Prisma.sql`
   normalized AS MATERIALIZED (
     SELECT s.*, ${normalizeTextSql(Prisma.sql`display_name`)} AS name_key,
       ${normalizeTextSql(Prisma.sql`mother_name`)} AS mother_key,
-      ${numericKey(Prisma.sql`national_id`)} AS national_key,
-      ${numericKey(Prisma.sql`sham_cash`)} AS sham_key,
+      ${numericKey(numericInputSql(Prisma.sql`national_id`))} AS national_key,
+      ${numericKey(numericInputSql(Prisma.sql`sham_cash`))} AS sham_key,
       ${numericKey(Prisma.sql`personal_no`)} AS personal_key,
       NULLIF(${normalizeTextSql(Prisma.sql`contract_code`)}, '') AS contract_key
     FROM source s
@@ -112,7 +121,7 @@ const jobCtes = Prisma.sql`,
     SELECT b.id, b.person_key, b.name_key, b.mother_key, c.header_raw,
       r.data ->> c.header_raw AS value, ${normalizeTextSql(Prisma.sql`r.data ->> c.header_raw`)} AS value_key
     FROM base b JOIN records r ON r.id = b.id JOIN file_columns c ON c.file_id = b.file_id
-    WHERE ${normalizeTextSql(Prisma.sql`c.header_raw`)} IN ('المسمي الوظيفي', 'مسمي وظيفي', 'المسمي', 'مسمي الوظيفة', 'المسمي الوظيفي الحالي')
+    WHERE ${normalizeTextSql(Prisma.sql`regexp_replace(c.header_raw, ${" \\[[^]]+\\]( \\([0-9]+\\))?$"}, '')`)} IN ('المسمي الوظيفي', 'مسمي وظيفي', 'المسمي', 'مسمي الوظيفة', 'المسمي الوظيفي الحالي')
       AND b.person_key IS NOT NULL
   )`;
 
@@ -128,22 +137,22 @@ function issueSelect(
 
 function localRule(key: ConflictRuleKey) {
   const from = Prisma.sql`base b`;
-  const national = latinDigitsSql(Prisma.sql`b.national_id`);
-  const sham = latinDigitsSql(Prisma.sql`b.sham_cash`);
+  const national = numericInputSql(Prisma.sql`b.national_id`);
+  const sham = numericInputSql(Prisma.sql`b.sham_cash`);
   switch (key) {
     case "national_short":
       return issueSelect(
         key,
-        Prisma.sql`'القيمة الأصلية «' || b.national_id || '» تتكون من ' || length(${national}) || ' أرقام؛ الحد الأدنى هنا 9 أرقام.'`,
+        Prisma.sql`'الرقم «' || b.national_key || '» يتكون من ' || length(b.national_key) || ' أرقام قبل تعبئة أصفار العرض؛ المطلوب من 9 إلى 11 رقماً. القيمة الأصلية «' || b.national_id || '».'`,
         from,
-        Prisma.sql`${national} ~ '^[0-9]{1,8}$'`,
+        Prisma.sql`length(b.national_key) <= 8`,
       );
     case "national_long":
       return issueSelect(
         key,
-        Prisma.sql`'القيمة الأصلية «' || b.national_id || '» تحتوي على ' || length(${national}) || ' خانة؛ الحد الأعلى 11.'`,
+        Prisma.sql`'الرقم «' || b.national_key || '» يتكون من ' || length(b.national_key) || ' أرقام قبل تعبئة أصفار العرض؛ الحد الأعلى 11. القيمة الأصلية «' || b.national_id || '».'`,
         from,
-        Prisma.sql`length(${national}) >= 12`,
+        Prisma.sql`length(b.national_key) >= 12`,
       );
     case "national_characters":
       return issueSelect(
@@ -155,23 +164,23 @@ function localRule(key: ConflictRuleKey) {
     case "sham_short":
       return issueSelect(
         key,
-        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي بعد تحويل الأرقام وحذف جميع الفراغات على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
         from,
-        Prisma.sql`b.sham_cash <> '' AND length(${sham}) < 16`,
+        Prisma.sql`${sham} <> '' AND length(${sham}) < 16`,
       );
     case "sham_long":
       return issueSelect(
         key,
-        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي بعد تحويل الأرقام وحذف جميع الفراغات على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
         from,
         Prisma.sql`length(${sham}) > 16`,
       );
     case "sham_characters":
       return issueSelect(
         key,
-        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على محارف غير رقمية؛ الشام كاش يجب أن يتكون من 16 رقماً فقط.'`,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي بعد حذف الفراغات على محارف غير رقمية؛ الشام كاش يجب أن يتكون من 16 رقماً فقط.'`,
         from,
-        Prisma.sql`b.sham_cash <> '' AND ${sham} !~ '^[0-9]+$'`,
+        Prisma.sql`${sham} <> '' AND ${sham} !~ '^[0-9]+$'`,
       );
     case "name_mismatch": {
       const composed = Prisma.sql`concat_ws(' ', NULLIF(b.first_name, ''), NULLIF(b.father_name, ''), NULLIF(b.last_name, ''))`;
@@ -291,7 +300,8 @@ export function buildConflictQuery(input: ConflictRequest) {
     ),
     page_rows AS (
       SELECT b.id, b.file_id AS "fileId", b.group_id AS "groupId", b.file_name AS "fileName", b.original_filename AS "originalFilename",
-        b.row_index AS "rowIndex", b.display_name AS "fullName", b.mother_name AS "motherName", b.national_id AS "nationalId", m.issues
+        b.row_index AS "rowIndex", b.display_name AS "fullName", b.mother_name AS "motherName",
+        COALESCE(lpad(b.national_key, GREATEST(11, length(b.national_key)), '0'), ${latinDigitsSql(Prisma.sql`b.national_id`)}) AS "nationalId", m.issues
       FROM matched m JOIN base b ON b.id = m.id
       ORDER BY b.name_key, b.mother_key, b.file_name, b.row_index, b.id
       LIMIT ${input.pageSize} OFFSET ${(input.page - 1) * input.pageSize}

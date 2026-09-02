@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import { normalizeStored } from "@/lib/normalization/arabic";
 import { suggestStandardField } from "@/lib/excel/standard-fields";
 import type { SheetInspection, WorkbookInspection } from "@/lib/excel/types";
+import { cellValueText } from "@/lib/excel/cell-value";
 
 const UPLOAD_DIRECTORY = path.join(process.cwd(), "tmp", "uploads");
 const TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,10 +19,10 @@ export function columnSignature(headers: string[]) {
   return createHash("sha256").update(headers.map(normalizeStored).join("\u001f")).digest("hex");
 }
 
-function headersForSheet(worksheet: ExcelJS.Worksheet) {
+export function headersForSheet(worksheet: ExcelJS.Worksheet) {
   const row = worksheet.getRow(1);
   const columnCount = Math.max(worksheet.actualColumnCount, row.cellCount);
-  const headers = Array.from({ length: columnCount }, (_, index) => row.getCell(index + 1).text.trim() || `عمود ${index + 1}`);
+  const headers = Array.from({ length: columnCount }, (_, index) => cellValueText(row.getCell(index + 1)).trim() || `عمود ${index + 1}`);
   const normalized = headers.map(normalizeStored);
   const duplicates = normalized.filter((header, index) => header && normalized.indexOf(header) !== index);
   if (duplicates.length) throw new Error("تحتوي الورقة على أسماء أعمدة مكررة. يرجى جعل عناوين الصف الأول فريدة ثم رفع الملف من جديد.");
@@ -34,7 +35,7 @@ function inspectWorksheet(worksheet: ExcelJS.Worksheet, sheetIndex: number): She
   const finalRow = Math.min(worksheet.actualRowCount, 21);
   for (let rowIndex = 2; rowIndex <= finalRow; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
-    preview.push(headers.map((_, index) => row.getCell(index + 1).text ?? ""));
+    preview.push(headers.map((_, index) => cellValueText(row.getCell(index + 1))));
   }
   return {
     sheetName: worksheet.name,
@@ -46,7 +47,7 @@ function inspectWorksheet(worksheet: ExcelJS.Worksheet, sheetIndex: number): She
   };
 }
 
-async function loadWorkbook(token: string) {
+export async function loadWorkbook(token: string) {
   const workbook = new ExcelJS.Workbook();
   try {
     await workbook.xlsx.readFile(workbookPath(token));

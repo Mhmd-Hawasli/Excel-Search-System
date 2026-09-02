@@ -32,7 +32,7 @@ export default async function UploadPage({
       <PageHeader
         eyebrow="استيراد البيانات"
         title="رفع ملف Excel"
-        description="سيرشدك المعالج لاختيار الورقة وربط حقول البحث وتنظيم أعمدة التفاصيل قبل الاستيراد."
+        description="اختر ورقة واحدة أو عدة أوراق مترابطة بالرقم الوطني، ثم اربط حقول البحث ونظّم أعمدة التفاصيل قبل الاستيراد."
       />
       {groups.length === 0 ? (
         <EmptyState

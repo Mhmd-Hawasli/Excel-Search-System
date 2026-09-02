@@ -106,24 +106,32 @@ async function main() {
       }
       const short1 = await row({ national_id: "1" });
       const short8 = await row({ national_id: "٠٠١٢٣٤٥٦" });
+      const paddedShort = await row({ national_id: "00012345678" });
       await row({ national_id: "123456789" });
       await row({ national_id: "1234567890" });
       await row({ national_id: "12345678901" });
-      expectRows("national_short", [short1, short8]);
+      expectRows("national_short", [short1, short8, paddedShort]);
       const long = await row({ national_id: "123456789012" });
+      const oversized = await row({ national_id: "9223372036854775808" });
       const letters = await row({ national_id: "12345678901A" });
-      expectRows("national_long", [long, letters]);
+      expectRows("national_long", [long, oversized]);
       const lettersOnly = await row({ national_id: "abc" });
       expectRows("national_characters", [letters, lettersOnly]);
       const shamShort = await row({ sham_cash: "012345678901234" });
       const shamLong = await row({ sham_cash: "01234567890123456" });
       const shamChars = await row({ sham_cash: "012345678901234A" });
       const shamHidden = await row({ sham_cash: "0123456789012345A" });
-      const shamSpaces = await row({ sham_cash: "0123 4567 8901 2345" });
-      await row({ sham_cash: "٠١٢٣٤٥٦٧٨٩٠١٢٣٤٥" });
-      expectRows("sham_short", [shamShort]);
-      expectRows("sham_long", [shamLong, shamHidden, shamSpaces]);
-      expectRows("sham_characters", [shamChars, shamHidden, shamSpaces]);
+      await row({ sham_cash: "0123 4567 8901 2345" });
+      await row({ sham_cash: "٠١٢٣ ٤٥٦٧ ٨٩٠١ ٢٣٤٦" });
+      await row({ sham_cash: "\u00a0۰۱۲۳\u00a0۴۵۶۷\t۸۹۰۱\r\n۲۳۴۷\ufeff" });
+      await row({ sham_cash: "0123\u2009\u202f4567\u3000\u20078901\u2028\u20292348" });
+      await row({ sham_cash: "9999 9999 9999 9999" });
+      const shamSpacedShort = await row({ sham_cash: "0123 4567 8901 239" });
+      const shamSpacedLong = await row({ sham_cash: "0123 4567 8901 23499" });
+      const shamSymbol = await row({ sham_cash: "0123-4567 8901 2345" });
+      expectRows("sham_short", [shamShort, shamSpacedShort]);
+      expectRows("sham_long", [shamLong, shamHidden, shamSpacedLong, shamSymbol]);
+      expectRows("sham_characters", [shamChars, shamHidden, shamSymbol]);
       const mismatch = await row({ full_name: "اسم مخالف للاجزاء" });
       await row({
         first_name: "أحمد",
@@ -153,6 +161,7 @@ async function main() {
         Object.fromEntries(STANDARD_FIELD_KEYS.map((key) => [key, " \t "])),
       );
       const missingMappedFull = await row({ full_name: "" });
+      const shamWhitespaceOnly = await row({ sham_cash: " \t\n\u00a0\u202f\ufeff" });
       const unmapped = await row({}, unmappedFile);
       for (const key of [
         "missing_national",
@@ -161,6 +170,7 @@ async function main() {
         "missing_mother",
       ] as const)
         expectRows(key, [missingAll, unmapped]);
+      expected.get("missing_sham")!.push(shamWhitespaceOnly);
       expectRows("missing_full", [missingAll, missingMappedFull]);
       for (const key of ["missing_first", "missing_father", "missing_last"] as const)
         expectRows(key, [missingAll]);
@@ -181,7 +191,7 @@ async function main() {
         contract_code: "مكرر",
       };
       const duplicateA = await row(duplicateValues);
-      const duplicateB = await row(duplicateValues);
+      const duplicateB = await row({ ...duplicateValues, sham_cash: "9999 1111 1111 1111" });
       await row(duplicateValues, secondFile);
       for (const key of [
         "duplicate_national",
@@ -196,7 +206,10 @@ async function main() {
         personal_no: "9222",
       };
       const peopleA = await row(peopleValues);
-      const peopleB = await row(peopleValues, secondFile);
+      const peopleB = await row(
+        { ...peopleValues, sham_cash: "٩٩٩٩\u00a0٢٢٢٢\t٢٢٢٢ ٢٢٢٢" },
+        secondFile,
+      );
       for (const key of ["national_people", "sham_people", "personal_people"] as const)
         expectRows(key, [peopleA, peopleB]);
       const samePerson = {
@@ -268,6 +281,18 @@ async function main() {
         );
         if (rule.key === "date_invalid")
           assert.equal(result.rows[0].issues.length, 2, "two bad dates share one record row");
+        if (rule.key === "national_short")
+          assert.equal(
+            result.rows.find((entry) => entry.id === paddedShort)?.nationalId,
+            "00012345678",
+            "display padding does not hide the short numeric ID",
+          );
+        if (rule.key === "national_long")
+          assert.equal(
+            result.rows.find((entry) => entry.id === oversized)?.nationalId,
+            "9223372036854775808",
+            "oversized original is retained and never truncated",
+          );
       }
       const page1 = await queryConflicts(
         { category: "invalid", field: "all", rule: "all", page: 1, pageSize: 10 },
@@ -319,6 +344,32 @@ async function main() {
         );
       }
       await tx.$executeRaw`DELETE FROM records`;
+      const sameShamValues = { ...person, sham_cash: "9999999999999999" };
+      const sameShamA = await row(sameShamValues);
+      const sameShamB = await row(
+        { ...sameShamValues, sham_cash: "٩٩٩٩\u00a0٩٩٩٩\t٩٩٩٩ ٩٩٩٩" },
+        secondFile,
+      );
+      const equivalentSham = await queryConflicts(
+        { category: "conflicting", field: "sham_cash", rule: "all", page: 1, pageSize: 25 },
+        tx,
+      );
+      assert.equal(
+        equivalentSham.total,
+        0,
+        "same person and account across files is not a conflict regardless of whitespace",
+      );
+      await tx.$executeRaw`UPDATE records SET data = jsonb_set(data, '{sham_cash}', '"9999 9999 9999 9998"'::jsonb) WHERE id = ${sameShamB}::uuid`;
+      const distinctSham = await queryConflicts(
+        { category: "conflicting", field: "sham_cash", rule: "person_sham", page: 1, pageSize: 25 },
+        tx,
+      );
+      assert.deepEqual(
+        distinctSham.rows.map((entry) => entry.id).sort(),
+        [sameShamA, sameShamB].sort(),
+        "16-digit accounts differing by one digit remain distinct without Number rounding",
+      );
+      await tx.$executeRaw`DELETE FROM records`;
       for (const category of ["invalid", "missing", "similar", "conflicting"] as const) {
         const result = await queryConflicts(
           { category, field: "all", rule: "all", page: 1, pageSize: 25 },
@@ -327,6 +378,36 @@ async function main() {
         assert.equal(result.total, 0);
         assert.deepEqual(result.rows, []);
       }
+      const nationalA = await row({ ...person, national_id: "123456789" });
+      const nationalB = await row({ ...person, national_id: "٠٠١٢٣\u00a0٤٥٦\t٧٨٩" }, secondFile);
+      const equivalentNational = await queryConflicts(
+        { category: "conflicting", field: "national_id", rule: "all", page: 1, pageSize: 25 },
+        tx,
+      );
+      assert.equal(
+        equivalentNational.total,
+        0,
+        "same numeric national ID across files is not a conflict",
+      );
+      await tx.$executeRaw`UPDATE records SET sf_mother_name = 'أم أخرى' WHERE id = ${nationalB}::uuid`;
+      const linkedNational = await queryConflicts(
+        {
+          category: "conflicting",
+          field: "national_id",
+          rule: "national_people",
+          page: 1,
+          pageSize: 25,
+        },
+        tx,
+      );
+      assert.deepEqual(
+        linkedNational.rows.map((entry) => entry.id).sort(),
+        [nationalA, nationalB].sort(),
+      );
+      assert(
+        linkedNational.rows.every((entry) => entry.nationalId === "00123456789"),
+        "all conflicts display the same eleven-digit national ID",
+      );
       console.log(
         "PASS: 31 rules, raw/mapped values, date boundaries, normalization, complete conflict groups, pagination, empty archive and in-progress import exclusion (temporary tables only).",
       );

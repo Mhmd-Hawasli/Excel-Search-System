@@ -6,7 +6,10 @@ const TATWEEL = /\u0640/g;
 export function toLatinDigits(value: string) {
   return value.replace(/[\u0660-\u0669\u06F0-\u06F9]/g, (digit) => {
     const code = digit.charCodeAt(0);
-    const numeric = code >= EXTENDED_ARABIC_INDIC_ZERO ? code - EXTENDED_ARABIC_INDIC_ZERO : code - ARABIC_INDIC_ZERO;
+    const numeric =
+      code >= EXTENDED_ARABIC_INDIC_ZERO
+        ? code - EXTENDED_ARABIC_INDIC_ZERO
+        : code - ARABIC_INDIC_ZERO;
     return String(numeric);
   });
 }
@@ -37,15 +40,22 @@ export function digitsOnly(value: unknown) {
   return toLatinDigits(value == null ? "" : String(value)).replace(/\D/g, "");
 }
 
+export function nationalIdDigits(value: unknown) {
+  const text = toLatinDigits(value == null ? "" : String(value)).replace(/\s/g, "");
+  if (!/^[0-9]+$/.test(text)) return null;
+  return text.replace(/^0+/, "") || "0";
+}
+
 export function normalizeNationalId(value: unknown) {
-  const digits = digitsOnly(value);
-  return digits ? digits.padStart(11, "0") : "";
+  const digits = nationalIdDigits(value);
+  return digits === null ? "" : digits.padStart(11, "0");
 }
 
 export function nationalIdAsBigInt(value: unknown) {
-  const digits = digitsOnly(value);
-  if (!digits || digits.length > 11) return null;
-  return BigInt(digits);
+  const digits = nationalIdDigits(value);
+  if (digits === null || digits.length > 19) return null;
+  const number = BigInt(digits);
+  return number <= 9223372036854775807n ? number : null;
 }
 
 export function matchesNormalizedText(query: unknown, stored: unknown) {

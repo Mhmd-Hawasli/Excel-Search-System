@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:conflicts": "tsx --env-file=.env scripts/verify-conflicts.ts",
+    "test:national-id-migration": "tsx --env-file=.env scripts/verify-national-id-migration.ts",
+    "test:linked-import": "tsx --env-file=.env scripts/verify-linked-import.ts",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push && prisma db execute --schema prisma/schema.prisma --file prisma/search-indexes.sql",
