@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StandardField {
+  FIRST_NAME              @map("first_name")
+  FATHER_NAME             @map("father_name")
+  LAST_NAME               @map("last_name")
+  FULL_NAME               @map("full_name")
+  NATIONAL_ID             @map("national_id")
+  SHAM_CASH               @map("sham_cash")
+  PERSONAL_NO             @map("personal_no")
+  MOTHER_NAME             @map("mother_name")
+  PHONE                   @map("phone")
+  CONTRACT_CODE           @map("contract_code")
+  SECONDARY_CONTRACT_CODE @map("secondary_contract_code")
+
+  @@map("standard_field")
+}
+
+enum UploadJobStatus {
+  PENDING   @map("pending")
+  PARSING   @map("parsing")
+  INSERTING @map("inserting")
+  DONE      @map("done")
+  FAILED    @map("failed")
+
+  @@map("upload_job_status")
+}
+
+enum DataQualityIssueType {
+  MISSING_NATIONAL_ID   @map("missing_national_id")
+  INVALID_NATIONAL_ID   @map("invalid_national_id")
+  DUPLICATE_NATIONAL_ID @map("duplicate_national_id")
+  INVALID_PHONE         @map("invalid_phone")
+  INVALID_SHAM_CASH     @map("invalid_sham_cash")
+  EMPTY_ROW             @map("empty_row")
+
+  @@map("data_quality_issue_type")
+}
+
+enum ActivityAction {
+  FILE_UPLOADED      @map("file_uploaded")
+  FILE_UPDATED       @map("file_updated")
+  FILE_REPLACED      @map("file_replaced")
+  FILE_DELETED       @map("file_deleted")
+  GROUP_CREATED      @map("group_created")
+  GROUP_UPDATED      @map("group_updated")
+  GROUP_REORDERED    @map("group_reordered")
+  GROUP_DELETED      @map("group_deleted")
+  CATEGORY_CREATED   @map("category_created")
+  CATEGORY_UPDATED   @map("category_updated")
+  CATEGORY_REORDERED @map("category_reordered")
+  CATEGORY_DELETED   @map("category_deleted")
+  COLUMN_REORDERED   @map("column_reordered")
+  COLUMN_RECATEGORIZED @map("column_recategorized")
+  TEMPLATE_CREATED   @map("template_created")
+  BACKUP_RESTORED    @map("backup_restored")
+
+  @@map("activity_action")
+}
+
+model Group {
+  id          String            @id @default(uuid()) @db.Uuid
+  name        String            @unique
+  description String            @default("")
+  sortOrder   Int               @default(0) @map("sort_order")
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  files       File[]
+  templates   MappingTemplate[]
+
+  @@map("groups")
+}
+
+model File {
+  id                String             @id @default(uuid()) @db.Uuid
+  groupId           String             @map("group_id") @db.Uuid
+  name              String             @unique
+  description       String             @default("")
+  originalFilename  String             @map("original_filename")
+  sheetName         String             @map("sheet_name")
+  rowCount          Int                @default(0) @map("row_count")
+  columnSignature   String             @map("column_signature")
+  version           Int                @default(1)
+  uploadedAt        DateTime           @default(now()) @map("uploaded_at") @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  group             Group              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  columns           FileColumn[]
+  records           Record[]
+  uploadJobs        UploadJob[]
+  dataQualityIssues DataQualityIssue[]
+
+  @@index([groupId])
+  @@map("files")
+}
+
+model Category {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @unique
+  sortOrder Int          @default(0) @map("sort_order")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  columns   FileColumn[]
+
+  @@map("categories")
+}
+
+model FileColumn {
+  id               String         @id @default(uuid()) @db.Uuid
+  fileId           String         @map("file_id") @db.Uuid
+  headerRaw        String         @map("header_raw")
+  headerNormalized String         @map("header_normalized")
+  columnIndex      Int            @map("column_index")
+  sortOrder        Int            @default(0) @map("sort_order")
+  categoryId       String?        @map("category_id") @db.Uuid
+  standardField    StandardField? @map("standard_field")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  file             File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  category         Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@unique([fileId, columnIndex])
+  @@index([fileId])
+  @@index([categoryId])
+  @@index([categoryId, sortOrder])
+  @@map("file_columns")
+}
+
+model Record {
+  id                      String   @id @default(uuid()) @db.Uuid
+  fileId                  String   @map("file_id") @db.Uuid
+  rowIndex                Int      @map("row_index")
+  data                    Json     @db.JsonB
+  sfFirstName             String?  @map("sf_first_name")
+  sfFatherName            String?  @map("sf_father_name")
+  sfLastName              String?  @map("sf_last_name")
+  sfFullName              String?  @map("sf_full_name")
+  sfNationalId            String?  @map("sf_national_id")
+  sfShamCash              BigInt?  @map("sf_sham_cash")
+  sfPersonalNo            String?  @map("sf_personal_no")
+  sfMotherName            String?  @map("sf_mother_name")
+  sfPhone                 String?  @map("sf_phone")
+  sfContractCode          String?  @map("sf_contract_code")
+  sfSecondaryContractCode String?  @map("sf_secondary_contract_code")
+  nFirstName              String?  @map("n_first_name")
+  nFatherName             String?  @map("n_father_name")
+  nLastName               String?  @map("n_last_name")
+  nFullName               String?  @map("n_full_name")
+  nMotherName             String?  @map("n_mother_name")
+  nContractCode           String?  @map("n_contract_code")
+  nSecondaryContractCode  String?  @map("n_secondary_contract_code")
+  dNationalId             String?  @map("d_national_id")
+  dPersonalNo             String?  @map("d_personal_no")
+  dPhone                  String?  @map("d_phone")
+  nationalIdNum           BigInt?  @map("national_id_num")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  file                    File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, rowIndex])
+  @@index([fileId])
+  @@index([nationalIdNum])
+  @@map("records")
+}
+
+model UploadJob {
+  id            String          @id @default(uuid()) @db.Uuid
+  fileId        String?         @map("file_id") @db.Uuid
+  status        UploadJobStatus @default(PENDING)
+  totalRows     Int             @default(0) @map("total_rows")
+  processedRows Int             @default(0) @map("processed_rows")
+  errorMessage  String?         @map("error_message")
+  payload       Json            @db.JsonB
+  startedAt     DateTime?       @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?       @map("finished_at") @db.Timestamptz(3)
+  file          File?           @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([fileId])
+  @@index([status])
+  @@map("upload_jobs")
+}
+
+model DataQualityIssue {
+  id         String               @id @default(uuid()) @db.Uuid
+  fileId     String               @map("file_id") @db.Uuid
+  rowIndex   Int                  @map("row_index")
+  issueType  DataQualityIssueType @map("issue_type")
+  columnName String?              @map("column_name")
+  rawValue   String?              @map("raw_value")
+  createdAt  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  file       File                 @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([fileId])
+  @@index([fileId, issueType])
+  @@map("data_quality_issues")
+}
+
+model ActivityLog {
+  id         String         @id @default(uuid()) @db.Uuid
+  action     ActivityAction
+  targetName String         @map("target_name")
+  details    Json           @default("{}") @db.JsonB
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("activity_log")
+}
+
+model MappingTemplate {
+  id              String   @id @default(uuid()) @db.Uuid
+  groupId         String   @map("group_id") @db.Uuid
+  name            String
+  headerSignature String   @map("header_signature")
+  mapping         Json     @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  group           Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, name])
+  @@index([groupId, headerSignature])
+  @@map("mapping_templates")
+}

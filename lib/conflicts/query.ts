@@ -1,0 +1,318 @@
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db/prisma";
+import {
+  CONFLICT_FIELDS,
+  CONFLICT_RULES,
+  type ConflictResponse,
+  type ConflictRuleKey,
+} from "@/lib/conflicts/catalog";
+import type { ConflictRequest } from "@/lib/conflicts/request";
+
+// Keep the SQL equivalent of normalizeStored local to this read-only report.
+// In particular, do not strip characters before validating an identifier.
+export function latinDigitsSql(value: Prisma.Sql) {
+  return Prisma.sql`translate(${value}, '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789')`;
+}
+
+export function normalizeTextSql(value: Prisma.Sql) {
+  return Prisma.sql`lower(regexp_replace(translate(regexp_replace(
+    ${latinDigitsSql(Prisma.sql`btrim(regexp_replace(COALESCE(${value}, ''), ${"\\s+"}, ' ', 'g'))`)},
+    ${"[\u064B-\u0655\u0670\u0640]"}, '', 'g'), 'أإآٱؤئةىء', 'ااااويهي'), ${"عبد\\s+"}, 'عبد', 'g'))`;
+}
+
+function numericKey(value: Prisma.Sql) {
+  const latin = latinDigitsSql(value);
+  return Prisma.sql`CASE WHEN ${latin} ~ '^[0-9]+$' THEN COALESCE(NULLIF(ltrim(${latin}, '0'), ''), '0') END`;
+}
+
+const rawFields = [
+  "first_name",
+  "father_name",
+  "last_name",
+  "full_name",
+  "national_id",
+  "sham_cash",
+  "personal_no",
+  "mother_name",
+  "contract_code",
+] as const;
+const trimCharacters =
+  " \t\n\r\f\v\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
+function rawField(field: (typeof rawFields)[number]) {
+  const fallback =
+    field === "sham_cash"
+      ? Prisma.sql`lpad(r.sf_sham_cash::text, 16, '0')`
+      : Prisma.raw(`r.sf_${field}`);
+  const originalCell = Prisma.sql`r.data ->> (m.mapping ->> ${field})`;
+  // Other sf_* text columns already contain the original cell. Only full_name
+  // can be synthesized and sham_cash is converted to bigint during import.
+  const original =
+    field === "full_name" || field === "sham_cash"
+      ? Prisma.sql`CASE WHEN m.mapping ? ${field} THEN ${originalCell} ELSE ${fallback} END`
+      : Prisma.sql`COALESCE(${fallback}, ${originalCell})`;
+  return Prisma.sql`btrim(COALESCE(${original}, ''), ${trimCharacters}) AS ${Prisma.raw(field)}`;
+}
+
+const baseCtes = Prisma.sql`
+  mappings AS (
+    SELECT file_id, jsonb_object_agg(standard_field::text, header_raw) FILTER (WHERE standard_field IS NOT NULL) AS mapping
+    FROM file_columns GROUP BY file_id
+  ),
+  source AS MATERIALIZED (
+    SELECT r.id, r.file_id, r.row_index, f.group_id, f.name AS file_name, f.original_filename,
+      COALESCE(m.mapping, '{}'::jsonb) AS mapping,
+      COALESCE(NULLIF(btrim(r.sf_full_name), ''), concat_ws(' ', NULLIF(btrim(r.sf_first_name), ''), NULLIF(btrim(r.sf_father_name), ''), NULLIF(btrim(r.sf_last_name), ''))) AS display_name,
+      ${Prisma.join(rawFields.map(rawField))}
+    FROM records r JOIN files f ON f.id = r.file_id LEFT JOIN mappings m ON m.file_id = r.file_id
+    WHERE NOT EXISTS (SELECT 1 FROM upload_jobs j WHERE j.file_id = f.id AND j.status IN ('pending', 'parsing', 'inserting'))
+  ),
+  normalized AS MATERIALIZED (
+    SELECT s.*, ${normalizeTextSql(Prisma.sql`display_name`)} AS name_key,
+      ${normalizeTextSql(Prisma.sql`mother_name`)} AS mother_key,
+      ${numericKey(Prisma.sql`national_id`)} AS national_key,
+      ${numericKey(Prisma.sql`sham_cash`)} AS sham_key,
+      ${numericKey(Prisma.sql`personal_no`)} AS personal_key,
+      NULLIF(${normalizeTextSql(Prisma.sql`contract_code`)}, '') AS contract_key
+    FROM source s
+  ),
+  base AS MATERIALIZED (
+    SELECT n.*, CASE WHEN name_key <> '' AND mother_key <> '' THEN jsonb_build_array(name_key, mother_key) END AS person_key
+    FROM normalized n
+  )`;
+
+const dateCtes = Prisma.sql`,
+  date_originals AS MATERIALIZED (
+    SELECT b.id, c.header_raw, COALESCE(r.data ->> c.header_raw, '') AS raw_value
+    FROM base b JOIN records r ON r.id = b.id JOIN file_columns c ON c.file_id = b.file_id
+    WHERE ${normalizeTextSql(Prisma.sql`c.header_raw`)} LIKE '%تاريخ%'
+  ),
+  date_values AS MATERIALIZED (
+    SELECT *, ${latinDigitsSql(Prisma.sql`btrim(raw_value, ${trimCharacters})`)} AS value FROM date_originals
+  ),
+  date_parts AS MATERIALIZED (
+    SELECT *, regexp_match(value, ${"^(\\d{1,2})[/-](\\d{1,2})[/-](\\d{4})$"}) AS dmy,
+      regexp_match(value, ${"^(\\d{4})-(\\d{1,2})-(\\d{1,2})(?:[T\\s].*)?$"}) AS ymd,
+      regexp_match(value, ${"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+(\\d{1,2})\\s+(\\d{4})(?:\\s|$)"}) AS excel
+    FROM date_values WHERE value <> ''
+  ),
+  date_iso AS MATERIALIZED (
+    SELECT *, CASE
+      WHEN dmy IS NOT NULL THEN dmy[3] || '-' || lpad(dmy[2], 2, '0') || '-' || lpad(dmy[1], 2, '0')
+      WHEN ymd IS NOT NULL THEN ymd[1] || '-' || lpad(ymd[2], 2, '0') || '-' || lpad(ymd[3], 2, '0')
+      WHEN excel IS NOT NULL THEN excel[3] || '-' || lpad(array_position(ARRAY['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], excel[1])::text, 2, '0') || '-' || lpad(excel[2], 2, '0')
+    END AS iso FROM date_parts
+  ),
+  dates AS (
+    SELECT *, CASE WHEN pg_input_is_valid(iso, 'date') THEN iso::date END AS parsed FROM date_iso
+  )`;
+
+const jobCtes = Prisma.sql`,
+  job_values AS (
+    SELECT b.id, b.person_key, b.name_key, b.mother_key, c.header_raw,
+      r.data ->> c.header_raw AS value, ${normalizeTextSql(Prisma.sql`r.data ->> c.header_raw`)} AS value_key
+    FROM base b JOIN records r ON r.id = b.id JOIN file_columns c ON c.file_id = b.file_id
+    WHERE ${normalizeTextSql(Prisma.sql`c.header_raw`)} IN ('المسمي الوظيفي', 'مسمي وظيفي', 'المسمي', 'مسمي الوظيفة', 'المسمي الوظيفي الحالي')
+      AND b.person_key IS NOT NULL
+  )`;
+
+function issueSelect(
+  key: ConflictRuleKey,
+  explanation: Prisma.Sql,
+  from: Prisma.Sql,
+  where: Prisma.Sql,
+) {
+  const rule = CONFLICT_RULES.find((entry) => entry.key === key)!;
+  return Prisma.sql`SELECT b.id, ${key}::text AS rule, ${rule.label}::text AS label, ${explanation} AS explanation FROM ${from} WHERE ${where}`;
+}
+
+function localRule(key: ConflictRuleKey) {
+  const from = Prisma.sql`base b`;
+  const national = latinDigitsSql(Prisma.sql`b.national_id`);
+  const sham = latinDigitsSql(Prisma.sql`b.sham_cash`);
+  switch (key) {
+    case "national_short":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.national_id || '» تتكون من ' || length(${national}) || ' أرقام؛ الحد الأدنى هنا 9 أرقام.'`,
+        from,
+        Prisma.sql`${national} ~ '^[0-9]{1,8}$'`,
+      );
+    case "national_long":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.national_id || '» تحتوي على ' || length(${national}) || ' خانة؛ الحد الأعلى 11.'`,
+        from,
+        Prisma.sql`length(${national}) >= 12`,
+      );
+    case "national_characters":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.national_id || '» تحتوي على محارف غير رقمية.'`,
+        from,
+        Prisma.sql`b.national_id <> '' AND ${national} !~ '^[0-9]+$'`,
+      );
+    case "sham_short":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
+        from,
+        Prisma.sql`b.sham_cash <> '' AND length(${sham}) < 16`,
+      );
+    case "sham_long":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على ' || length(${sham}) || ' خانة، والمطلوب 16.'`,
+        from,
+        Prisma.sql`length(${sham}) > 16`,
+      );
+    case "sham_characters":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.sham_cash || '» تحتوي على محارف غير رقمية؛ الشام كاش يجب أن يتكون من 16 رقماً فقط.'`,
+        from,
+        Prisma.sql`b.sham_cash <> '' AND ${sham} !~ '^[0-9]+$'`,
+      );
+    case "name_mismatch": {
+      const composed = Prisma.sql`concat_ws(' ', NULLIF(b.first_name, ''), NULLIF(b.father_name, ''), NULLIF(b.last_name, ''))`;
+      return issueSelect(
+        key,
+        Prisma.sql`'الاسم المربوط «' || b.full_name || '» لا يساوي «' || ${composed} || '» (الاسم + اسم الأب + النسبة) بعد التطبيع.'`,
+        from,
+        Prisma.sql`b.mapping ?& ARRAY['full_name','first_name','father_name','last_name'] AND b.full_name <> '' AND ${normalizeTextSql(Prisma.sql`b.full_name`)} <> ${normalizeTextSql(composed)}`,
+      );
+    }
+    case "date_invalid":
+    case "date_early":
+    case "date_future": {
+      const condition =
+        key === "date_invalid"
+          ? Prisma.sql`b.parsed IS NULL`
+          : key === "date_early"
+            ? Prisma.sql`b.parsed < DATE '1940-01-01'`
+            : Prisma.sql`b.parsed > CURRENT_DATE`;
+      const reason =
+        key === "date_invalid"
+          ? "تعذر تحويلها إلى تاريخ معتمد."
+          : key === "date_early"
+            ? "تسبق 01/01/1940."
+            : "تتجاوز تاريخ اليوم.";
+      return issueSelect(
+        key,
+        Prisma.sql`'العمود «' || b.header_raw || '»، القيمة «' || b.raw_value || '»: ' || ${reason}`,
+        Prisma.sql`dates b`,
+        condition,
+      );
+    }
+    default: {
+      const rule = CONFLICT_RULES.find((entry) => entry.key === key)!;
+      if (rule.category !== "missing") return null;
+      const value = Prisma.raw(`b.${rule.field}`);
+      const conditional = ["full_name", "first_name", "father_name", "last_name"].includes(
+        rule.field,
+      );
+      return issueSelect(
+        key,
+        Prisma.sql`${CONFLICT_FIELDS[rule.field] + ": "} || CASE WHEN b.mapping ? ${rule.field} THEN 'الخلية في العمود «' || (b.mapping ->> ${rule.field}) || '» فارغة.' ELSE 'لا توجد قيمة مسجلة أو عمود مربوط بهذا الحقل.' END`,
+        from,
+        Prisma.sql`${value} = '' ${conditional ? Prisma.sql`AND b.mapping ? ${rule.field}` : Prisma.empty}`,
+      );
+    }
+  }
+}
+
+const identifierColumns = {
+  national_id: ["national_key", "national_id"],
+  sham_cash: ["sham_key", "sham_cash"],
+  personal_no: ["personal_key", "personal_no"],
+  contract_code: ["contract_key", "contract_code"],
+} as const;
+
+function relationalRule(key: ConflictRuleKey) {
+  if (key === "similar_names")
+    return issueSelect(
+      key,
+      Prisma.sql`'هذا الاسم الثلاثي مرتبط بـ ' || g.total || ' أسماء أمهات مختلفة بعد التطبيع، منها «' || g.first_value || '» و«' || g.last_value || '».'`,
+      Prisma.sql`base b JOIN (SELECT name_key, COUNT(DISTINCT mother_key) AS total, MIN(mother_name) AS first_value, MAX(mother_name) AS last_value FROM base WHERE person_key IS NOT NULL GROUP BY name_key HAVING COUNT(DISTINCT mother_key) > 1) g ON g.name_key = b.name_key`,
+      Prisma.sql`b.person_key IS NOT NULL`,
+    );
+  if (key === "person_job")
+    return issueSelect(
+      key,
+      Prisma.sql`'الشخص نفسه مرتبط بـ ' || g.total || ' مسميات وظيفية مختلفة: منها «' || g.first_value || '» و«' || g.last_value || '». عمود هذا السجل «' || b.header_raw || '»، وقيمته «' || b.value || '».'`,
+      Prisma.sql`job_values b JOIN (SELECT person_key, COUNT(DISTINCT value_key) AS total, MIN(value) AS first_value, MAX(value) AS last_value FROM job_values WHERE value_key <> '' GROUP BY person_key HAVING COUNT(DISTINCT value_key) > 1) g ON g.person_key = b.person_key`,
+      Prisma.sql`b.value_key <> ''`,
+    );
+  const rule = CONFLICT_RULES.find((entry) => entry.key === key)!;
+  if (!(rule.field in identifierColumns)) throw new Error("Unsupported conflict rule");
+  const [keyName, valueName] = identifierColumns[rule.field as keyof typeof identifierColumns];
+  const keyColumn = Prisma.raw(keyName);
+  const valueColumn = Prisma.raw(valueName);
+  const currentKey = Prisma.raw(`b.${keyName}`);
+  const currentValue = Prisma.raw(`b.${valueName}`);
+  if (key.startsWith("duplicate_"))
+    return issueSelect(
+      key,
+      Prisma.sql`'القيمة «' || ${currentValue} || '» مكررة في ' || g.total || ' صفوف داخل ملف المصدر نفسه.'`,
+      Prisma.sql`base b JOIN (SELECT file_id, ${keyColumn} AS value_key, COUNT(*) AS total FROM base WHERE ${keyColumn} IS NOT NULL GROUP BY file_id, ${keyColumn} HAVING COUNT(*) > 1) g ON g.file_id = b.file_id AND g.value_key = ${currentKey}`,
+      Prisma.sql`TRUE`,
+    );
+  if (key.endsWith("_people"))
+    return issueSelect(
+      key,
+      Prisma.sql`'القيمة «' || ${currentValue} || '» مرتبطة بـ ' || g.total || ' أشخاص مختلفين في جميع الملفات؛ الشخص هو الاسم الثلاثي مع اسم الأم.'`,
+      Prisma.sql`base b JOIN (SELECT ${keyColumn} AS value_key, COUNT(DISTINCT person_key) AS total FROM base WHERE person_key IS NOT NULL AND ${keyColumn} IS NOT NULL GROUP BY ${keyColumn} HAVING COUNT(DISTINCT person_key) > 1) g ON g.value_key = ${currentKey}`,
+      Prisma.sql`b.person_key IS NOT NULL`,
+    );
+  return issueSelect(
+    key,
+    Prisma.sql`'الشخص نفسه مرتبط بـ ' || g.total || ${" قيم مختلفة لحقل «" + CONFLICT_FIELDS[rule.field] + "»، منها «"} || g.first_value || '» و«' || g.last_value || '». قيمة هذا السجل «' || ${currentValue} || '».'`,
+    Prisma.sql`base b JOIN (SELECT person_key, COUNT(DISTINCT ${keyColumn}) AS total, MIN(${valueColumn}) AS first_value, MAX(${valueColumn}) AS last_value FROM base WHERE person_key IS NOT NULL AND ${keyColumn} IS NOT NULL GROUP BY person_key HAVING COUNT(DISTINCT ${keyColumn}) > 1) g ON g.person_key = b.person_key`,
+    Prisma.sql`${currentKey} IS NOT NULL`,
+  );
+}
+
+export function buildConflictQuery(input: ConflictRequest) {
+  const rules = CONFLICT_RULES.filter(
+    (rule) =>
+      rule.category === input.category &&
+      (input.field === "all" || rule.field === input.field) &&
+      (input.rule === "all" || rule.key === input.rule),
+  );
+  if (!rules.length) throw new Error("No matching conflict rules");
+  const selects = rules.map((rule) => localRule(rule.key) ?? relationalRule(rule.key));
+  return Prisma.sql`WITH ${baseCtes}
+    ${rules.some((rule) => rule.field === "date") ? dateCtes : Prisma.empty}
+    ${rules.some((rule) => rule.key === "person_job") ? jobCtes : Prisma.empty},
+    issues AS (${Prisma.join(selects, " UNION ALL ")}),
+    matched AS MATERIALIZED (
+      SELECT id, jsonb_agg(jsonb_build_object('rule', rule, 'label', label, 'explanation', explanation) ORDER BY rule, explanation) AS issues
+      FROM issues GROUP BY id
+    ),
+    page_rows AS (
+      SELECT b.id, b.file_id AS "fileId", b.group_id AS "groupId", b.file_name AS "fileName", b.original_filename AS "originalFilename",
+        b.row_index AS "rowIndex", b.display_name AS "fullName", b.mother_name AS "motherName", b.national_id AS "nationalId", m.issues
+      FROM matched m JOIN base b ON b.id = m.id
+      ORDER BY b.name_key, b.mother_key, b.file_name, b.row_index, b.id
+      LIMIT ${input.pageSize} OFFSET ${(input.page - 1) * input.pageSize}
+    )
+    SELECT (SELECT COUNT(*)::integer FROM matched) AS total,
+      COALESCE((SELECT jsonb_agg(to_jsonb(p)) FROM page_rows p), '[]'::jsonb) AS rows`;
+}
+
+export async function queryConflicts(
+  input: ConflictRequest,
+  database: Pick<Prisma.TransactionClient, "$queryRaw"> = prisma,
+): Promise<ConflictResponse> {
+  const [result] = await database.$queryRaw<Pick<ConflictResponse, "total" | "rows">[]>(
+    buildConflictQuery(input),
+  );
+  const total = result?.total ?? 0;
+  return {
+    rows: result?.rows ?? [],
+    total,
+    page: input.page,
+    pageSize: input.pageSize,
+    pageCount: Math.ceil(total / input.pageSize),
+  };
+}

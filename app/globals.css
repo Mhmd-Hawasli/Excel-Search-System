@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 42 42% 97%;
+    --foreground: 165 32% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 165 32% 12%;
+    --primary: 164 54% 27%;
+    --primary-foreground: 45 50% 98%;
+    --secondary: 42 32% 91%;
+    --secondary-foreground: 164 38% 20%;
+    --muted: 42 26% 93%;
+    --muted-foreground: 165 10% 40%;
+    --accent: 39 69% 88%;
+    --accent-foreground: 25 50% 24%;
+    --destructive: 2 65% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 42 18% 84%;
+    --input: 42 18% 80%;
+    --ring: 164 54% 32%;
+    --radius: 0.8rem;
+  }
+
+  .dark {
+    --background: 165 31% 8%;
+    --foreground: 42 28% 92%;
+    --card: 165 26% 11%;
+    --card-foreground: 42 28% 92%;
+    --primary: 158 43% 56%;
+    --primary-foreground: 165 40% 9%;
+    --secondary: 165 18% 17%;
+    --secondary-foreground: 42 24% 90%;
+    --muted: 165 17% 15%;
+    --muted-foreground: 42 12% 66%;
+    --accent: 35 32% 21%;
+    --accent-foreground: 42 40% 90%;
+    --destructive: 2 58% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 165 14% 22%;
+    --input: 165 14% 24%;
+    --ring: 158 43% 56%;
+  }
+
+  * { @apply border-border; }
+  html { font-feature-settings: "ss01", "ss02"; }
+  body { @apply bg-background text-foreground antialiased; }
+  ::selection { @apply bg-primary/20; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .ltr-numbers { direction: ltr; unicode-bidi: isolate; }
+}

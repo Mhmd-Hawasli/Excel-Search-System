@@ -1,0 +1,9 @@
+.next/
+node_modules/
+coverage/
+.npm-cache/
+test-artifacts/
+tmp/
+*.tsbuildinfo
+*.xlsx
+*.xls

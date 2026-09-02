@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: excel-archive-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: excel_archive
+      POSTGRES_PASSWORD: excel_archive
+      POSTGRES_DB: excel_archive
+    ports:
+      - "5432:5432"
+    volumes:
+      - excel_archive_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excel_archive -d excel_archive"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  excel_archive_data:
