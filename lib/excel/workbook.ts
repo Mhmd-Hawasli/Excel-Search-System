@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import { normalizeStored } from "@/lib/normalization/arabic";
@@ -85,9 +85,39 @@ export function removeWorkbookFilters(workbook: ExcelJS.Workbook) {
   return changed;
 }
 
+/**
+ * Best-effort removal of orphaned upload workbooks. The import worker deletes
+ * its token file when it finishes, but on Windows the delete can fail while
+ * the streaming reader still holds the file, so leftovers accumulate.
+ * Only UUID-named .xlsx files older than a day are removed; an active wizard
+ * session always references a fresh token.
+ */
+export async function pruneStaleUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
+  try {
+    await mkdir(UPLOAD_DIRECTORY, { recursive: true });
+    const cutoff = Date.now() - maxAgeMs;
+    const entries = await readdir(UPLOAD_DIRECTORY);
+    await Promise.all(
+      entries
+        .filter((entry) => /^[0-9a-f-]{36}\.xlsx$/i.test(entry))
+        .map(async (entry) => {
+          const fullPath = path.join(UPLOAD_DIRECTORY, entry);
+          try {
+            if ((await stat(fullPath)).mtimeMs < cutoff) await unlink(fullPath);
+          } catch {
+            // Locked or already removed; leave it for the next pass.
+          }
+        }),
+    );
+  } catch {
+    // Pruning must never break an upload.
+  }
+}
+
 export async function saveAndInspectWorkbook(buffer: Buffer, originalFilename: string): Promise<WorkbookInspection> {
   const token = randomUUID();
   await mkdir(UPLOAD_DIRECTORY, { recursive: true });
+  await pruneStaleUploads();
   await writeFile(workbookPath(token), buffer);
   const workbook = await loadWorkbook(token);
   if (!workbook.worksheets.length) throw new Error("لا يحتوي المصنف على أي أوراق قابلة للقراءة.");

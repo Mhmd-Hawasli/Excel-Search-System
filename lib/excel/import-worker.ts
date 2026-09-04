@@ -3,7 +3,9 @@ import { ActivityAction, DataQualityIssueType, Prisma, UploadJobStatus } from "@
 import { prisma } from "@/lib/db/prisma";
 import { uploadConfigSchema, type UploadConfig } from "@/lib/excel/config";
 import { PRISMA_STANDARD_FIELDS } from "@/lib/excel/standard-fields";
+import { documentRows } from "@/lib/excel/document-rows";
 import { importRows } from "@/lib/excel/import-rows";
+import { UnresolvableCellError } from "@/lib/excel/cell-value";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { columnSignature, workbookPath } from "@/lib/excel/workbook";
 import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";
@@ -141,6 +143,28 @@ export async function runImportJob(jobId: string) {
     return;
   }
   const config = parsed.data;
+  try {
+    await executeImport(jobId, config, "stream", false);
+  } catch (error) {
+    // The streaming reader can intermittently fail to resolve shared strings
+    // (an ExcelJS streaming defect). Retry once through the document reader,
+    // which resolves them natively; the partial file was already removed.
+    // The retry marks the job FAILED itself when it fails, so its rejection
+    // is swallowed to keep runImportJob rejection-free for setImmediate.
+    if (error instanceof UnresolvableCellError) {
+      await executeImport(jobId, config, "document", true).catch(() => undefined);
+    }
+  } finally {
+    await unlink(workbookPath(config.token)).catch(() => undefined);
+  }
+}
+
+async function executeImport(
+  jobId: string,
+  config: UploadConfig,
+  source: "stream" | "document",
+  isRetry: boolean,
+) {
   let fileId: string | null = null;
   try {
     await prisma.uploadJob.update({
@@ -191,7 +215,8 @@ export async function runImportJob(jobId: string) {
     let recordBatch: Prisma.RecordCreateManyInput[] = [];
     let issueBatch: Prisma.DataQualityIssueCreateManyInput[] = [];
     const seenNationalIds = new Set<string>();
-    for await (const row of importRows(config)) {
+    const rows = source === "stream" ? importRows(config) : documentRows(config);
+    for await (const row of rows) {
       processedRows += 1;
       const data: RowData = {};
       for (const column of config.columns)
@@ -236,6 +261,7 @@ export async function runImportJob(jobId: string) {
             rows: importedRows,
             sheetName: config.sheetName,
             ...(config.linkedSheets ? { linkedSheets: config.linkedSheets } : {}),
+            ...(isRetry ? { fallback: "document" } : {}),
           },
         },
       }),
@@ -252,7 +278,6 @@ export async function runImportJob(jobId: string) {
         finishedAt: new Date(),
       },
     });
-  } finally {
-    await unlink(workbookPath(config.token)).catch(() => undefined);
+    throw error;
   }
 }
