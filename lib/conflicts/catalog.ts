@@ -22,6 +22,8 @@ export const CONFLICT_FIELDS = {
   last_name: "النسبة",
   date: "التواريخ",
   job_title: "المسمى الوظيفي",
+  functional_category: "الفئة الوظيفية",
+  organizational_level: "السوية التنظيمية الأساسية",
 } as const;
 export type ConflictField = keyof typeof CONFLICT_FIELDS;
 
@@ -57,6 +59,12 @@ export const CONFLICT_RULES = [
     category: "invalid",
     field: "full_name",
     label: "الاسم الثلاثي لا يطابق تركيب الاسم",
+  },
+  {
+    key: "category_invalid",
+    category: "invalid",
+    field: "functional_category",
+    label: "الفئة الوظيفية غير معروفة",
   },
   { key: "date_invalid", category: "invalid", field: "date", label: "تاريخ تعذر تحويله" },
   { key: "date_early", category: "invalid", field: "date", label: "تاريخ قبل عام 1940" },
@@ -167,6 +175,18 @@ export const CONFLICT_RULES = [
     field: "job_title",
     label: "الشخص مرتبط بأكثر من مسمى وظيفي",
   },
+  {
+    key: "person_category",
+    category: "conflicting",
+    field: "functional_category",
+    label: "الشخص مرتبط بأكثر من فئة وظيفية",
+  },
+  {
+    key: "person_org_level",
+    category: "conflicting",
+    field: "organizational_level",
+    label: "الشخص مرتبط بأكثر من سوية تنظيمية أساسية",
+  },
 ] as const satisfies readonly {
   key: string;
   category: ConflictCategory;
@@ -188,6 +208,7 @@ export type ConflictRow = {
   nationalId: string;
   shamCash: string;
   personalNo: string;
+  functionalCategory: string | null;
   issueNumber: number;
   groupKey: string | null;
   issues: ConflictIssue[];
@@ -200,6 +221,7 @@ export const CONFLICT_SORTABLE = [
   "nationalId",
   "shamCash",
   "personalNo",
+  "functionalCategory",
 ] as const;
 export type ConflictSortBy = (typeof CONFLICT_SORTABLE)[number];
 export type ConflictSortDir = "asc" | "desc";

@@ -128,3 +128,73 @@ describe("national ID import quality", () => {
     ).toMatchObject([{ issueType: "DUPLICATE_NATIONAL_ID" }]);
   });
 });
+
+describe("recordInput employment standard fields", () => {
+  const config: UploadConfig = {
+    token: "d57df626-8e31-4a3d-b8b8-d01bb4648d4f",
+    groupId: "2254b5b0-065d-4846-ab8a-d5f57f7655ab",
+    name: "ملف الموظفين",
+    description: "",
+    originalFilename: "employees.xlsx",
+    sheetName: "Sheet1",
+    sheetIndex: 1,
+    totalRows: 1,
+    columns: [
+      {
+        headerRaw: "الرقم الوطني",
+        headerNormalized: "الرقم الوطني",
+        columnIndex: 0,
+        standardField: "national_id",
+        categoryId: null,
+      },
+      {
+        headerRaw: "المسمى الوظيفي",
+        headerNormalized: "المسمي الوظيفي",
+        columnIndex: 1,
+        standardField: "job_title",
+        categoryId: null,
+      },
+      {
+        headerRaw: "الفئة الوظيفية",
+        headerNormalized: "الفئه الوظيفيه",
+        columnIndex: 2,
+        standardField: "functional_category",
+        categoryId: null,
+      },
+      {
+        headerRaw: "السوية التنظيمية",
+        headerNormalized: "السويه التنظيميه",
+        columnIndex: 3,
+        standardField: "organizational_level",
+        categoryId: null,
+      },
+    ],
+  };
+  const data = {
+    "الرقم الوطني": "123456789",
+    "المسمى الوظيفي": "مهندس",
+    "الفئة الوظيفية": "الفئة الأولى",
+    "السوية التنظيمية": "المستوى الأول",
+  };
+
+  it("stores job title, numeric category and normalized organizational level", () => {
+    const input = recordInput("file-id", 2, data, config);
+    expect(input.sfJobTitle).toBe("مهندس");
+    expect(input.nJobTitle).toBe(normalizeStored("مهندس"));
+    expect(input.sfFunctionalCategory).toBe(1);
+    expect(input.sfOrganizationalLevel).toBe("المستوى الأول");
+    expect(input.nOrganizationalLevel).toBe(normalizeStored("المستوى الأول"));
+  });
+
+  it("stores 0 for an unknown category and null for an empty one", () => {
+    expect(recordInput("file-id", 2, { ...data, "الفئة الوظيفية": "سادسة" }, config).sfFunctionalCategory).toBe(0);
+    expect(recordInput("file-id", 2, { ...data, "الفئة الوظيفية": "" }, config).sfFunctionalCategory).toBeNull();
+  });
+
+  it("reports an invalid functional category as a quality issue", () => {
+    expect(qualityIssues("file-id", 2, { ...data, "الفئة الوظيفية": "سادسة" }, config, new Set())).toMatchObject([
+      { issueType: "INVALID_FUNCTIONAL_CATEGORY", rawValue: "سادسة" },
+    ]);
+    expect(qualityIssues("file-id", 2, data, config, new Set())).toEqual([]);
+  });
+});

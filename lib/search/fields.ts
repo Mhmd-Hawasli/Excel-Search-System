@@ -1,7 +1,7 @@
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
 
-export type SearchFieldType = "text" | "numeric";
+export type SearchFieldType = "text" | "numeric" | "functional_category";
 export type SearchField = { key: StandardFieldKey; label: string; type: SearchFieldType; column: string };
 
 export const SEARCH_FIELDS: SearchField[] = [
@@ -16,6 +16,9 @@ export const SEARCH_FIELDS: SearchField[] = [
   { key: "phone", label: STANDARD_FIELD_LABELS.phone, type: "numeric", column: "d_phone" },
   { key: "contract_code", label: STANDARD_FIELD_LABELS.contract_code, type: "text", column: "n_contract_code" },
   { key: "secondary_contract_code", label: STANDARD_FIELD_LABELS.secondary_contract_code, type: "text", column: "n_secondary_contract_code" },
+  { key: "job_title", label: STANDARD_FIELD_LABELS.job_title, type: "text", column: "n_job_title" },
+  { key: "functional_category", label: STANDARD_FIELD_LABELS.functional_category, type: "functional_category", column: "sf_functional_category" },
+  { key: "organizational_level", label: STANDARD_FIELD_LABELS.organizational_level, type: "text", column: "n_organizational_level" },
 ];
 
 export const SEARCH_FIELD_MAP = Object.fromEntries(SEARCH_FIELDS.map((field) => [field.key, field])) as Record<StandardFieldKey, SearchField>;

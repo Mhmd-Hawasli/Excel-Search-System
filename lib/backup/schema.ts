@@ -8,9 +8,10 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 import { CATEGORY_LIMIT_MESSAGE, MAX_CUSTOM_CATEGORIES } from "@/lib/categories/config";
-import { digitsOnly } from "@/lib/normalization/arabic";
+import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";
 import { nationalIdColumns } from "@/lib/format/national-id";
 import { nationalIdQualityIssue } from "@/lib/excel/national-id-quality";
+import { parseFunctionalCategory } from "@/lib/format/functional-category";
 
 export const BACKUP_SCHEMA_VERSION = 1 as const;
 const date = z.coerce.date();
@@ -96,6 +97,9 @@ const record = z.object({
   sfPhone: nullableText,
   sfContractCode: nullableText,
   sfSecondaryContractCode: nullableText.optional().default(null),
+  sfJobTitle: nullableText.optional().default(null),
+  sfFunctionalCategory: z.number().int().min(0).max(5).nullable().optional().default(null),
+  sfOrganizationalLevel: nullableText.optional().default(null),
   nFirstName: nullableText,
   nFatherName: nullableText,
   nLastName: nullableText,
@@ -103,6 +107,8 @@ const record = z.object({
   nMotherName: nullableText,
   nContractCode: nullableText,
   nSecondaryContractCode: nullableText.optional().default(null),
+  nJobTitle: nullableText.optional().default(null),
+  nOrganizationalLevel: nullableText.optional().default(null),
   dNationalId: nullableText,
   dPersonalNo: nullableText,
   dPhone: nullableText,
@@ -182,6 +188,21 @@ export const backupSchema = z
         .filter((column) => column.standardField === StandardField.NATIONAL_ID)
         .map((column) => [column.fileId, column.headerRaw]),
     );
+    const jobTitleHeaders = new Map(
+      backup.data.fileColumns
+        .filter((column) => column.standardField === StandardField.JOB_TITLE)
+        .map((column) => [column.fileId, column.headerRaw]),
+    );
+    const functionalCategoryHeaders = new Map(
+      backup.data.fileColumns
+        .filter((column) => column.standardField === StandardField.FUNCTIONAL_CATEGORY)
+        .map((column) => [column.fileId, column.headerRaw]),
+    );
+    const organizationalLevelHeaders = new Map(
+      backup.data.fileColumns
+        .filter((column) => column.standardField === StandardField.ORGANIZATIONAL_LEVEL)
+        .map((column) => [column.fileId, column.headerRaw]),
+    );
     const nationalIssueTypes: DataQualityIssueType[] = [
       DataQualityIssueType.MISSING_NATIONAL_ID,
       DataQualityIssueType.INVALID_NATIONAL_ID,
@@ -205,6 +226,11 @@ export const backupSchema = z
           ? data[header!]
           : (data.__national_id_original ?? entry.sfNationalId);
         if (!hasMappedValue && raw != null) data.__national_id_original = raw;
+        const readHeader = (header: string | undefined) =>
+          header !== undefined && Object.hasOwn(data, header) ? data[header] : undefined;
+        const jobTitleRaw = readHeader(jobTitleHeaders.get(entry.fileId));
+        const categoryRaw = readHeader(functionalCategoryHeaders.get(entry.fileId));
+        const orgLevelRaw = readHeader(organizationalLevelHeaders.get(entry.fileId));
         const seen = seenByFile.get(entry.fileId) ?? new Set<string>();
         seenByFile.set(entry.fileId, seen);
         const issueType = nationalIdQualityIssue(raw, seen);
@@ -218,7 +244,23 @@ export const backupSchema = z
             rawValue: raw == null ? "" : String(raw),
             createdAt: entry.createdAt,
           });
-        return { ...entry, data, ...nationalIdColumns(raw) };
+        const jobTitle =
+          jobTitleRaw !== undefined ? String(jobTitleRaw) : entry.sfJobTitle ?? null;
+        const orgLevel =
+          orgLevelRaw !== undefined ? String(orgLevelRaw) : entry.sfOrganizationalLevel ?? null;
+        return {
+          ...entry,
+          data,
+          ...nationalIdColumns(raw),
+          sfJobTitle: jobTitle,
+          sfFunctionalCategory:
+            categoryRaw !== undefined ? parseFunctionalCategory(categoryRaw) : entry.sfFunctionalCategory,
+          sfOrganizationalLevel: orgLevel,
+          nJobTitle: jobTitle ? normalizeStored(jobTitle) : entry.nJobTitle ?? null,
+          nOrganizationalLevel: orgLevel
+            ? normalizeStored(orgLevel)
+            : entry.nOrganizationalLevel ?? null,
+        };
       });
     return { ...backup, data: { ...backup.data, records, dataQualityIssues } };
   });

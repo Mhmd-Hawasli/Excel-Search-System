@@ -5,6 +5,9 @@ export const SEARCH_SORT_KEYS = [
   "mother_name",
   "sham_cash",
   "personal_no",
+  "job_title",
+  "functional_category",
+  "organizational_level",
   "match",
 ] as const;
 

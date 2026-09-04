@@ -10,6 +10,9 @@ export const STANDARD_FIELD_KEYS = [
   "phone",
   "contract_code",
   "secondary_contract_code",
+  "job_title",
+  "functional_category",
+  "organizational_level",
 ] as const;
 export type StandardFieldKey = (typeof STANDARD_FIELD_KEYS)[number];
 

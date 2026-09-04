@@ -15,6 +15,7 @@ const labels: Record<DataQualityIssueType, string> = {
   DUPLICATE_NATIONAL_ID: "رقم وطني مكرر",
   INVALID_PHONE: "رقم هاتف غير صالح",
   INVALID_SHAM_CASH: "رقم شام كاش غير صالح",
+  INVALID_FUNCTIONAL_CATEGORY: "فئة وظيفية غير معروفة",
   EMPTY_ROW: "صف فارغ",
 };
 

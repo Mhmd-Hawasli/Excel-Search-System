@@ -27,6 +27,7 @@ import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
 import { digitsOnly, normalizeQuery, normalizeStored } from "@/lib/normalization/arabic";
 import { formatShamCash } from "@/lib/format/sham-cash";
 import { formatNationalId } from "@/lib/format/national-id";
+import { formatFunctionalCategory } from "@/lib/format/functional-category";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +47,9 @@ type ResultRow = {
   sfMotherName: string | null;
   sfShamCash: string | null;
   sfPersonalNo: string | null;
+  sfJobTitle: string | null;
+  sfFunctionalCategory: number | null;
+  sfOrganizationalLevel: string | null;
   matchedField: StandardFieldKey | null;
   matchedValue: string | null;
   matchRank: number;
@@ -382,6 +386,21 @@ export function SearchInterface({
         header: "الرقم الذاتي",
         cell: (info) => <span className="ltr-numbers">{info.getValue() || "—"}</span>,
       }),
+      helper.accessor("sfJobTitle", {
+        id: "job_title",
+        header: "المسمى الوظيفي",
+        cell: (info) => info.getValue() || "—",
+      }),
+      helper.accessor("sfFunctionalCategory", {
+        id: "functional_category",
+        header: "الفئة الوظيفية",
+        cell: (info) => formatFunctionalCategory(info.getValue()) || "—",
+      }),
+      helper.accessor("sfOrganizationalLevel", {
+        id: "organizational_level",
+        header: "السوية التنظيمية",
+        cell: (info) => info.getValue() || "—",
+      }),
       helper.display({
         id: "match",
         header: "المطابقة",
@@ -397,7 +416,9 @@ export function SearchInterface({
                 value={
                   info.row.original.matchedField === "sham_cash"
                     ? formatShamCash(info.row.original.matchedValue) || "—"
-                    : info.row.original.matchedValue || "—"
+                    : info.row.original.matchedField === "functional_category"
+                      ? formatFunctionalCategory(info.row.original.matchedValue) || "—"
+                      : info.row.original.matchedValue || "—"
                 }
                 query={debounced}
                 field={info.row.original.matchedField}
@@ -484,7 +505,7 @@ export function SearchInterface({
                   setQuery(event.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم، رقم وطني، هاتف، أو أي معرّف…"
+                placeholder="اسم، رقم وطني، هاتف، فئة وظيفية، أو أي معرّف…"
                 autoFocus
               />
             </div>
@@ -558,7 +579,7 @@ export function SearchInterface({
             </p>
           </div>
           <div className="overflow-x-auto rounded-xl border bg-card">
-            <table className="w-full min-w-[1050px] text-sm">
+            <table className="w-full min-w-[1450px] text-sm">
               <thead className="bg-muted/70">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>

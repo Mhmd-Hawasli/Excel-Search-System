@@ -21,6 +21,19 @@ describe("search planning", () => {
     expect(plan.fields.map((field) => field.key)).toEqual(["phone"]);
     expect(plan.numericNeedle).toBe("0555");
   });
+  it("includes the functional category for Arabic ordinal full search", () => {
+    const plan = buildSearchPlan({ query: "الفئة الأولى", mode: "full" });
+    expect(plan.fields.map((field) => field.key)).toContain("functional_category");
+  });
+  it("matches any Arabic spelling of the functional category in full search", () => {
+    expect(buildSearchPlan({ query: "اولى", mode: "full" }).fields.map((field) => field.key)).toContain("functional_category");
+    expect(buildSearchPlan({ query: "ثان", mode: "full" }).fields.map((field) => field.key)).toContain("functional_category");
+    expect(buildSearchPlan({ query: "مس", mode: "full" }).fields.map((field) => field.key)).toContain("functional_category");
+  });
+  it.each(["job_title", "functional_category", "organizational_level"] as const)("supports custom searching by %s", (field) => {
+    const plan = buildSearchPlan({ query: field === "functional_category" ? "ثالثة" : "مهندس", mode: "custom", field });
+    expect(plan.fields.map((item) => item.key)).toEqual([field]);
+  });
   it.each(["contract_code", "secondary_contract_code"] as const)("supports custom searching by %s", (field) => {
     const plan = buildSearchPlan({ query: "CN-2026-A", mode: "custom", field });
     expect(plan.fields.map((item) => item.key)).toEqual([field]);

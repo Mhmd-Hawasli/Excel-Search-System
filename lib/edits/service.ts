@@ -4,6 +4,7 @@ import type { StandardFieldKey } from "@/lib/excel/types";
 import { digitsOnly, nationalIdDigits, normalizeStored } from "@/lib/normalization/arabic";
 import { nationalIdColumns, nationalIdIssue } from "@/lib/format/national-id";
 import { normalizeShamCash, shamCashAsBigInt } from "@/lib/format/sham-cash";
+import { parseFunctionalCategory } from "@/lib/format/functional-category";
 
 type MappedColumn = {
   headerRaw: string;
@@ -58,6 +59,9 @@ export function buildRecordFieldUpdates(
     sfPhone: fields.phone ?? null,
     sfContractCode: fields.contract_code ?? null,
     sfSecondaryContractCode: fields.secondary_contract_code ?? null,
+    sfJobTitle: fields.job_title ?? null,
+    sfFunctionalCategory: parseFunctionalCategory(fields.functional_category ?? ""),
+    sfOrganizationalLevel: fields.organizational_level ?? null,
     nFirstName: fields.first_name ? normalizeStored(fields.first_name) : null,
     nFatherName: fields.father_name ? normalizeStored(fields.father_name) : null,
     nLastName: fields.last_name ? normalizeStored(fields.last_name) : null,
@@ -66,6 +70,10 @@ export function buildRecordFieldUpdates(
     nContractCode: fields.contract_code ? normalizeStored(fields.contract_code) : null,
     nSecondaryContractCode: fields.secondary_contract_code
       ? normalizeStored(fields.secondary_contract_code)
+      : null,
+    nJobTitle: fields.job_title ? normalizeStored(fields.job_title) : null,
+    nOrganizationalLevel: fields.organizational_level
+      ? normalizeStored(fields.organizational_level)
       : null,
     dPersonalNo: fields.personal_no ? digitsOnly(fields.personal_no) : null,
     dPhone: fields.phone ? digitsOnly(fields.phone) : null,
@@ -117,6 +125,16 @@ function singleRowIssues(
       issueType: DataQualityIssueType.INVALID_SHAM_CASH,
       columnName: "الشام كاش",
       rawValue: shamCashRaw,
+    });
+  }
+  const categoryRaw = fields.functional_category ?? "";
+  if (categoryRaw && parseFunctionalCategory(categoryRaw) === 0) {
+    issues.push({
+      fileId,
+      rowIndex,
+      issueType: DataQualityIssueType.INVALID_FUNCTIONAL_CATEGORY,
+      columnName: "الفئة الوظيفية",
+      rawValue: categoryRaw,
     });
   }
   return issues;
@@ -192,6 +210,7 @@ export async function saveRecordEdit(input: SaveEditInput) {
             DataQualityIssueType.INVALID_NATIONAL_ID,
             DataQualityIssueType.INVALID_PHONE,
             DataQualityIssueType.INVALID_SHAM_CASH,
+            DataQualityIssueType.INVALID_FUNCTIONAL_CATEGORY,
           ],
         },
       },

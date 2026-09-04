@@ -14,6 +14,9 @@ export const STANDARD_FIELD_LABELS: Record<StandardFieldKey, string> = {
   phone: "رقم الهاتف",
   contract_code: "رمز العقد الأساسي",
   secondary_contract_code: "رمز العقد الثانوي",
+  job_title: "المسمى الوظيفي",
+  functional_category: "الفئة الوظيفية",
+  organizational_level: "السوية التنظيمية الأساسية",
 };
 
 export const PRISMA_STANDARD_FIELDS: Record<StandardFieldKey, StandardField> = {
@@ -28,6 +31,9 @@ export const PRISMA_STANDARD_FIELDS: Record<StandardFieldKey, StandardField> = {
   phone: StandardField.PHONE,
   contract_code: StandardField.CONTRACT_CODE,
   secondary_contract_code: StandardField.SECONDARY_CONTRACT_CODE,
+  job_title: StandardField.JOB_TITLE,
+  functional_category: StandardField.FUNCTIONAL_CATEGORY,
+  organizational_level: StandardField.ORGANIZATIONAL_LEVEL,
 };
 
 const ALIASES: Record<StandardFieldKey, string[]> = {
@@ -42,6 +48,9 @@ const ALIASES: Record<StandardFieldKey, string[]> = {
   phone: ["رقم الهاتف", "الهاتف", "الموبايل", "الجوال", "رقم الموبايل"],
   contract_code: ["رمز العقد الأساسي", "كود العقد الأساسي", "رقم العقد الأساسي", "رمز العقد", "كود العقد", "رقم العقد"],
   secondary_contract_code: ["رمز العقد الثانوي", "كود العقد الثانوي", "رقم العقد الثانوي", "الرمز الثانوي للعقد", "رمز العقد الإضافي", "رمز العقد الاضافي", "كود العقد الإضافي"],
+  job_title: ["المسمى الوظيفي", "مسمى وظيفي", "المسمى", "مسمى الوظيفة", "المسمى الوظيفي الحالي", "الوظيفة الحالية", "الوظيفة", "الوظيفه"],
+  functional_category: ["الفئة الوظيفية", "فئة وظيفية", "الفئة", "فئة", "الدرجة الوظيفية", "درجة وظيفية"],
+  organizational_level: ["السوية التنظيمية الأساسية", "السوية التنظيمية", "السوية", "المستوى التنظيمي الأساسي", "المستوى التنظيمي", "السوية التنظيميه", "المستوي التنظيمي"],
 };
 
 function bigrams(value: string) {
