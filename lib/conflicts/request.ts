@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CONFLICT_FIELDS, CONFLICT_RULES } from "@/lib/conflicts/catalog";
+import { CONFLICT_FIELDS, CONFLICT_RULES, CONFLICT_SORTABLE } from "@/lib/conflicts/catalog";
 
 const schema = z
   .object({
@@ -20,6 +20,8 @@ const schema = z
       .default("all"),
     page: z.coerce.number().int().min(1).max(1_000_000).default(1),
     pageSize: z.coerce.number().int().min(10).max(100).default(25),
+    sortBy: z.enum(CONFLICT_SORTABLE).default("issueNumber"),
+    sortDir: z.enum(["asc", "desc"]).default("asc"),
   })
   .superRefine((input, context) => {
     const rules = CONFLICT_RULES.filter(

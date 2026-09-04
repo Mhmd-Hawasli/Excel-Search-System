@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ExternalLink, FileStack, IdCard } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -6,11 +7,29 @@ import { RecordDetails } from "@/components/record-details";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatUploadDateTime } from "@/lib/format/date";
 import { formatNationalId } from "@/lib/format/national-id";
+import { formatUploadDateTime } from "@/lib/format/date";
 import type { StandardFieldKey } from "@/lib/excel/types";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const record = await prisma.record.findUnique({
+    where: { id },
+    select: { sfFullName: true, sfFirstName: true, sfFatherName: true, sfLastName: true },
+  });
+  if (!record) return { title: { absolute: "السجل غير موجود" } };
+  const displayName =
+    record.sfFullName ||
+    [record.sfFirstName, record.sfFatherName, record.sfLastName].filter(Boolean).join(" ") ||
+    "سجل بلا اسم";
+  return { title: { absolute: displayName } };
+}
 
 function rowData(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};

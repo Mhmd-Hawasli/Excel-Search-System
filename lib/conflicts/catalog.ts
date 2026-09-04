@@ -186,8 +186,24 @@ export type ConflictRow = {
   fullName: string;
   motherName: string;
   nationalId: string;
+  shamCash: string;
+  personalNo: string;
+  issueNumber: number;
+  groupKey: string | null;
   issues: ConflictIssue[];
 };
+export const CONFLICT_SORTABLE = [
+  "issueNumber",
+  "fileName",
+  "fullName",
+  "motherName",
+  "nationalId",
+  "shamCash",
+  "personalNo",
+] as const;
+export type ConflictSortBy = (typeof CONFLICT_SORTABLE)[number];
+export type ConflictSortDir = "asc" | "desc";
+
 export type ConflictResponse = {
   rows: ConflictRow[];
   total: number;

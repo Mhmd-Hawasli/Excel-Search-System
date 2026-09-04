@@ -281,6 +281,73 @@ function relationalRule(key: ConflictRuleKey) {
   );
 }
 
+function groupKeyExpression(input: import("@/lib/conflicts/request").ConflictRequest): { sql: Prisma.Sql; isPerRow: boolean } {
+  // For categories where each row is isolated, use per-row id
+  if (input.category === "invalid" || input.category === "missing") {
+    return { sql: Prisma.sql`b.id::text`, isPerRow: true };
+  }
+  if (input.category === "similar") {
+    return { sql: Prisma.sql`b.name_key`, isPerRow: false };
+  }
+  // conflicting
+  if (input.category === "conflicting") {
+    if (input.rule !== "all") {
+      const rule = CONFLICT_RULES.find((r) => r.key === input.rule);
+      if (!rule) return { sql: Prisma.sql`b.id::text`, isPerRow: true };
+      if (rule.key.startsWith("duplicate_")) {
+        const field = rule.field as keyof typeof identifierColumns;
+        const keyName = identifierColumns[field]?.[0];
+        if (keyName) {
+          return { sql: Prisma.sql`b.file_name || '|' || COALESCE(${Prisma.raw(`b.${keyName}`)}::text, '')`, isPerRow: false };
+        }
+      }
+      if (rule.key.endsWith("_people")) {
+        const field = rule.field as keyof typeof identifierColumns;
+        const keyName = identifierColumns[field]?.[0];
+        if (keyName) {
+          return { sql: Prisma.raw(`COALESCE(b.${keyName}::text, '')`), isPerRow: false };
+        }
+      }
+      if (rule.key.startsWith("person_") || rule.key === "person_job") {
+        return { sql: Prisma.sql`COALESCE(b.name_key, '') || '|' || COALESCE(b.mother_key, '')`, isPerRow: false };
+      }
+    }
+    // For broad conflicting queries (multiple rules / fields), fallback to per-row to avoid incorrect lumping
+    return { sql: Prisma.sql`b.id::text`, isPerRow: true };
+  }
+  return { sql: Prisma.sql`b.id::text`, isPerRow: true };
+}
+
+function sortOrderSql(input: import("@/lib/conflicts/request").ConflictRequest): Prisma.Sql {
+  const dir = input.sortDir === "desc" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+  const nulls = input.sortDir === "desc" ? Prisma.sql`NULLS LAST` : Prisma.sql`NULLS FIRST`;
+  const base = (() => {
+    switch (input.sortBy) {
+      case "issueNumber":
+        return Prisma.sql`issue_number`;
+      case "fileName":
+        return Prisma.sql`file_name`;
+      case "fullName":
+        return Prisma.sql`name_key`;
+      case "motherName":
+        return Prisma.sql`mother_key`;
+      case "nationalId":
+        return Prisma.sql`national_key`;
+      case "shamCash":
+        return Prisma.sql`sham_key`;
+      case "personalNo":
+        return Prisma.sql`personal_key`;
+      default:
+        return Prisma.sql`issue_number`;
+    }
+  })();
+  // For stable secondary sort, append default ordering
+  if (input.sortBy === "issueNumber") {
+    return Prisma.sql`${base} ${dir} ${nulls}, name_key ASC, mother_key ASC, file_name ASC, row_index ASC`;
+  }
+  return Prisma.sql`${base} ${dir} ${nulls}, issue_number ASC, name_key ASC`;
+}
+
 export function buildConflictQuery(input: ConflictRequest) {
   const rules = CONFLICT_RULES.filter(
     (rule) =>
@@ -290,6 +357,14 @@ export function buildConflictQuery(input: ConflictRequest) {
   );
   if (!rules.length) throw new Error("No matching conflict rules");
   const selects = rules.map((rule) => localRule(rule.key) ?? relationalRule(rule.key));
+  const groupInfo = groupKeyExpression(input);
+  const orderBy = sortOrderSql(input);
+
+  // Determine ranking window: DENSE_RANK for grouped issues (same group_key = same issue number), ROW_NUMBER for per-row
+  const issueNumberWindow = groupInfo.isPerRow
+    ? Prisma.sql`ROW_NUMBER() OVER (ORDER BY name_key ASC, mother_key ASC, file_name ASC, row_index ASC, id ASC)`
+    : Prisma.sql`DENSE_RANK() OVER (ORDER BY group_key ASC)`;
+
   return Prisma.sql`WITH ${baseCtes}
     ${rules.some((rule) => rule.field === "date") ? dateCtes : Prisma.empty}
     ${rules.some((rule) => rule.key === "person_job") ? jobCtes : Prisma.empty},
@@ -298,12 +373,25 @@ export function buildConflictQuery(input: ConflictRequest) {
       SELECT id, jsonb_agg(jsonb_build_object('rule', rule, 'label', label, 'explanation', explanation) ORDER BY rule, explanation) AS issues
       FROM issues GROUP BY id
     ),
+    grouped AS (
+      SELECT b.*, m.issues AS issues_agg, ${groupInfo.sql} AS group_key
+      FROM matched m JOIN base b ON b.id = m.id
+    ),
+    ranked AS (
+      SELECT *, ${issueNumberWindow} AS issue_number
+      FROM grouped
+    ),
     page_rows AS (
       SELECT b.id, b.file_id AS "fileId", b.group_id AS "groupId", b.file_name AS "fileName", b.original_filename AS "originalFilename",
         b.row_index AS "rowIndex", b.display_name AS "fullName", b.mother_name AS "motherName",
-        COALESCE(lpad(b.national_key, GREATEST(11, length(b.national_key)), '0'), ${latinDigitsSql(Prisma.sql`b.national_id`)}) AS "nationalId", m.issues
-      FROM matched m JOIN base b ON b.id = m.id
-      ORDER BY b.name_key, b.mother_key, b.file_name, b.row_index, b.id
+        COALESCE(lpad(b.national_key, GREATEST(11, length(b.national_key)), '0'), ${latinDigitsSql(Prisma.sql`b.national_id`)}) AS "nationalId",
+        COALESCE(b.sham_cash, '') AS "shamCash",
+        COALESCE(b.personal_no, '') AS "personalNo",
+        b.group_key AS "groupKey",
+        b.issue_number::integer AS "issueNumber",
+        b.issues_agg AS issues
+      FROM ranked b
+      ORDER BY ${orderBy}
       LIMIT ${input.pageSize} OFFSET ${(input.page - 1) * input.pageSize}
     )
     SELECT (SELECT COUNT(*)::integer FROM matched) AS total,

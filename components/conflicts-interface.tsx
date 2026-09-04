@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -21,9 +24,11 @@ import {
   type ConflictCategory,
   type ConflictField,
   type ConflictResponse,
+  type ConflictSortBy,
 } from "@/lib/conflicts/catalog";
 import { toLatinDigits } from "@/lib/normalization/arabic";
 import { formatNationalId } from "@/lib/format/national-id";
+import { formatShamCash } from "@/lib/format/sham-cash";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -34,6 +39,30 @@ const icons = { invalid: AlertTriangle, missing: ListMinus, similar: Users, conf
 const selectClass =
   "h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
+type SortableColumn = {
+  key: ConflictSortBy;
+  label: string;
+};
+
+const sortableColumns: SortableColumn[] = [
+  { key: "issueNumber", label: "رقم المشكلة" },
+  { key: "fileName", label: "ملف المصدر" },
+  { key: "fullName", label: "الاسم الثلاثي" },
+  { key: "motherName", label: "اسم الأم" },
+  { key: "nationalId", label: "الرقم الوطني" },
+  { key: "shamCash", label: "الشام كاش" },
+  { key: "personalNo", label: "الرقم الذاتي" },
+];
+
+function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
+  if (!active) return <ArrowUpDown className="size-3.5 opacity-40" aria-hidden="true" />;
+  return dir === "asc" ? (
+    <ArrowUp className="size-3.5 text-primary" aria-hidden="true" />
+  ) : (
+    <ArrowDown className="size-3.5 text-primary" aria-hidden="true" />
+  );
+}
+
 export function ConflictsInterface() {
   const [filters, setFilters] = useState({
     category: "invalid" as ConflictCategory,
@@ -41,6 +70,8 @@ export function ConflictsInterface() {
     rule: "all",
     page: 1,
     pageSize: 25,
+    sortBy: "issueNumber" as ConflictSortBy,
+    sortDir: "asc" as "asc" | "desc",
   });
   const [revision, setRevision] = useState(0);
   const [data, setData] = useState<ConflictResponse | null>(null);
@@ -54,6 +85,15 @@ export function ConflictsInterface() {
   const rules = categoryRules.filter(
     (rule) => filters.field === "all" || rule.field === filters.field,
   );
+
+  function handleSort(column: ConflictSortBy) {
+    setFilters((current) => {
+      if (current.sortBy === column) {
+        return { ...current, sortDir: current.sortDir === "asc" ? "desc" : "asc", page: 1 };
+      }
+      return { ...current, sortBy: column, sortDir: "asc", page: 1 };
+    });
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -88,6 +128,8 @@ export function ConflictsInterface() {
     void fetchResults();
     return () => controller.abort();
   }, [filters, requestKey]);
+
+  const isDefaultSort = filters.sortBy === "issueNumber";
 
   return (
     <div className="space-y-6">
@@ -221,6 +263,11 @@ export function ConflictsInterface() {
                   ? "لم يكتمل الفحص"
                   : `${(data?.total ?? 0).toLocaleString("en-US")} سجل — يظهر كل سجل مرة واحدة مع مشكلاته المطابقة للفلاتر`}
             </p>
+            {isDefaultSort ? (
+              <p className="mt-1 text-xs text-muted-foreground">الفرز الافتراضي حسب رقم المشكلة — المشاكل الفردية والزوجية بألوان مختلفة</p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">الفرز الحالي: {sortableColumns.find((c) => c.key === filters.sortBy)?.label} {filters.sortDir === "asc" ? "تصاعدي" : "تنازلي"} — التلوين حسب رقم المشكلة معطّل</p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="conflict-page-size" className="text-xs">
@@ -247,27 +294,38 @@ export function ConflictsInterface() {
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border bg-card">
-          <table className="w-full min-w-[950px] text-sm">
+          <table className="w-full min-w-[1250px] text-sm">
             <caption className="sr-only">
-              ملف المصدر والاسم الثلاثي واسم الأم والرقم الوطني والمشكلة وشرحها؛ مرتبة بالاسم
-              الثلاثي.
+              رقم المشكلة وملف المصدر والاسم الثلاثي واسم الأم والرقم الوطني والشام كاش والرقم الذاتي والمشكلة وشرحها
             </caption>
             <thead className="bg-muted/70">
               <tr>
-                {["ملف المصدر", "الاسم الثلاثي", "اسم الأم", "الرقم الوطني", "المشكلة وشرحها"].map(
-                  (label) => (
-                    <th key={label} scope="col" className="p-4 text-right font-bold">
-                      {label}
-                    </th>
-                  ),
-                )}
+                {sortableColumns.map((col) => (
+                  <th key={col.key} scope="col" className="p-0 text-right font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSort(col.key)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-1 p-4 text-right transition hover:bg-muted",
+                        filters.sortBy === col.key && "bg-primary/5 text-primary",
+                      )}
+                      aria-label={`فرز حسب ${col.label} ${filters.sortBy === col.key && filters.sortDir === "asc" ? "تنازلي" : "تصاعدي"}`}
+                    >
+                      <span>{col.label}</span>
+                      <SortIcon active={filters.sortBy === col.key} dir={filters.sortDir} />
+                    </button>
+                  </th>
+                ))}
+                <th scope="col" className="p-4 text-right font-bold">
+                  المشكلة وشرحها
+                </th>
               </tr>
             </thead>
             <tbody>
               {busy ? (
                 Array.from({ length: 5 }, (_, index) => (
                   <tr key={index} className="border-t">
-                    {Array.from({ length: 5 }, (_, cell) => (
+                    {Array.from({ length: 8 }, (_, cell) => (
                       <td key={cell} className="p-4">
                         <Skeleton className="h-8 w-full" />
                       </td>
@@ -276,7 +334,7 @@ export function ConflictsInterface() {
                 ))
               ) : error ? (
                 <tr>
-                  <td colSpan={5} className="p-10 text-center">
+                  <td colSpan={8} className="p-10 text-center">
                     <div role="alert" className="mb-4 text-destructive">
                       {error}
                     </div>
@@ -287,7 +345,7 @@ export function ConflictsInterface() {
                 </tr>
               ) : !data?.rows.length ? (
                 <tr>
-                  <td colSpan={5} className="p-12 text-center">
+                  <td colSpan={8} className="p-12 text-center">
                     <CircleCheck className="mx-auto mb-3 size-9 text-primary" aria-hidden="true" />
                     <p className="font-bold">لا توجد سجلات تطابق هذه الفلاتر</p>
                     <p className="mt-2 text-muted-foreground">
@@ -296,56 +354,89 @@ export function ConflictsInterface() {
                   </td>
                 </tr>
               ) : (
-                data.rows.map((row) => (
-                  <tr key={row.id} className="border-t align-top transition hover:bg-muted/40">
-                    <td className="max-w-52 p-4">
-                      <Link
-                        className="font-semibold text-primary hover:underline"
-                        href={`/groups/${row.groupId}/files/${row.fileId}`}
-                      >
-                        {row.fileName}
-                      </Link>
-                      <p className="mt-1 break-words text-xs text-muted-foreground">
-                        {row.originalFilename}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">صف Excel: {row.rowIndex}</p>
-                    </td>
-                    <td className="min-w-44 p-4">
-                      <Link
-                        href={`/records/${row.id}`}
-                        className="font-semibold hover:text-primary hover:underline"
-                      >
-                        {row.fullName || "—"}
-                      </Link>
-                      {!row.fullName && (
-                        <Link
-                          className="mt-2 block text-xs text-primary hover:underline"
-                          href={`/records/${row.id}`}
+                data.rows.map((row) => {
+                  const isEvenIssue = isDefaultSort && row.issueNumber % 2 === 0;
+                  const rowBg = isDefaultSort
+                    ? isEvenIssue
+                      ? "bg-amber-50/70 dark:bg-amber-950/20"
+                      : "bg-white dark:bg-card"
+                    : "bg-card";
+                  return (
+                    <tr
+                      key={row.id}
+                      className={cn("border-t align-top transition hover:bg-muted/40", rowBg)}
+                    >
+                      <td className="p-4 text-center">
+                        <span
+                          className={cn(
+                            "inline-flex min-w-8 justify-center rounded-full px-2 py-1 text-xs font-black",
+                            isEvenIssue
+                              ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                              : "bg-primary/10 text-primary",
+                          )}
                         >
-                          فتح السجل
+                          {row.issueNumber}
+                        </span>
+                      </td>
+                      <td className="max-w-44 p-4">
+                        <Link
+                          className="font-semibold text-primary hover:underline"
+                          href={`/groups/${row.groupId}/files/${row.fileId}`}
+                        >
+                          {row.fileName}
                         </Link>
-                      )}
-                    </td>
-                    <td className="min-w-28 p-4">{row.motherName || "—"}</td>
-                    <td className="p-4">
-                      <bdi className="break-all font-mono">
-                        {formatNationalId(row.nationalId) || "—"}
-                      </bdi>
-                    </td>
-                    <td className="min-w-80 max-w-xl p-4">
-                      <ul className="space-y-3">
-                        {row.issues.map((issue, index) => (
-                          <li key={`${issue.rule}-${index}`}>
-                            <p className="text-xs font-bold text-primary">{issue.label}</p>
-                            <p className="mt-1 break-words text-sm leading-7 text-muted-foreground">
-                              {toLatinDigits(issue.explanation)}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                  </tr>
-                ))
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                          {row.originalFilename}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">صف Excel: {row.rowIndex}</p>
+                      </td>
+                      <td className="min-w-36 p-4">
+                        <Link
+                          href={`/records/${row.id}`}
+                          className="font-semibold hover:text-primary hover:underline"
+                        >
+                          {row.fullName || "—"}
+                        </Link>
+                        {!row.fullName && (
+                          <Link
+                            className="mt-2 block text-xs text-primary hover:underline"
+                            href={`/records/${row.id}`}
+                          >
+                            فتح السجل
+                          </Link>
+                        )}
+                      </td>
+                      <td className="min-w-28 p-4">{row.motherName || "—"}</td>
+                      <td className="p-4">
+                        <bdi className="break-all font-mono text-xs">
+                          {formatNationalId(row.nationalId) || "—"}
+                        </bdi>
+                      </td>
+                      <td className="p-4">
+                        <bdi className="break-all font-mono text-xs ltr-numbers">
+                          {row.shamCash ? formatShamCash(row.shamCash) || row.shamCash : "—"}
+                        </bdi>
+                      </td>
+                      <td className="p-4">
+                        <bdi className="break-all font-mono text-xs">
+                          {row.personalNo || "—"}
+                        </bdi>
+                      </td>
+                      <td className="min-w-80 max-w-xl p-4">
+                        <ul className="space-y-3">
+                          {row.issues.map((issue, index) => (
+                            <li key={`${issue.rule}-${index}`}>
+                              <p className="text-xs font-bold text-primary">{issue.label}</p>
+                              <p className="mt-1 break-words text-sm leading-7 text-muted-foreground">
+                                {toLatinDigits(issue.explanation)}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

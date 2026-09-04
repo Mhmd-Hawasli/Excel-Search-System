@@ -267,7 +267,7 @@ async function main() {
 
       for (const rule of CONFLICT_RULES) {
         const result = await queryConflicts(
-          { category: rule.category, field: rule.field, rule: rule.key, page: 1, pageSize: 100 },
+          { category: rule.category, field: rule.field, rule: rule.key, page: 1, pageSize: 100 , sortBy: "issueNumber", sortDir: "asc" },
           tx,
         );
         assert.deepEqual(
@@ -295,24 +295,24 @@ async function main() {
           );
       }
       const page1 = await queryConflicts(
-        { category: "invalid", field: "all", rule: "all", page: 1, pageSize: 10 },
+        { category: "invalid", field: "all", rule: "all", page: 1, pageSize: 10 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       const page2 = await queryConflicts(
-        { category: "invalid", field: "all", rule: "all", page: 2, pageSize: 10 },
+        { category: "invalid", field: "all", rule: "all", page: 2, pageSize: 10 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.equal(page1.total, page2.total);
       assert.equal(page1.rows.length, 10);
       assert(!page1.rows.some((entry) => page2.rows.some((other) => other.id === entry.id)));
       const pastEnd = await queryConflicts(
-        { category: "invalid", field: "all", rule: "all", page: 999, pageSize: 10 },
+        { category: "invalid", field: "all", rule: "all", page: 999, pageSize: 10 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.equal(pastEnd.rows.length, 0);
       assert.equal(pastEnd.total, page1.total);
       const allConflicts = await queryConflicts(
-        { category: "conflicting", field: "all", rule: "all", page: 1, pageSize: 100 },
+        { category: "conflicting", field: "all", rule: "all", page: 1, pageSize: 100 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.equal(allConflicts.rows.find((entry) => entry.id === sameA)?.issues.length, 5);
@@ -351,7 +351,7 @@ async function main() {
         secondFile,
       );
       const equivalentSham = await queryConflicts(
-        { category: "conflicting", field: "sham_cash", rule: "all", page: 1, pageSize: 25 },
+        { category: "conflicting", field: "sham_cash", rule: "all", page: 1, pageSize: 25 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.equal(
@@ -361,7 +361,7 @@ async function main() {
       );
       await tx.$executeRaw`UPDATE records SET data = jsonb_set(data, '{sham_cash}', '"9999 9999 9999 9998"'::jsonb) WHERE id = ${sameShamB}::uuid`;
       const distinctSham = await queryConflicts(
-        { category: "conflicting", field: "sham_cash", rule: "person_sham", page: 1, pageSize: 25 },
+        { category: "conflicting", field: "sham_cash", rule: "person_sham", page: 1, pageSize: 25 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.deepEqual(
@@ -372,7 +372,7 @@ async function main() {
       await tx.$executeRaw`DELETE FROM records`;
       for (const category of ["invalid", "missing", "similar", "conflicting"] as const) {
         const result = await queryConflicts(
-          { category, field: "all", rule: "all", page: 1, pageSize: 25 },
+          { category, field: "all", rule: "all", page: 1, pageSize: 25, sortBy: "issueNumber", sortDir: "asc" },
           tx,
         );
         assert.equal(result.total, 0);
@@ -381,7 +381,7 @@ async function main() {
       const nationalA = await row({ ...person, national_id: "123456789" });
       const nationalB = await row({ ...person, national_id: "٠٠١٢٣\u00a0٤٥٦\t٧٨٩" }, secondFile);
       const equivalentNational = await queryConflicts(
-        { category: "conflicting", field: "national_id", rule: "all", page: 1, pageSize: 25 },
+        { category: "conflicting", field: "national_id", rule: "all", page: 1, pageSize: 25 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.equal(
@@ -397,7 +397,7 @@ async function main() {
           rule: "national_people",
           page: 1,
           pageSize: 25,
-        },
+         sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
       assert.deepEqual(

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { FileSpreadsheet, FolderKanban, Search, UsersRound } from "lucide-react";
+import { prisma } from "@/lib/db/prisma";
+import { FileCard } from "@/components/file-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatUploadDateTime } from "@/lib/format/date";
 
 const cards = [
   { label: "المجموعات", value: "—", icon: FolderKanban },
@@ -11,12 +12,19 @@ const cards = [
   { label: "السجلات", value: "—", icon: UsersRound },
 ];
 
-import { prisma } from "@/lib/db/prisma";
-
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [groupCount, fileCount, recordCount, recentFiles] = await Promise.all([prisma.group.count(), prisma.file.count(), prisma.record.count(), prisma.file.findMany({ orderBy: { uploadedAt: "desc" }, take: 5, include: { group: true } })]);
+  const [groupCount, fileCount, recordCount, recentFiles] = await Promise.all([
+    prisma.group.count(),
+    prisma.file.count(),
+    prisma.record.count(),
+    prisma.file.findMany({
+      orderBy: { uploadedAt: "desc" },
+      take: 5,
+      include: { group: true, _count: { select: { columns: true } } },
+    }),
+  ]);
   const values = [groupCount, fileCount, recordCount];
   return (
     <div className="space-y-8">
@@ -36,7 +44,46 @@ export default async function DashboardPage() {
           <Card key={label}><CardContent className="flex items-center justify-between p-6"><div><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-black">{values[index].toLocaleString("en-US")}</p></div><span className="grid size-12 place-items-center rounded-xl bg-primary/10 text-primary"><Icon className="size-6" /></span></CardContent></Card>
         ))}
       </section>
-      <Card><CardHeader><CardTitle>{recentFiles.length ? "أحدث الملفات المرفوعة" : "ابدأ بإضافة أول ملف"}</CardTitle><CardDescription>{recentFiles.length ? "آخر ما أضيف أو استُبدل في الأرشيف." : "أنشئ مجموعة لتنظيم الملفات، ثم استخدم معالج الرفع لربط الأعمدة القابلة للبحث."}</CardDescription></CardHeader><CardContent>{recentFiles.length ? <div className="grid gap-2">{recentFiles.map((file) => <Link key={file.id} href={`/groups/${file.groupId}/files/${file.id}`} className="flex items-center justify-between rounded-lg border p-3 hover:border-primary"><div><p className="font-bold">{file.name}</p><p className="text-xs text-muted-foreground">{file.group.name} · {file.rowCount.toLocaleString("en-US")} سجل</p></div><span className="ltr-numbers text-xs text-muted-foreground">{formatUploadDateTime(file.uploadedAt)}</span></Link>)}</div> : <div className="flex flex-wrap gap-3"><Button asChild><Link href="/groups">إدارة المجموعات</Link></Button><Button asChild variant="outline"><Link href="/upload">رفع ملف Excel</Link></Button></div>}</CardContent></Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{recentFiles.length ? "أحدث الملفات المرفوعة" : "ابدأ بإضافة أول ملف"}</CardTitle>
+          <CardDescription>
+            {recentFiles.length
+              ? "آخر ما أضيف أو استُبدل في الأرشيف — اضغط على أي ملف لعرض تفاصيله."
+              : "أنشئ مجموعة لتنظيم الملفات، ثم استخدم معالج الرفع لربط الأعمدة القابلة للبحث."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentFiles.length ? (
+            <div className="grid gap-3">
+              {recentFiles.map((file) => (
+                <FileCard
+                  key={file.id}
+                  href={`/groups/${file.groupId}/files/${file.id}`}
+                  name={file.name}
+                  description={file.description}
+                  originalFilename={file.originalFilename}
+                  rowCount={file.rowCount}
+                  columnCount={file._count.columns}
+                  version={file.version}
+                  uploadedAt={file.uploadedAt}
+                  groupName={file.group.name}
+                  showGroup
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <Button asChild>
+                <Link href="/groups">إدارة المجموعات</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/upload">رفع ملف Excel</Link>
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
