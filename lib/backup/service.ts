@@ -25,6 +25,7 @@ export async function exportBackup() {
     mappingTemplates,
     uploadJobs,
     activityLogs,
+    recordEdits,
   ] = await prisma.$transaction([
     prisma.group.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.category.findMany({ orderBy: { createdAt: "asc" } }),
@@ -35,6 +36,7 @@ export async function exportBackup() {
     prisma.mappingTemplate.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.uploadJob.findMany({ orderBy: { startedAt: "asc" } }),
     prisma.activityLog.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.recordEdit.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -55,6 +57,7 @@ export async function exportBackup() {
       mappingTemplates,
       uploadJobs,
       activityLogs,
+      recordEdits,
     },
   };
 }
@@ -81,6 +84,7 @@ export async function restoreBackup(input: unknown) {
         await tx.dataQualityIssue.createMany({ data: batch });
       if (data.mappingTemplates.length)
         await tx.mappingTemplate.createMany({ data: data.mappingTemplates });
+      if (data.recordEdits.length) await tx.recordEdit.createMany({ data: data.recordEdits });
       if (data.uploadJobs.length)
         await tx.uploadJob.createMany({
           data: data.uploadJobs.map((job) =>

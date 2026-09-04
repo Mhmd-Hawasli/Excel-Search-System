@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, RefreshCw, ShieldCheck, SlidersHorizontal, PencilLine } from "lucide-react";
+import { ArrowRight, Download, RefreshCw, ShieldCheck, SlidersHorizontal, PencilLine } from "lucide-react";
 import { notFound } from "next/navigation";
 import { deleteFile } from "@/lib/actions/files";
 import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
@@ -24,6 +24,7 @@ export default async function FilePage({ params }: { params: Promise<{ id: strin
     },
   });
   if (!file) notFound();
+  const editCount = await prisma.recordEdit.count({ where: { fileId: file.id } });
 
   return (
     <div className="space-y-7">
@@ -58,6 +59,18 @@ export default async function FilePage({ params }: { params: Promise<{ id: strin
                 تحديث الملف
               </Link>
             </Button>
+            <Button asChild variant="outline">
+              <Link href={`/edits?fileId=${file.id}`}>
+                <PencilLine className="size-4" />
+                سجل التعديلات{editCount ? ` (${editCount})` : ""}
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <a href={`/api/files/${file.id}/export`}>
+                <Download className="size-4" />
+                تصدير Excel
+              </a>
+            </Button>
             <TypedDeleteButton
               id={file.id}
               entityName={file.name}
@@ -68,6 +81,25 @@ export default async function FilePage({ params }: { params: Promise<{ id: strin
         }
       />
 
+      {editCount > 0 ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-400/60 bg-amber-50 p-4 text-sm md:flex-row md:items-center md:justify-between dark:bg-amber-950/20">
+          <p className="font-bold flex items-center gap-2 text-amber-900 dark:text-amber-100">
+            <PencilLine className="size-4" />
+            هذا الملف تم تعديله يدويًا
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
+            </Button>
+            <Button asChild size="sm">
+              <a href={`/api/files/${file.id}/export`}>
+                <Download className="size-4" />
+                تصدير Excel بالقيم المعدلة
+              </a>
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <div className="grid gap-3 rounded-xl border bg-amber-500/5 p-4 text-sm leading-relaxed">
         <p className="font-bold flex items-center gap-2">
           <PencilLine className="size-4 text-amber-600" />

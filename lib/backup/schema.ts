@@ -145,6 +145,16 @@ const activity = z.object({
   details: jsonInput,
   createdAt: date,
 });
+const recordEdit = z.object({
+  id: z.string().uuid(),
+  recordId: z.string().uuid(),
+  fileId: z.string().uuid(),
+  fileColumnId: z.string().uuid().nullable(),
+  headerRaw: z.string(),
+  oldValue: z.string(),
+  newValue: z.string(),
+  createdAt: date,
+});
 
 export const backupSchema = z
   .object({
@@ -161,6 +171,7 @@ export const backupSchema = z
       mappingTemplates: z.array(template),
       uploadJobs: z.array(job),
       activityLogs: z.array(activity),
+      recordEdits: z.array(recordEdit).optional().default([]),
     }),
   })
   .transform((backup) => {

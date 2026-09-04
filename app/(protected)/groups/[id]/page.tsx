@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { getEditedFileIds } from "@/lib/edits/service";
 import { EmptyState } from "@/components/empty-state";
 import { FileCard } from "@/components/file-card";
 import { FlashMessage } from "@/components/flash-message";
@@ -23,6 +24,7 @@ export default async function GroupDetailPage({
     include: { files: { orderBy: { uploadedAt: "desc" }, include: { _count: { select: { columns: true } } } } },
   });
   if (!group) notFound();
+  const editedIds = await getEditedFileIds(group.files.map((f) => f.id));
   return (
     <div className="space-y-7">
       <Button asChild variant="ghost" size="sm">
@@ -67,6 +69,7 @@ export default async function GroupDetailPage({
               columnCount={file._count.columns}
               version={file.version}
               uploadedAt={file.uploadedAt}
+              hasEdits={editedIds.has(file.id)}
             />
           ))}
         </div>

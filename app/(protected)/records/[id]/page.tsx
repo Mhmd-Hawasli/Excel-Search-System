@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ExternalLink, FileStack, IdCard } from "lucide-react";
+import { ArrowRight, ExternalLink, FileStack, IdCard, PencilLine } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { RecordDetails } from "@/components/record-details";
+import { getRecordEdits } from "@/lib/edits/service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +59,7 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
     },
   });
   if (!record) notFound();
+  const { edits: recordEdits, editedHeaders } = await getRecordEdits(id);
   const related =
     record.nationalIdNum === null
       ? []
@@ -106,6 +108,15 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
               <Badge variant="secondary">
                 {record.file.group.name} — {record.file.name}
               </Badge>
+              {recordEdits.length ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  <PencilLine className="size-3" />
+                  يحتوي {recordEdits.length} {recordEdits.length === 1 ? "تعديل" : "تعديلات"} يدوية
+                </Badge>
+              ) : null}
             </div>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -121,11 +132,22 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
           <CardTitle>بيانات السجل الأصلية</CardTitle>
           <CardDescription>
             القيم الأصلية محفوظة كما وردت في Excel. تُنسّق التواريخ ويُعرض الرقم الوطني بـ11 خانة مع
-            تعبئة الأصفار على اليسار، دون اقتطاع القيم الأطول.
+            تعبئة الأصفار على اليسار، دون اقتطاع القيم الأطول. يمكن تعديل أي حقل بزر القلم؛ يُحفظ
+            التعديل في سجل منفصل مع القيمة القديمة والجديدة ويُحدَّث البحث فورًا، والحقل المعدّل
+            يحمل شارة «معدّل».
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <RecordDetails columns={columns} />
+          <RecordDetails
+            recordId={record.id}
+            columns={columns}
+            editedHeaders={Object.fromEntries(
+              Object.entries(editedHeaders).map(([header, info]) => [
+                header,
+                { ...info, lastAt: info.lastAt.toISOString() },
+              ]),
+            )}
+          />
         </CardContent>
       </Card>
       <Card className="border-primary/30">

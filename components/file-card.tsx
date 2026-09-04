@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, FileSpreadsheet } from "lucide-react";
+import { ChevronLeft, FileSpreadsheet, PencilLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatUploadDateTime } from "@/lib/format/date";
@@ -15,6 +15,7 @@ type FileCardProps = {
   uploadedAt: Date;
   groupName?: string;
   showGroup?: boolean;
+  hasEdits?: boolean;
 };
 
 export function FileCard({
@@ -28,6 +29,7 @@ export function FileCard({
   uploadedAt,
   groupName,
   showGroup = false,
+  hasEdits = false,
 }: FileCardProps) {
   return (
     <Link href={href} className="block group">
@@ -58,6 +60,15 @@ export function FileCard({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {hasEdits ? (
+              <Badge
+                variant="outline"
+                className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                <PencilLine className="size-3" />
+                معدّل
+              </Badge>
+            ) : null}
             <Badge variant="secondary">الإصدار {version}</Badge>
             <ChevronLeft className="size-4 text-muted-foreground group-hover:text-primary" />
           </div>

@@ -61,6 +61,7 @@ enum ActivityAction {
   COLUMN_RECATEGORIZED @map("column_recategorized")
   TEMPLATE_CREATED   @map("template_created")
   BACKUP_RESTORED    @map("backup_restored")
+  RECORD_EDITED      @map("record_edited")
 
   @@map("activity_action")
 }
@@ -95,6 +96,7 @@ model File {
   records           Record[]
   uploadJobs        UploadJob[]
   dataQualityIssues DataQualityIssue[]
+  recordEdits       RecordEdit[]
 
   @@index([groupId])
   @@map("files")
@@ -122,6 +124,7 @@ model FileColumn {
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   file             File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
   category         Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  recordEdits      RecordEdit[]
 
   @@unique([fileId, columnIndex])
   @@index([fileId])
@@ -159,6 +162,7 @@ model Record {
   nationalIdNum           BigInt?  @map("national_id_num")
   createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   file                    File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  edits                   RecordEdit[]
 
   @@unique([fileId, rowIndex])
   @@index([fileId])
@@ -207,6 +211,25 @@ model ActivityLog {
 
   @@index([createdAt])
   @@map("activity_log")
+}
+
+model RecordEdit {
+  id           String      @id @default(uuid()) @db.Uuid
+  recordId     String      @map("record_id") @db.Uuid
+  fileId       String      @map("file_id") @db.Uuid
+  fileColumnId String?     @map("file_column_id") @db.Uuid
+  headerRaw    String      @map("header_raw")
+  oldValue     String      @default("") @map("old_value")
+  newValue     String      @default("") @map("new_value")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  record       Record      @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  file         File        @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fileColumn   FileColumn? @relation(fields: [fileColumnId], references: [id], onDelete: SetNull)
+
+  @@index([recordId])
+  @@index([fileId])
+  @@index([fileId, createdAt])
+  @@map("record_edits")
 }
 
 model MappingTemplate {

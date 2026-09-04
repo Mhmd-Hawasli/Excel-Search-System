@@ -6,6 +6,7 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   CATEGORY_CREATED: "إنشاء فئة", CATEGORY_UPDATED: "تحديث فئة", CATEGORY_REORDERED: "ترتيب فئة", CATEGORY_DELETED: "حذف فئة",
   COLUMN_REORDERED: "ترتيب عمود", COLUMN_RECATEGORIZED: "نقل عمود بين الفئات",
   TEMPLATE_CREATED: "حفظ قالب ربط", BACKUP_RESTORED: "استعادة نسخة احتياطية",
+  RECORD_EDITED: "تعديل سجل",
 };
 
 export function relativeArabic(date: Date) {

@@ -37,6 +37,35 @@ function displayDate(year: number, month: number, day: number) {
   return validDateParts(year, month, day) ? `${pad(day)}/${pad(month)}/${year}` : null;
 }
 
+/** Parse a stored Excel/ISO date string into a real Date (UTC midnight), or null. */
+export function parseStoredDate(value: unknown): Date | null {
+  if (value == null) return null;
+  const normalized = westernDigits(String(value).trim());
+  if (!normalized) return null;
+  let match = normalized.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (match) {
+    const year = Number(match[3]);
+    const month = Number(match[2]);
+    const day = Number(match[1]);
+    return validDateParts(year, month, day) ? new Date(Date.UTC(year, month - 1, day)) : null;
+  }
+  match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    return validDateParts(year, month, day) ? new Date(Date.UTC(year, month - 1, day)) : null;
+  }
+  match = normalized.match(/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{4})\b/);
+  if (match) {
+    const year = Number(match[3]);
+    const month = MONTHS[match[1]];
+    const day = Number(match[2]);
+    return validDateParts(year, month, day) ? new Date(Date.UTC(year, month - 1, day)) : null;
+  }
+  return null;
+}
+
 export function formatStoredDate(value: string) {
   const normalized = westernDigits(value.trim());
   let match = normalized.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);

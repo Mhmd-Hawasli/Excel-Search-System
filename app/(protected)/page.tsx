@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileSpreadsheet, FolderKanban, Search, UsersRound } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
+import { getEditedFileIds } from "@/lib/edits/service";
 import { FileCard } from "@/components/file-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,7 @@ export default async function DashboardPage() {
     }),
   ]);
   const values = [groupCount, fileCount, recordCount];
+  const editedIds = await getEditedFileIds(recentFiles.map((f) => f.id));
   return (
     <div className="space-y-8">
       <section className="overflow-hidden rounded-2xl border bg-gradient-to-l from-primary/12 via-card to-card p-6 shadow-soft md:p-9">
@@ -69,6 +71,7 @@ export default async function DashboardPage() {
                   uploadedAt={file.uploadedAt}
                   groupName={file.group.name}
                   showGroup
+                  hasEdits={editedIds.has(file.id)}
                 />
               ))}
             </div>
