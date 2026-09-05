@@ -62,13 +62,14 @@ export function clearWorkbookFilters(workbook: ExcelJS.Workbook) {
  * Headers of one sheet. Unlike the archive importer this does not reject
  * duplicate names: merged workbooks often repeat a title, and the exporter
  * renames duplicates the same way Excel does when building a table.
+ * Formulas without a saved result read as empty (see cellValueText).
  */
 export function sheetHeaders(worksheet: ExcelJS.Worksheet): string[] {
   const row = worksheet.getRow(1);
   const columnCount = Math.max(worksheet.actualColumnCount, row.cellCount);
   return Array.from(
     { length: columnCount },
-    (_, index) => cellValueText(row.getCell(index + 1)).trim() || `عمود ${index + 1}`,
+    (_, index) => cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }).trim() || `عمود ${index + 1}`,
   );
 }
 
@@ -81,7 +82,11 @@ export function sheetDataRows(
   // that hold values, so it would drop every row after a blank one.
   for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
-    const cells = headers.map((_, index) => cellValueText(row.getCell(index + 1)));
+    // A formula without a saved result counts as empty, so rows left fully
+    // empty (including formula-only rows) are skipped and never merged.
+    const cells = headers.map((_, index) =>
+      cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }),
+    );
     if (cells.every((value) => normalizeStored(value) === "")) continue;
     rows.push({ rowNumber: rowIndex, cells });
   }

@@ -29,12 +29,14 @@ function inspectWorksheet(
   worksheet: ExcelJS.Worksheet,
   sheetName: string,
 ): MergeInspection["selected"] {
-  const headers = headersForSheet(worksheet);
+  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty" });
   const preview: string[][] = [];
   const finalRow = Math.min(worksheet.actualRowCount, 7);
   for (let rowIndex = 2; rowIndex <= finalRow; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
-    preview.push(headers.map((_, index) => cellValueText(row.getCell(index + 1))));
+    preview.push(
+      headers.map((_, index) => cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" })),
+    );
   }
   return {
     sheetName,
@@ -119,11 +121,13 @@ export async function readMergeSheet(token: string, sheetName: string) {
   }
   const worksheet = workbook.worksheets.find((sheet) => sheet.name === sheetName);
   if (!worksheet) throw new Error("الورقة المحددة غير موجودة في المصنف.");
-  const headers = headersForSheet(worksheet);
+  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty" });
   const rows: Array<{ rowNumber: number; cells: string[] }> = [];
   for (let rowIndex = 2; rowIndex <= worksheet.actualRowCount; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
-    const cells = headers.map((_, index) => cellValueText(row.getCell(index + 1)));
+    const cells = headers.map((_, index) =>
+      cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }),
+    );
     if (cells.every((value) => normalizeStored(value) === "")) continue;
     rows.push({ rowNumber: rowIndex, cells });
   }

@@ -20,10 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { FolderInput, GripVertical, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
-import {
-  moveColumnToCategory,
-  reorderCategoryColumnGroups,
-} from "@/lib/actions/categories";
+import { moveColumnToCategory, reorderCategoryColumnGroups } from "@/lib/actions/categories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MutationForm } from "@/components/mutation-form";
@@ -77,12 +74,20 @@ function SortableColumnGroup({
           {...attributes}
           {...listeners}
         >
-          {disabled ? <LoaderCircle className="size-5 animate-spin" /> : <GripVertical className="size-5" />}
+          {disabled ? (
+            <LoaderCircle className="size-5 animate-spin" />
+          ) : (
+            <GripVertical className="size-5" />
+          )}
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="font-black">{group.label}</h4>
-            {group.standardFieldLabel ? <Badge>حقل قياسي موحّد</Badge> : <Badge variant="outline">عمود مستقل</Badge>}
+            {group.standardFieldLabel ? (
+              <Badge>حقل قياسي موحّد</Badge>
+            ) : (
+              <Badge variant="outline">عمود مستقل</Badge>
+            )}
             <Badge variant="secondary">{group.columns.length} عمود</Badge>
             <Badge variant="outline">{files} ملف</Badge>
           </div>
@@ -96,23 +101,32 @@ function SortableColumnGroup({
 
       <div className="border-t bg-muted/20">
         {group.columns.map((column) => (
-          <div key={column.id} className="grid gap-3 border-b p-3 last:border-b-0 md:grid-cols-[1fr_1fr_auto] md:items-center">
+          <div
+            key={column.id}
+            className="grid gap-3 border-b p-3 last:border-b-0 md:grid-cols-[1fr_1fr_auto] md:items-center"
+          >
             <div>
               <p className="font-bold">{column.headerRaw}</p>
-              <p className="mt-1 text-xs text-muted-foreground">عمود Excel رقم {column.columnIndex}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                عمود Excel رقم {column.columnIndex}
+              </p>
             </div>
             <div>
               <p className="font-semibold">{column.fileName}</p>
               <p className="mt-1 text-xs text-muted-foreground">{column.groupName}</p>
             </div>
-            <MutationForm action={moveColumnToCategory} pendingMessage="جارٍ نقل العمود…" className="flex items-center gap-2">
+            <MutationForm
+              action={moveColumnToCategory}
+              pendingMessage="جارٍ نقل العمود…"
+              className="flex flex-wrap items-center gap-2"
+            >
               <input type="hidden" name="columnId" value={column.id} />
               <input type="hidden" name="openCategory" value={categoryKey} />
               <select
                 name="categoryId"
                 defaultValue={categoryKey}
                 aria-label={`فئة العمود ${column.headerRaw}`}
-                className="h-9 min-w-40 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring sm:min-w-40"
               >
                 {categoryOptions.map((option) => (
                   <option key={option.id ?? "other"} value={option.id ?? "other"}>
@@ -160,7 +174,10 @@ export function CategoryColumnBoard({
     const next = arrayMove(groups, oldIndex, newIndex);
     setGroups(next);
     startSaving(async () => {
-      const result = await reorderCategoryColumnGroups(categoryId, next.map((group) => group.key));
+      const result = await reorderCategoryColumnGroups(
+        categoryId,
+        next.map((group) => group.key),
+      );
       if (!result.ok) {
         setGroups(previous);
         toast.error(result.error);
@@ -171,7 +188,11 @@ export function CategoryColumnBoard({
   }
 
   if (groups.length === 0) {
-    return <div className="p-8 text-center text-sm text-muted-foreground">لا توجد أعمدة مرتبطة بهذه الفئة.</div>;
+    return (
+      <div className="p-8 text-center text-sm text-muted-foreground">
+        لا توجد أعمدة مرتبطة بهذه الفئة.
+      </div>
+    );
   }
 
   return (
@@ -179,8 +200,16 @@ export function CategoryColumnBoard({
       <p className="text-sm text-muted-foreground">
         اسحب أي بند من المقبض لتغيير موضعه. الحقول القياسية الموحّدة تتحرك بكل أعمدتها دفعة واحدة.
       </p>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={groups.map((group) => group.key)} strategy={verticalListSortingStrategy}>
+      <DndContext
+        id={`category-columns-${categoryId ?? "other"}`}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={groups.map((group) => group.key)}
+          strategy={verticalListSortingStrategy}
+        >
           <div className="space-y-3">
             {groups.map((group) => (
               <SortableColumnGroup

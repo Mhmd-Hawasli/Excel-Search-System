@@ -26,16 +26,38 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
       setPending(false);
       return;
     }
-    window.location.assign(nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/");
+    window.location.assign(
+      nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/",
+    );
   }
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div className="space-y-2"><Label htmlFor="username">اسم المستخدم</Label><Input id="username" name="username" autoComplete="username" required autoFocus /></div>
-      <div className="space-y-2"><Label htmlFor="password">كلمة المرور</Label><Input id="password" name="password" type="password" autoComplete="current-password" required /></div>
-      {error ? <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">{error}</p> : null}
-      <Button className="w-full" type="submit" disabled={pending}>
-        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <LogIn className="size-4" />}{pending ? "جارٍ التحقق…" : "تسجيل الدخول"}
+      <div className="space-y-2">
+        <Label htmlFor="username">اسم المستخدم</Label>
+        <Input id="username" name="username" autoComplete="username" required autoFocus />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">كلمة المرور</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </div>
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+      <Button className="h-11 w-full" type="submit" disabled={pending}>
+        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+        {pending ? "جارٍ التحقق…" : "تسجيل الدخول"}
       </Button>
     </form>
   );

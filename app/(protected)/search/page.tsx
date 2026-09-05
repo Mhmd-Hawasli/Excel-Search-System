@@ -23,7 +23,7 @@ export default async function SearchPage({
         title="البحث في جميع السجلات"
         description="تُراعى اختلافات الهمزة والتاء المربوطة والألف المقصورة والأرقام العربية تلقائيًا."
       />
-      <SearchInterface groups={groups} initialQuery={q ?? ""} />
+      <SearchInterface key={q ?? ""} groups={groups} initialQuery={q ?? ""} />
     </div>
   );
 }

@@ -79,6 +79,29 @@ describe("parseUploadedWorkbook", () => {
       "تعذر قراءة المصنف",
     );
   });
+
+  it("treats formulas without a saved result as empty and skips fully empty rows", async () => {
+    const buffer = await workbookBuffer((workbook) => {
+      const main = workbook.addWorksheet("المؤهلات");
+      main.addRows([
+        ["الاسم", "الرقم الوطني"],
+        ["أحمد", "123456789"],
+      ]);
+      // A formula with no cached result: reads as "" instead of failing the upload.
+      main.getCell("A3").value = { formula: "A2" };
+      main.getCell("B3").value = { formula: "B2" };
+      main.getCell("A4").value = "ليلى";
+      main.getCell("B4").value = { formula: "B2" };
+      workbook.addWorksheet("الثانية").addRows([
+        ["الرقم الوطني", "حقل"],
+        ["123456789", "س"],
+      ]);
+    });
+    const uploaded = await parseUploadedWorkbook(buffer, "ملف.xlsx");
+    const sheet = uploaded.sheets[0];
+    expect(sheet.rows.map((row) => row.rowNumber)).toEqual([2, 4]);
+    expect(sheet.rows[1].cells).toEqual(["ليلى", ""]);
+  });
 });
 
 describe("clearWorkbookFilters", () => {

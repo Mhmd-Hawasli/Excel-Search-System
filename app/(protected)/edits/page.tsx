@@ -32,9 +32,7 @@ export default async function EditsPage({
     listEdits({ fileId: fileId?.trim() || undefined, page, pageSize }),
   ]);
 
-  const activeFile = fileId?.trim()
-    ? files.find((f) => f.fileId === fileId.trim())
-    : undefined;
+  const activeFile = fileId?.trim() ? files.find((f) => f.fileId === fileId.trim()) : undefined;
 
   function tableLink(targetPage: number) {
     const params = new URLSearchParams();
@@ -47,7 +45,8 @@ export default async function EditsPage({
   return (
     <div className="space-y-7">
       <PageHeader
-        title="التعديلات والتصدير"
+        eyebrow="التعديلات والتصدير"
+        title="تصدير ملفات الإكسل"
         description="كل تعديل يدوي على حقول السجلات محفوظ في سجل منفصل مع القيمة القديمة والجديدة. صدّر أي ملف معدل إلى Excel كامل بالقيم الحالية."
       />
 
@@ -82,7 +81,7 @@ export default async function EditsPage({
                   className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
                 >
                   <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 font-bold">
+                    <div className="flex flex-wrap items-center gap-2 font-bold">
                       <Link
                         href={`/groups/${file.groupId}/files/${file.fileId}`}
                         className="truncate text-primary hover:underline"
@@ -96,7 +95,7 @@ export default async function EditsPage({
                         <PencilLine className="size-3" />
                         معدّل
                       </Badge>
-                    </p>
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {file.groupName} · {file.rowCount.toLocaleString("en-US")} سجل ·{" "}
                       {file.editCount.toLocaleString("en-US")}{" "}
@@ -110,9 +109,7 @@ export default async function EditsPage({
                     <Button asChild size="sm" variant="outline">
                       <Link
                         href={
-                          fileId?.trim() === file.fileId
-                            ? "/edits"
-                            : `/edits?fileId=${file.fileId}`
+                          fileId?.trim() === file.fileId ? "/edits" : `/edits?fileId=${file.fileId}`
                         }
                       >
                         {fileId?.trim() === file.fileId ? (

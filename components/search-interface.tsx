@@ -155,7 +155,7 @@ function GroupMultiSelect({
   }
 
   return (
-    <div ref={containerRef} className="relative min-w-56">
+    <div ref={containerRef} className="relative min-w-0 sm:min-w-56">
       <Button
         type="button"
         variant="outline"
@@ -174,7 +174,7 @@ function GroupMultiSelect({
           role="listbox"
           aria-label="مصدر البيانات"
           aria-multiselectable="true"
-          className="absolute start-0 top-full z-50 mt-1 max-h-72 w-full min-w-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg bg-white"
+          className="absolute start-0 top-full z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border bg-card p-1 text-card-foreground shadow-lg sm:min-w-64"
         >
           <div className="mb-1 border-b border-border pb-1">
             <button
@@ -491,7 +491,7 @@ export function SearchInterface({
               البحث المخصص
             </button>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
             <div className="relative">
               <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
               <Label htmlFor="search-query" className="sr-only">
@@ -552,7 +552,7 @@ export function SearchInterface({
           <Skeleton className="h-16" />
         </div>
       ) : !debounced ? (
-        <div className="rounded-xl border border-dashed p-12 text-center">
+        <div className="rounded-xl border border-dashed bg-card p-6 text-center sm:p-12">
           <Search className="mx-auto size-10 text-muted-foreground" />
           <h2 className="mt-3 font-bold">ابدأ بكتابة عبارة البحث</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -560,7 +560,7 @@ export function SearchInterface({
           </p>
         </div>
       ) : data.rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-12 text-center">
+        <div className="rounded-xl border border-dashed bg-card p-6 text-center sm:p-12">
           <h2 className="font-bold">لم نعثر على نتائج مطابقة</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             جرّب كتابة كلمات أقل، أو غيّر نطاق البحث إلى جميع الملفات.

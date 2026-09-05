@@ -1,0 +1,23 @@
+{
+  "errors": [],
+  "checkedRoutes": [
+    "/",
+    "/search",
+    "/groups",
+    "/settings/categories",
+    "/conflicts",
+    "/upload",
+    "/edits",
+    "/merge",
+    "/merge-sheets",
+    "/settings/backup",
+    "/logs"
+  ],
+  "viewports": [
+    1440,
+    1024,
+    768,
+    390,
+    320
+  ]
+}

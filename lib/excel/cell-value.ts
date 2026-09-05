@@ -29,7 +29,10 @@ function cellLocation(cell: ExcelJS.Cell): { sheet: string; address: string } {
 }
 
 /** Read the saved value of a formula, never its expression or an external link. */
-export function cellValueText(cell: ExcelJS.Cell): string {
+export function cellValueText(
+  cell: ExcelJS.Cell,
+  options?: { onUncachedFormula?: "throw" | "empty" },
+): string {
   if (cell.type !== ExcelJS.ValueType.Formula) {
     const raw: unknown = (cell as unknown as { value?: unknown }).value;
     // Normal scalars (and null/undefined) keep the historical behavior.
@@ -61,10 +64,15 @@ export function cellValueText(cell: ExcelJS.Cell): string {
     return cell.text ?? "";
   }
   const result = cell.result;
-  if (result === undefined || result === null)
+  if (result === undefined || result === null) {
+    // Merge flows treat a formula without a saved result as an empty cell
+    // (rows left fully empty are skipped downstream); every other flow keeps
+    // failing loudly so the user recalculates and re-saves the workbook.
+    if (options?.onUncachedFormula === "empty") return "";
     throw new Error(
       `الورقة «${cell.worksheet.name}»، الخلية ${cell.address}: لا توجد نتيجة محفوظة للمعادلة. أعد حساب المصنف في Excel واحفظه ثم أعد فحص الملف.`,
     );
+  }
   if (typeof result === "object" && "error" in result) return String(result.error);
   // ExcelJS Cell.text loses zero and false formula results because it tests truthiness.
   return String(result);

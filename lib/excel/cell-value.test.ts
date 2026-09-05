@@ -27,6 +27,11 @@ describe("saved formula values", () => {
       /المؤهلات.*A2.*لا توجد نتيجة محفوظة/,
     );
   });
+  it("reads absent formula results as empty when the caller opts in", () => {
+    const worksheet = new ExcelJS.Workbook().addWorksheet("المؤهلات");
+    worksheet.getCell("A2").value = { formula: "C2" };
+    expect(cellValueText(worksheet.getCell("A2"), { onUncachedFormula: "empty" })).toBe("");
+  });
   it("retains the Excel error value for diagnostics", () => {
     const worksheet = new ExcelJS.Workbook().addWorksheet("بيانات");
     worksheet.getCell("A2").value = { formula: "C2", result: { error: "#REF!" } };

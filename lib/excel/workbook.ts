@@ -19,10 +19,13 @@ export function columnSignature(headers: string[]) {
   return createHash("sha256").update(headers.map(normalizeStored).join("\u001f")).digest("hex");
 }
 
-export function headersForSheet(worksheet: ExcelJS.Worksheet) {
+export function headersForSheet(
+  worksheet: ExcelJS.Worksheet,
+  options?: { onUncachedFormula?: "throw" | "empty" },
+) {
   const row = worksheet.getRow(1);
   const columnCount = Math.max(worksheet.actualColumnCount, row.cellCount);
-  const headers = Array.from({ length: columnCount }, (_, index) => cellValueText(row.getCell(index + 1)).trim() || `عمود ${index + 1}`);
+  const headers = Array.from({ length: columnCount }, (_, index) => cellValueText(row.getCell(index + 1), options).trim() || `عمود ${index + 1}`);
   const normalized = headers.map(normalizeStored);
   const duplicates = normalized.filter((header, index) => header && normalized.indexOf(header) !== index);
   if (duplicates.length) throw new Error("تحتوي الورقة على أسماء أعمدة مكررة. يرجى جعل عناوين الصف الأول فريدة ثم رفع الملف من جديد.");
