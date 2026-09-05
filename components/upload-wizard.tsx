@@ -79,7 +79,7 @@ export function UploadWizard({
   );
   const progress = job ? Math.round((job.processedRows / Math.max(job.totalRows, 1)) * 100) : 0;
 
-  function useSheet(next: SheetInspection | null) {
+  function applySheet(next: SheetInspection | null) {
     setSheet(next);
     if (!next) {
       setColumns([]);
@@ -107,7 +107,7 @@ export function UploadWizard({
     setBusy(false);
     if (!response.ok) return toast.error(result.error ?? "تعذر فحص الملف.");
     setInspection(result);
-    useSheet(result.selected);
+    applySheet(result.selected);
     setName(file.name.replace(/\.(xlsx|xls)$/i, ""));
     setNameError(null);
   }
@@ -424,7 +424,7 @@ export function UploadWizard({
                     onChange={(event) => {
                       setFile(event.target.files?.[0] ?? null);
                       setInspection(null);
-                      useSheet(null);
+                      applySheet(null);
                     }}
                   />
                   <Button
@@ -448,7 +448,7 @@ export function UploadWizard({
                     key={inspection.token}
                     inspection={inspection}
                     sheet={sheet}
-                    onChange={useSheet}
+                    onChange={applySheet}
                     busy={busy}
                     onBusyChange={setBusy}
                   />

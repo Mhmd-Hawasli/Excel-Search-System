@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useLocalStorageFlag } from "@/hooks/use-local-storage-flag";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Archive,
@@ -127,7 +128,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useLocalStorageFlag("archive-sidebar-collapsed");
   const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const currentSection = navigation.find((section) =>
@@ -137,11 +138,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     currentSection?.links.find((link) => isActive(pathname, link.href))?.label ?? "تفاصيل السجل";
 
   useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem("archive-sidebar-collapsed") === "true");
-    } catch {
-      /* Storage is optional. */
-    }
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -160,18 +156,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
+  // Close the mobile drawer when navigating (previous-render comparison
+  // instead of an effect, per react-hooks guidance).
+  const [previousPathname, setPreviousPathname] = useState(pathname);
+  if (pathname !== previousPathname) {
+    setPreviousPathname(pathname);
+    if (mobileOpen) setMobileOpen(false);
+  }
 
   function toggleSidebar() {
-    const next = !collapsed;
-    setCollapsed(next);
-    try {
-      localStorage.setItem("archive-sidebar-collapsed", String(next));
-    } catch {
-      /* Keep the toggle usable without storage. */
-    }
+    setCollapsed(!collapsed);
   }
 
   return (

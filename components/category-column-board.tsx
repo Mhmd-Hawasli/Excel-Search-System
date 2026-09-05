@@ -157,9 +157,13 @@ export function CategoryColumnBoard({
 }) {
   const [groups, setGroups] = React.useState(initialGroups);
   const [saving, startSaving] = React.useTransition();
-  React.useEffect(() => {
+  // Sync from server props when a save/reorder round-trip lands (previous-render
+  // comparison instead of an effect, per react-hooks guidance).
+  const [previousInitial, setPreviousInitial] = React.useState(initialGroups);
+  if (initialGroups !== previousInitial) {
+    setPreviousInitial(initialGroups);
     setGroups(initialGroups);
-  }, [initialGroups]);
+  }
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),

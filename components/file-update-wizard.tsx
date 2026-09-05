@@ -24,7 +24,6 @@ import { CategorySelector } from "@/components/category-selector";
 import { WorkbookSheetSelector } from "@/components/workbook-sheet-selector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 
 type ExistingColumn = {
@@ -72,7 +71,7 @@ export function FileUpdateWizard({
   const [job, setJob] = useState<JobState | null>(null);
   const notifiedJob = useRef<string | null>(null);
 
-  function useSheet(next: SheetInspection | null) {
+  function applySheet(next: SheetInspection | null) {
     setSheet(next);
     if (!next) {
       setColumns([]);
@@ -139,7 +138,7 @@ export function FileUpdateWizard({
     setBusy(false);
     if (!response.ok) return toast.error(result.error ?? "تعذر فحص الملف.");
     setInspection(result);
-    useSheet(result.selected);
+    applySheet(result.selected);
   }
   function updateColumn(
     index: number,
@@ -273,7 +272,7 @@ export function FileUpdateWizard({
               onChange={(event) => {
                 setFile(event.target.files?.[0] ?? null);
                 setInspection(null);
-                useSheet(null);
+                applySheet(null);
               }}
             />
             <Button type="button" onClick={inspect} disabled={!file || busy}>
@@ -290,7 +289,7 @@ export function FileUpdateWizard({
               key={inspection.token}
               inspection={inspection}
               sheet={sheet}
-              onChange={useSheet}
+              onChange={applySheet}
               busy={busy}
               onBusyChange={setBusy}
             />

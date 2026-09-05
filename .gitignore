@@ -11,3 +11,4 @@ coverage/
 *.xls
 tmp/
 generated/
+.pglite-data/

@@ -9,7 +9,6 @@ import {
   type SheetMergeResult,
   type SheetMergeSheetStat,
   type UnlinkedRow,
-  type UploadedSheet,
   type UploadedSheetRow,
   type UploadedWorkbook,
 } from "@/lib/sheet-merge/types";

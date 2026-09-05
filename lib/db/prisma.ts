@@ -13,7 +13,12 @@ function createPrismaClient(): PrismaClient {
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set. انسخ .env.example إلى .env وحدد اتصال قاعدة البيانات.");
   }
-  const adapter = new PrismaPg({ connectionString });
+  const adapter = new PrismaPg({
+    connectionString,
+    // Optional override; set DATABASE_POOL_MAX=1 for single-session local
+    // databases such as the PGlite dev server (scripts/dev-postgres.mjs).
+    max: process.env.DATABASE_POOL_MAX ? Number(process.env.DATABASE_POOL_MAX) : undefined,
+  });
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
