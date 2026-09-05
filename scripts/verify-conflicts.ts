@@ -219,13 +219,20 @@ async function main() {
         full_name: "سهى عبد الله النجار",
         mother_name: "أمينة",
       };
-      const sameA = await row({ ...samePerson, "المسمى الوظيفي": "مهندس" });
+      const sameA = await row({
+        ...samePerson,
+        "المسمى الوظيفي": "مهندس",
+        functional_category: "الفئة الأولى",
+        organizational_level: "المستوى الأول",
+      });
       const sameB = await row(
         {
           ...samePerson,
           full_name: "سهي عبدالله النجار",
           mother_name: "امينه",
           "المسمى الوظيفي": "مدير",
+          functional_category: "ثانية",
+          organizational_level: "المستوى الثاني",
         },
         secondFile,
       );
@@ -235,8 +242,12 @@ async function main() {
         "person_personal",
         "person_contract",
         "person_job",
+        "person_category",
+        "person_org_level",
       ] as const)
         expectRows(key, [sameA, sameB]);
+      const categoryInvalid = await row({ functional_category: "سادسة" });
+      expectRows("category_invalid", [categoryInvalid]);
       const similarA = await row({
         first_name: "حسن",
         father_name: "محمود",
@@ -315,7 +326,7 @@ async function main() {
         { category: "conflicting", field: "all", rule: "all", page: 1, pageSize: 100 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
-      assert.equal(allConflicts.rows.find((entry) => entry.id === sameA)?.issues.length, 5);
+      assert.equal(allConflicts.rows.find((entry) => entry.id === sameA)?.issues.length, 7);
       const names = allConflicts.rows.map((entry) => normalizeStored(entry.fullName));
       for (const name of new Set(names)) {
         const positions = names.flatMap((value, position) => (value === name ? [position] : []));
@@ -409,7 +420,7 @@ async function main() {
         "all conflicts display the same eleven-digit national ID",
       );
       console.log(
-        "PASS: 31 rules, raw/mapped values, date boundaries, normalization, complete conflict groups, pagination, empty archive and in-progress import exclusion (temporary tables only).",
+        `PASS: ${CONFLICT_RULES.length} rules, raw/mapped values, date boundaries, normalization, complete conflict groups, pagination, empty archive and in-progress import exclusion (temporary tables only).`,
       );
     },
     { timeout: 120_000 },

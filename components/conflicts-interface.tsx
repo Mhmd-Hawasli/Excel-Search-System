@@ -29,6 +29,7 @@ import {
 import { toLatinDigits } from "@/lib/normalization/arabic";
 import { formatNationalId } from "@/lib/format/national-id";
 import { formatShamCash } from "@/lib/format/sham-cash";
+import { formatFunctionalCategory } from "@/lib/format/functional-category";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,7 @@ const sortableColumns: SortableColumn[] = [
   { key: "nationalId", label: "الرقم الوطني" },
   { key: "shamCash", label: "الشام كاش" },
   { key: "personalNo", label: "الرقم الذاتي" },
+  { key: "functionalCategory", label: "الفئة الوظيفية" },
 ];
 
 function SortIcon({ active, dir }: { active: boolean; dir: "asc" | "desc" }) {
@@ -240,13 +242,13 @@ export function ConflictsInterface() {
             </div>
             <p className="text-xs leading-6 text-muted-foreground">
               {filters.category === "invalid" &&
-                "تُقبل الأرقام العربية وتُحذف الفراغات من الرقم الوطني والشام كاش. يُفحص طول الرقم الوطني كرقم قبل تعبئة الأصفار: 8 أرقام أو أقل، و12 رقماً أو أكثر، مشكلة تكامل. يُعرض بـ11 خانة دون اقتطاع الأرقام الأطول. الشام كاش مطلوب 16 خانة. يُقارن الاسم الثلاثي بالاسم + اسم الأب + النسبة بعد التطبيع. تُفحص القيم غير الفارغة في أعمدة «تاريخ»."}
+                "تُقبل الأرقام العربية وتُحذف الفراغات من الرقم الوطني والشام كاش. يُفحص طول الرقم الوطني كرقم قبل تعبئة الأصفار: 8 أرقام أو أقل، و12 رقماً أو أكثر، مشكلة تكامل. يُعرض بـ11 خانة دون اقتطاع الأرقام الأطول. الشام كاش مطلوب 16 خانة. يُقارن الاسم الثلاثي بالاسم + اسم الأب + النسبة بعد التطبيع. تُفحص القيم غير الفارغة في أعمدة «تاريخ». الفئة الوظيفية تُحوَّل من أي صيغة عربية أو رقمية إلى 1–5؛ النص غير المعروف يُخزن 0 ويظهر هنا."}
               {filters.category === "missing" &&
                 "يُفحص الرقم الوطني والشام كاش والرقم الذاتي واسم الأم في جميع السجلات. يُفحص الاسم الثلاثي والاسم واسم الأب والنسبة عندما تكون مربوطة بأعمدة Excel؛ ويُعتمد فراغ الخلية الأصلية حتى لو ركّب النظام اسماً للعرض."}
               {filters.category === "similar" &&
                 "التشابه هنا هو تطابق الاسم الثلاثي بعد التطبيع مع اختلاف اسم الأم. تظهر جميع السجلات المعنية مرتبة بالاسم الثلاثي؛ اسم الأم الفارغ يُراجع في البيانات الناقصة."}
               {filters.category === "conflicting" &&
-                "التكرار يُفحص داخل الملف نفسه، والارتباطات تُفحص عبر جميع الملفات. الشخص = الاسم الثلاثي + اسم الأم بعد التطبيع. تُقارن الأرقام الوطنية والشام كاش بقيمتها الرقمية بعد حذف الفراغات، دون تأثير لأصفار العرض. القيم الفارغة والمعرّفات ذات المحارف تُراجع في البيانات الناقصة والخاطئة."}
+                "التكرار يُفحص داخل الملف نفسه، والارتباطات تُفحص عبر جميع الملفات. الشخص = الاسم الثلاثي + اسم الأم بعد التطبيع. تُقارن الأرقام الوطنية والشام كاش بقيمتها الرقمية بعد حذف الفراغات، دون تأثير لأصفار العرض. تُقارن الفئة الوظيفية برقمها من 1 إلى 5، فمثلاً نفس الرقم الوطني بفئتين مختلفتين عبر ملفين يظهر تضارباً. القيم الفارغة والمعرّفات ذات المحارف تُراجع في البيانات الناقصة والخاطئة."}
             </p>
           </CardContent>
         </Card>
@@ -294,9 +296,9 @@ export function ConflictsInterface() {
           </div>
         </div>
         <div className="overflow-x-auto rounded-xl border bg-card">
-          <table className="w-full min-w-[1250px] text-sm">
+          <table className="w-full min-w-[1400px] text-sm">
             <caption className="sr-only">
-              رقم المشكلة وملف المصدر والاسم الثلاثي واسم الأم والرقم الوطني والشام كاش والرقم الذاتي والمشكلة وشرحها
+              رقم المشكلة وملف المصدر والاسم الثلاثي واسم الأم والرقم الوطني والشام كاش والرقم الذاتي والفئة الوظيفية والمشكلة وشرحها
             </caption>
             <thead className="bg-muted/70">
               <tr>
@@ -325,7 +327,7 @@ export function ConflictsInterface() {
               {busy ? (
                 Array.from({ length: 5 }, (_, index) => (
                   <tr key={index} className="border-t">
-                    {Array.from({ length: 8 }, (_, cell) => (
+                    {Array.from({ length: 9 }, (_, cell) => (
                       <td key={cell} className="p-4">
                         <Skeleton className="h-8 w-full" />
                       </td>
@@ -334,7 +336,7 @@ export function ConflictsInterface() {
                 ))
               ) : error ? (
                 <tr>
-                  <td colSpan={8} className="p-10 text-center">
+                  <td colSpan={9} className="p-10 text-center">
                     <div role="alert" className="mb-4 text-destructive">
                       {error}
                     </div>
@@ -345,7 +347,7 @@ export function ConflictsInterface() {
                 </tr>
               ) : !data?.rows.length ? (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center">
+                  <td colSpan={9} className="p-12 text-center">
                     <CircleCheck className="mx-auto mb-3 size-9 text-primary" aria-hidden="true" />
                     <p className="font-bold">لا توجد سجلات تطابق هذه الفلاتر</p>
                     <p className="mt-2 text-muted-foreground">
@@ -421,6 +423,9 @@ export function ConflictsInterface() {
                         <bdi className="break-all font-mono text-xs">
                           {row.personalNo || "—"}
                         </bdi>
+                      </td>
+                      <td className="min-w-36 p-4">
+                        {formatFunctionalCategory(row.functionalCategory) || "—"}
                       </td>
                       <td className="min-w-80 max-w-xl p-4">
                         <ul className="space-y-3">

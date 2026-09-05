@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatStoredDate } from "@/lib/format/date";
 import { formatShamCash } from "@/lib/format/sham-cash";
 import { formatNationalId } from "@/lib/format/national-id";
+import { formatFunctionalCategory } from "@/lib/format/functional-category";
 import { matchesNormalizedText } from "@/lib/normalization/arabic";
 import type { StandardFieldKey } from "@/lib/excel/types";
 
@@ -36,7 +37,9 @@ function displayFor(column: DetailColumn, rawValue: string) {
     ? formatShamCash(rawValue)
     : column.standardField === "national_id"
       ? formatNationalId(rawValue)
-      : formatStoredDate(rawValue);
+      : column.standardField === "functional_category"
+        ? formatFunctionalCategory(rawValue)
+        : formatStoredDate(rawValue);
 }
 
 export function RecordDetails({

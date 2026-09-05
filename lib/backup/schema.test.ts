@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { backupSchema } from "@/lib/backup/schema";
+import { normalizeStored } from "@/lib/normalization/arabic";
 import { CATEGORY_LIMIT_MESSAGE, MAX_CUSTOM_CATEGORIES } from "@/lib/categories/config";
 
 function backupWithCategoryCount(count: number) {
@@ -180,5 +181,70 @@ describe("backward-compatible national ID backups", () => {
     const result = backupSchema.parse(numericInput);
     expect(result.data.records[0].sfNationalId).toBeNull();
     expect(result.data.dataQualityIssues.at(-1)?.rawValue).toBe("123456789A");
+  });
+});
+
+describe("backward-compatible employment standard fields", () => {
+  it("recomputes job title, functional category and organizational level from legacy originals", () => {
+    const input = nationalBackup(["123456789"]);
+    const record = input.data.records[0];
+    const fileId = record.fileId;
+    input.data.fileColumns.push(
+      {
+        id: randomUUID(),
+        fileId,
+        headerRaw: "المسمى الوظيفي",
+        headerNormalized: "المسمي الوظيفي",
+        columnIndex: 2,
+        categoryId: null,
+        standardField: "JOB_TITLE",
+        createdAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        fileId,
+        headerRaw: "الفئة الوظيفية",
+        headerNormalized: "الفئه الوظيفيه",
+        columnIndex: 3,
+        categoryId: null,
+        standardField: "FUNCTIONAL_CATEGORY",
+        createdAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        fileId,
+        headerRaw: "السوية التنظيمية",
+        headerNormalized: "السويه التنظيميه",
+        columnIndex: 4,
+        categoryId: null,
+        standardField: "ORGANIZATIONAL_LEVEL",
+        createdAt: new Date(),
+      },
+    );
+    record.data = {
+      "الرقم الوطني": record.data["الرقم الوطني"],
+      "المسمى الوظيفي": "مدير",
+      "الفئة الوظيفية": "ثانية",
+      "السوية التنظيمية": "المستوى الثاني",
+    } as typeof record.data;
+    const { data } = backupSchema.parse(input);
+    expect(data.records[0]).toMatchObject({
+      sfJobTitle: "مدير",
+      nJobTitle: normalizeStored("مدير"),
+      sfFunctionalCategory: 2,
+      sfOrganizationalLevel: "المستوى الثاني",
+      nOrganizationalLevel: normalizeStored("المستوى الثاني"),
+    });
+  });
+
+  it("keeps legacy backups without employment columns empty", () => {
+    const parsed = backupSchema.parse(nationalBackup(["123456789"]));
+    expect(parsed.data.records[0]).toMatchObject({
+      sfJobTitle: null,
+      sfFunctionalCategory: null,
+      sfOrganizationalLevel: null,
+      nJobTitle: null,
+      nOrganizationalLevel: null,
+    });
   });
 });

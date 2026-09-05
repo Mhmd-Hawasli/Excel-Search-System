@@ -25,6 +25,20 @@ function numericKey(value: Prisma.Sql) {
   return Prisma.sql`CASE WHEN ${latin} ~ '^[0-9]+$' THEN COALESCE(NULLIF(ltrim(${latin}, '0'), ''), '0') END`;
 }
 
+function categoryDisplaySql(value: Prisma.Sql) {
+  return Prisma.sql`CASE WHEN COALESCE(TRIM(COALESCE(${value}, '')), '') ~ '^[0-9]+$'
+    THEN CASE COALESCE(NULLIF(${value}, '')::integer, 0)
+      WHEN 1 THEN 'الفئة الأولى'
+      WHEN 2 THEN 'الفئة الثانية'
+      WHEN 3 THEN 'الفئة الثالثة'
+      WHEN 4 THEN 'الفئة الرابعة'
+      WHEN 5 THEN 'الفئة الخامسة'
+      ELSE 'فئة غير معروفة'
+    END
+    ELSE 'فئة غير معروفة'
+  END`;
+}
+
 const rawFields = [
   "first_name",
   "father_name",
@@ -35,6 +49,9 @@ const rawFields = [
   "personal_no",
   "mother_name",
   "contract_code",
+  "job_title",
+  "functional_category",
+  "organizational_level",
 ] as const;
 const trimCharacters =
   " \t\n\r\f\v\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
@@ -51,13 +68,15 @@ function rawField(field: (typeof rawFields)[number]) {
       ? Prisma.sql`lpad(r.sf_sham_cash::text, 16, '0')`
       : field === "national_id"
         ? Prisma.sql`COALESCE(r.data ->> '__national_id_original', r.sf_national_id::text)`
-        : Prisma.raw(`r.sf_${field}`);
+        : field === "functional_category"
+          ? Prisma.sql`COALESCE(r.sf_functional_category::text, '')`
+          : Prisma.raw(`r.sf_${field}`);
   const originalCell = Prisma.sql`r.data ->> (m.mapping ->> ${field})`;
   // Read originals for synthesized names and numeric standardized identifiers.
   const original =
     field === "national_id"
       ? Prisma.sql`CASE WHEN r.data ? (m.mapping ->> ${field}) THEN ${originalCell} ELSE ${fallback} END`
-      : field === "full_name" || field === "sham_cash"
+      : field === "full_name" || field === "sham_cash" || field === "functional_category"
         ? Prisma.sql`CASE WHEN m.mapping ? ${field} THEN ${originalCell} ELSE ${fallback} END`
         : Prisma.sql`COALESCE(${fallback}, ${originalCell})`;
   return Prisma.sql`btrim(COALESCE(${original}, ''), ${trimCharacters}) AS ${Prisma.raw(field)}`;
@@ -72,7 +91,8 @@ const baseCtes = Prisma.sql`
     SELECT r.id, r.file_id, r.row_index, f.group_id, f.name AS file_name, f.original_filename,
       COALESCE(m.mapping, '{}'::jsonb) AS mapping,
       COALESCE(NULLIF(btrim(r.sf_full_name), ''), concat_ws(' ', NULLIF(btrim(r.sf_first_name), ''), NULLIF(btrim(r.sf_father_name), ''), NULLIF(btrim(r.sf_last_name), ''))) AS display_name,
-      ${Prisma.join(rawFields.map(rawField))}
+      ${Prisma.join(rawFields.map(rawField))},
+      r.sf_functional_category::text AS functional_category_stored
     FROM records r JOIN files f ON f.id = r.file_id LEFT JOIN mappings m ON m.file_id = r.file_id
     WHERE NOT EXISTS (SELECT 1 FROM upload_jobs j WHERE j.file_id = f.id AND j.status IN ('pending', 'parsing', 'inserting'))
   ),
@@ -82,7 +102,10 @@ const baseCtes = Prisma.sql`
       ${numericKey(numericInputSql(Prisma.sql`national_id`))} AS national_key,
       ${numericKey(numericInputSql(Prisma.sql`sham_cash`))} AS sham_key,
       ${numericKey(Prisma.sql`personal_no`)} AS personal_key,
-      NULLIF(${normalizeTextSql(Prisma.sql`contract_code`)}, '') AS contract_key
+      NULLIF(${normalizeTextSql(Prisma.sql`contract_code`)}, '') AS contract_key,
+      NULLIF(btrim(s.functional_category_stored, ${trimCharacters}), '') AS functional_category_key,
+      NULLIF(${normalizeTextSql(Prisma.sql`job_title`)}, '') AS job_key,
+      NULLIF(${normalizeTextSql(Prisma.sql`organizational_level`)}, '') AS org_level_key
     FROM source s
   ),
   base AS MATERIALIZED (
@@ -119,10 +142,13 @@ const dateCtes = Prisma.sql`,
 const jobCtes = Prisma.sql`,
   job_values AS (
     SELECT b.id, b.person_key, b.name_key, b.mother_key, c.header_raw,
-      r.data ->> c.header_raw AS value, ${normalizeTextSql(Prisma.sql`r.data ->> c.header_raw`)} AS value_key
+      COALESCE(NULLIF(btrim(r.data ->> c.header_raw), ''), b.job_title) AS value,
+      ${normalizeTextSql(Prisma.sql`COALESCE(NULLIF(btrim(r.data ->> c.header_raw), ''), b.job_title)`)} AS value_key
     FROM base b JOIN records r ON r.id = b.id JOIN file_columns c ON c.file_id = b.file_id
-    WHERE ${normalizeTextSql(Prisma.sql`regexp_replace(c.header_raw, ${" \\[[^]]+\\]( \\([0-9]+\\))?$"}, '')`)} IN ('المسمي الوظيفي', 'مسمي وظيفي', 'المسمي', 'مسمي الوظيفة', 'المسمي الوظيفي الحالي')
-      AND b.person_key IS NOT NULL
+    WHERE b.person_key IS NOT NULL AND (
+      c.standard_field = 'job_title'
+      OR ${normalizeTextSql(Prisma.sql`regexp_replace(c.header_raw, ${" \\[[^]]+\\]( \\([0-9]+\\))?$"}, '')`)} IN ('المسمي الوظيفي', 'مسمي وظيفي', 'المسمي', 'مسمي الوظيفة', 'المسمي الوظيفي الحالي')
+    )
   )`;
 
 function issueSelect(
@@ -191,6 +217,13 @@ function localRule(key: ConflictRuleKey) {
         Prisma.sql`b.mapping ?& ARRAY['full_name','first_name','father_name','last_name'] AND b.full_name <> '' AND ${normalizeTextSql(Prisma.sql`b.full_name`)} <> ${normalizeTextSql(composed)}`,
       );
     }
+    case "category_invalid":
+      return issueSelect(
+        key,
+        Prisma.sql`'القيمة الأصلية «' || b.functional_category || '» لا يمكن تحويلها إلى فئة وظيفية من 1 إلى 5، وتُخزن كـ 0 للخطأ.'`,
+        from,
+        Prisma.sql`b.functional_category_key = '0'`,
+      );
     case "date_invalid":
     case "date_early":
     case "date_future": {
@@ -235,6 +268,9 @@ const identifierColumns = {
   sham_cash: ["sham_key", "sham_cash"],
   personal_no: ["personal_key", "personal_no"],
   contract_code: ["contract_key", "contract_code"],
+  job_title: ["job_key", "job_title"],
+  functional_category: ["functional_category_key", "functional_category_key"],
+  organizational_level: ["org_level_key", "organizational_level"],
 } as const;
 
 function relationalRule(key: ConflictRuleKey) {
@@ -273,9 +309,12 @@ function relationalRule(key: ConflictRuleKey) {
       Prisma.sql`base b JOIN (SELECT ${keyColumn} AS value_key, COUNT(DISTINCT person_key) AS total FROM base WHERE person_key IS NOT NULL AND ${keyColumn} IS NOT NULL GROUP BY ${keyColumn} HAVING COUNT(DISTINCT person_key) > 1) g ON g.value_key = ${currentKey}`,
       Prisma.sql`b.person_key IS NOT NULL`,
     );
+  const displayValue = (value: Prisma.Sql) =>
+    rule.field === "functional_category" ? categoryDisplaySql(value) : value;
+  const currentDisplay = displayValue(currentValue);
   return issueSelect(
     key,
-    Prisma.sql`'الشخص نفسه مرتبط بـ ' || g.total || ${" قيم مختلفة لحقل «" + CONFLICT_FIELDS[rule.field] + "»، منها «"} || g.first_value || '» و«' || g.last_value || '». قيمة هذا السجل «' || ${currentValue} || '».'`,
+    Prisma.sql`'الشخص نفسه مرتبط بـ ' || g.total || ${" قيم مختلفة لحقل «" + CONFLICT_FIELDS[rule.field] + "»، منها «"} || ${displayValue(Prisma.sql`g.first_value`)} || '» و«' || ${displayValue(Prisma.sql`g.last_value`)} || '». قيمة هذا السجل «' || ${currentDisplay} || '».'`,
     Prisma.sql`base b JOIN (SELECT person_key, COUNT(DISTINCT ${keyColumn}) AS total, MIN(${valueColumn}) AS first_value, MAX(${valueColumn}) AS last_value FROM base WHERE person_key IS NOT NULL AND ${keyColumn} IS NOT NULL GROUP BY person_key HAVING COUNT(DISTINCT ${keyColumn}) > 1) g ON g.person_key = b.person_key`,
     Prisma.sql`${currentKey} IS NOT NULL`,
   );
@@ -337,6 +376,8 @@ function sortOrderSql(input: import("@/lib/conflicts/request").ConflictRequest):
         return Prisma.sql`sham_key`;
       case "personalNo":
         return Prisma.sql`personal_key`;
+      case "functionalCategory":
+        return Prisma.sql`functional_category_key`;
       default:
         return Prisma.sql`issue_number`;
     }
@@ -387,6 +428,7 @@ export function buildConflictQuery(input: ConflictRequest) {
         COALESCE(lpad(b.national_key, GREATEST(11, length(b.national_key)), '0'), ${latinDigitsSql(Prisma.sql`b.national_id`)}) AS "nationalId",
         COALESCE(b.sham_cash, '') AS "shamCash",
         COALESCE(b.personal_no, '') AS "personalNo",
+        b.functional_category_key::integer AS "functionalCategory",
         b.group_key AS "groupKey",
         b.issue_number::integer AS "issueNumber",
         b.issues_agg AS issues

@@ -1,5 +1,6 @@
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { digitsOnly, normalizeQuery } from "@/lib/normalization/arabic";
+import { functionalCategoryQuery } from "@/lib/format/functional-category";
 import { SEARCH_FIELD_MAP, SEARCH_FIELDS, type SearchField } from "@/lib/search/fields";
 
 export type SearchMode = "full" | "custom";
@@ -21,8 +22,14 @@ export function buildSearchPlan(input: SearchPlanInput): SearchPlan {
   }
   const hasText = textTokens.length > 0;
   const hasNumbers = numericNeedle.length > 0;
+  const hasFunctionalCategory = functionalCategoryQuery(input.query) !== null;
   return {
-    fields: SEARCH_FIELDS.filter((field) => (field.type === "text" && hasText) || (field.type === "numeric" && hasNumbers)),
+    fields: SEARCH_FIELDS.filter(
+      (field) =>
+        (field.type === "text" && hasText) ||
+        (field.type === "numeric" && hasNumbers) ||
+        (field.type === "functional_category" && hasFunctionalCategory),
+    ),
     textTokens,
     numericNeedle,
     normalizedText: allTokens.join(" "),

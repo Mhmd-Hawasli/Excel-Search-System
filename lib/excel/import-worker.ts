@@ -12,6 +12,7 @@ import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";
 import { nationalIdColumns } from "@/lib/format/national-id";
 import { nationalIdQualityIssue } from "@/lib/excel/national-id-quality";
 import { normalizeShamCash, shamCashAsBigInt } from "@/lib/format/sham-cash";
+import { parseFunctionalCategory } from "@/lib/format/functional-category";
 import { assignColumnSortOrders } from "@/lib/categories/column-order";
 
 const BATCH_SIZE = 1000;
@@ -56,6 +57,9 @@ export function recordInput(
     sfPhone: fields.phone ?? null,
     sfContractCode: fields.contract_code ?? null,
     sfSecondaryContractCode: fields.secondary_contract_code ?? null,
+    sfJobTitle: fields.job_title ?? null,
+    sfFunctionalCategory: parseFunctionalCategory(fields.functional_category ?? ""),
+    sfOrganizationalLevel: fields.organizational_level ?? null,
     nFirstName: fields.first_name ? normalizeStored(fields.first_name) : null,
     nFatherName: fields.father_name ? normalizeStored(fields.father_name) : null,
     nLastName: fields.last_name ? normalizeStored(fields.last_name) : null,
@@ -64,6 +68,10 @@ export function recordInput(
     nContractCode: fields.contract_code ? normalizeStored(fields.contract_code) : null,
     nSecondaryContractCode: fields.secondary_contract_code
       ? normalizeStored(fields.secondary_contract_code)
+      : null,
+    nJobTitle: fields.job_title ? normalizeStored(fields.job_title) : null,
+    nOrganizationalLevel: fields.organizational_level
+      ? normalizeStored(fields.organizational_level)
       : null,
     dPersonalNo: fields.personal_no ? digitsOnly(fields.personal_no) : null,
     dPhone: fields.phone ? digitsOnly(fields.phone) : null,
@@ -107,6 +115,15 @@ export function qualityIssues(
       issueType: DataQualityIssueType.INVALID_SHAM_CASH,
       columnName: "الشام كاش",
       rawValue: shamCashRaw,
+    });
+  const categoryRaw = fields.functional_category ?? "";
+  if (categoryRaw && parseFunctionalCategory(categoryRaw) === 0)
+    issues.push({
+      fileId,
+      rowIndex,
+      issueType: DataQualityIssueType.INVALID_FUNCTIONAL_CATEGORY,
+      columnName: "الفئة الوظيفية",
+      rawValue: categoryRaw,
     });
   return issues;
 }

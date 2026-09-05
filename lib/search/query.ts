@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { buildSearchPlan, type SearchMode } from "@/lib/search/plan";
+import { functionalCategoryQuery } from "@/lib/format/functional-category";
 import type { SearchField } from "@/lib/search/fields";
 import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
 
@@ -33,6 +34,9 @@ type SearchDatabaseRow = {
   sfPhone: string | null;
   sfContractCode: string | null;
   sfSecondaryContractCode: string | null;
+  sfJobTitle: string | null;
+  sfFunctionalCategory: number | null;
+  sfOrganizationalLevel: string | null;
   matchedField: StandardFieldKey | null;
   matchedValue: string | null;
   matchRank: number;
@@ -45,7 +49,16 @@ function column(field: SearchField) {
   return Prisma.raw(`r."${field.column}"`);
 }
 
-function conditionFor(field: SearchField, textTokens: string[], numericNeedle: string) {
+function conditionFor(
+  field: SearchField,
+  textTokens: string[],
+  numericNeedle: string,
+  categoryNeedle: number | null,
+) {
+  if (field.type === "functional_category")
+    return categoryNeedle === null
+      ? Prisma.sql`FALSE`
+      : Prisma.sql`r."sf_functional_category" = ${categoryNeedle}`;
   const fieldColumn = column(field);
   if (field.type === "numeric")
     return numericNeedle
@@ -58,12 +71,30 @@ function conditionFor(field: SearchField, textTokens: string[], numericNeedle: s
   )})`;
 }
 
-function exactFor(field: SearchField, normalizedText: string, numericNeedle: string) {
+function exactFor(
+  field: SearchField,
+  normalizedText: string,
+  numericNeedle: string,
+  categoryNeedle: number | null,
+) {
+  if (field.type === "functional_category")
+    return categoryNeedle === null
+      ? Prisma.sql`FALSE`
+      : Prisma.sql`r."sf_functional_category" = ${categoryNeedle}`;
   const needle = field.type === "numeric" ? numericNeedle : normalizedText;
   return needle ? Prisma.sql`${column(field)} = ${needle}` : Prisma.sql`FALSE`;
 }
 
-function prefixFor(field: SearchField, normalizedText: string, numericNeedle: string) {
+function prefixFor(
+  field: SearchField,
+  normalizedText: string,
+  numericNeedle: string,
+  categoryNeedle: number | null,
+) {
+  if (field.type === "functional_category")
+    return categoryNeedle === null
+      ? Prisma.sql`FALSE`
+      : Prisma.sql`r."sf_functional_category" = ${categoryNeedle}`;
   const needle = field.type === "numeric" ? numericNeedle : normalizedText;
   return needle ? Prisma.sql`${column(field)} ILIKE ${`${needle}%`}` : Prisma.sql`FALSE`;
 }
@@ -81,8 +112,12 @@ function displayColumn(field: SearchField) {
     phone: "sf_phone",
     contract_code: "sf_contract_code",
     secondary_contract_code: "sf_secondary_contract_code",
+    job_title: "sf_job_title",
+    functional_category: "sf_functional_category",
+    organizational_level: "sf_organizational_level",
   };
   if (field.key === "sham_cash") return Prisma.sql`LPAD(r."sf_sham_cash"::text, 16, '0')`;
+  if (field.type === "functional_category") return Prisma.sql`r."sf_functional_category"::text`;
   return Prisma.raw(`r."${columns[field.key]}"`);
 }
 
@@ -102,6 +137,12 @@ function searchOrder(sortBy?: SearchSortKey, sortDirection: SearchSortDirection 
       return Prisma.sql`r."sf_sham_cash" ${direction} NULLS LAST, r.id ASC`;
     case "personal_no":
       return Prisma.sql`NULLIF(r."d_personal_no", '')::numeric ${direction} NULLS LAST, r.id ASC`;
+    case "job_title":
+      return Prisma.sql`r."n_job_title" ${direction} NULLS LAST, r.id ASC`;
+    case "functional_category":
+      return Prisma.sql`r."sf_functional_category" ${direction} NULLS LAST, r.id ASC`;
+    case "organizational_level":
+      return Prisma.sql`r."n_organizational_level" ${direction} NULLS LAST, r.id ASC`;
     case "match":
       return Prisma.sql`"matchedValue" ${direction} NULLS LAST, "matchedField" ${direction} NULLS LAST, r.id ASC`;
   }
@@ -113,14 +154,15 @@ export async function searchRecords(input: SearchRequest) {
   const plan = buildSearchPlan(input);
   if (!input.query.trim() || plan.fields.length === 0)
     return { rows: [] as SearchResultRow[], total: 0, page, pageSize, pageCount: 0 };
+  const categoryNeedle = functionalCategoryQuery(input.query);
   const conditions = plan.fields.map((field) =>
-    conditionFor(field, plan.textTokens, plan.numericNeedle),
+    conditionFor(field, plan.textTokens, plan.numericNeedle, categoryNeedle),
   );
   const exact = plan.fields.map((field) =>
-    exactFor(field, plan.normalizedText, plan.numericNeedle),
+    exactFor(field, plan.normalizedText, plan.numericNeedle, categoryNeedle),
   );
   const prefix = plan.fields.map((field) =>
-    prefixFor(field, plan.normalizedText, plan.numericNeedle),
+    prefixFor(field, plan.normalizedText, plan.numericNeedle, categoryNeedle),
   );
   const groupIds = Array.from(new Set(input.groupIds ?? []));
   const groupScope = groupIds.length
@@ -145,6 +187,7 @@ export async function searchRecords(input: SearchRequest) {
         r."sf_mother_name" AS "sfMotherName", r."sf_sham_cash"::text AS "sfShamCash", r."sf_personal_no" AS "sfPersonalNo",
         r."sf_first_name" AS "sfFirstName", r."sf_father_name" AS "sfFatherName", r."sf_last_name" AS "sfLastName",
         r."sf_phone" AS "sfPhone", r."sf_contract_code" AS "sfContractCode", r."sf_secondary_contract_code" AS "sfSecondaryContractCode",
+        r."sf_job_title" AS "sfJobTitle", r."sf_functional_category" AS "sfFunctionalCategory", r."sf_organizational_level" AS "sfOrganizationalLevel",
         CASE ${Prisma.join(fieldCases, " ")} ELSE NULL END AS "matchedField",
         CASE ${Prisma.join(matchedValueCases, " ")} ELSE NULL END AS "matchedValue",
         CASE WHEN (${Prisma.join(exact, " OR ")}) THEN 0 WHEN (${Prisma.join(prefix, " OR ")}) THEN 1 ELSE 2 END AS "matchRank"
