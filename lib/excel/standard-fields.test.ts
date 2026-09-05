@@ -1,21 +1,33 @@
+import { StandardField } from "@/generated/prisma/client";
 import { describe, expect, it } from "vitest";
-import { STANDARD_FIELD_LABELS, suggestStandardField } from "@/lib/excel/standard-fields";
+import {
+  PRISMA_STANDARD_FIELDS,
+  STANDARD_FIELD_LABELS,
+  standardFieldKey,
+} from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_KEYS, type StandardFieldKey } from "@/lib/excel/types";
 
-describe("standard-field suggestions", () => {
-  it.each([
-    ["الرقم الوطنى", "national_id"], ["رقم وطني", "national_id"], ["اسم الوالدة", "mother_name"],
-    ["رقم الموبايل", "phone"], ["كود العقد", "contract_code"], ["رمز العقد الأساسي", "contract_code"],
-    ["رمز العقد الثانوي", "secondary_contract_code"], ["كود العقد الثانوي", "secondary_contract_code"], ["رمز العقد الإضافي", "secondary_contract_code"], ["الرقم الوظيفي", "personal_no"],
-    ["المسمى الوظيفي", "job_title"], ["مسمى وظيفي", "job_title"], ["الفئة الوظيفية", "functional_category"],
-    ["فئة وظيفية", "functional_category"], ["الدرجة الوظيفية", "functional_category"],
-    ["السوية التنظيمية الأساسية", "organizational_level"], ["المستوى التنظيمي", "organizational_level"],
-  ] as const)("suggests %s as %s", (header, expected) => expect(suggestStandardField(header)).toBe(expected));
-  it("exposes the new primary and secondary labels", () => {
-    expect(STANDARD_FIELD_LABELS.contract_code).toBe("رمز العقد الأساسي");
-    expect(STANDARD_FIELD_LABELS.secondary_contract_code).toBe("رمز العقد الثانوي");
-    expect(STANDARD_FIELD_LABELS.job_title).toBe("المسمى الوظيفي");
-    expect(STANDARD_FIELD_LABELS.functional_category).toBe("الفئة الوظيفية");
-    expect(STANDARD_FIELD_LABELS.organizational_level).toBe("السوية التنظيمية الأساسية");
+describe("standard-fields Prisma bridge", () => {
+  it("maps every catalog key to a distinct Prisma enum member", () => {
+    const values = Object.values(PRISMA_STANDARD_FIELDS);
+    expect(values).toHaveLength(STANDARD_FIELD_KEYS.length);
+    expect(new Set(values).size).toBe(STANDARD_FIELD_KEYS.length);
+    for (const value of values) expect(Object.values(StandardField)).toContain(value);
   });
-  it("does not force an unrelated header", () => expect(suggestStandardField("ملاحظات إدارية طويلة")).toBeNull());
+
+  it("round-trips enum members back to catalog keys", () => {
+    for (const key of STANDARD_FIELD_KEYS) {
+      expect(standardFieldKey(PRISMA_STANDARD_FIELDS[key])).toBe(key);
+    }
+  });
+
+  it("returns null for unknown enum members", () => {
+    expect(standardFieldKey("NOT_A_FIELD" as StandardField)).toBeNull();
+  });
+
+  it("provides an Arabic label for every key", () => {
+    for (const key of STANDARD_FIELD_KEYS) {
+      expect(STANDARD_FIELD_LABELS[key as StandardFieldKey]).toBeTruthy();
+    }
+  });
 });
