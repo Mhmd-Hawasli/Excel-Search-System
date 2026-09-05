@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -18,14 +18,15 @@ import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
 import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 import { ensureUniqueStandardFields } from "@/lib/excel/mapping";
 import { formatShamCash } from "@/lib/format/sham-cash";
-import { CategorySelector } from "@/components/category-selector";
-import { WorkbookSheetSelector } from "@/components/workbook-sheet-selector";
+import { CategorySelector } from "@/features/categories/category-selector";
+import { WorkbookSheetSelector } from "@/features/upload/workbook-sheet-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { useUploadJobPolling } from "@/hooks/use-upload-job-polling";
 
 type GroupOption = { id: string; name: string };
 type CategoryOption = { id: string; name: string };
@@ -33,14 +34,6 @@ type TemplateOption = { id: string; groupId: string; name: string; mapping: unkn
 type ColumnMapping = SheetInspection["columns"][number] & {
   standardField: StandardFieldKey | null;
   categoryId: string | null;
-};
-type JobState = {
-  id: string;
-  fileId: string | null;
-  status: "PENDING" | "PARSING" | "INSERTING" | "DONE" | "FAILED";
-  totalRows: number;
-  processedRows: number;
-  errorMessage: string | null;
 };
 
 const steps = ["الملف والورقة", "هوية الملف", "حقول البحث", "فئات الأعمدة", "المعاينة والتأكيد"];
@@ -68,10 +61,12 @@ export function UploadWizard({
   const [nameError, setNameError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
-  const [job, setJob] = useState<JobState | null>(null);
+  const [job, setJob] = useUploadJobPolling({
+    doneMessage: "تم حفظ الملف وأصبحت سجلاته جاهزة للبحث.",
+    failedFallbackMessage: "فشل حفظ الملف.",
+  });
   const [templateName, setTemplateName] = useState("");
   const [templateSaved, setTemplateSaved] = useState(false);
-  const notifiedJob = useRef<string | null>(null);
 
   const groupTemplates = useMemo(
     () => templates.filter((template) => template.groupId === groupId),
@@ -254,26 +249,6 @@ export function UploadWizard({
       errorMessage: null,
     });
   }
-
-  useEffect(() => {
-    if (!job || job.status === "DONE" || job.status === "FAILED") return;
-    const timer = window.setInterval(async () => {
-      const response = await fetch(`/api/upload-jobs/${job.id}`, { cache: "no-store" });
-      if (response.ok) setJob((await response.json()) as JobState);
-    }, 1200);
-    return () => window.clearInterval(timer);
-  }, [job]);
-
-  useEffect(() => {
-    if (!job || notifiedJob.current === job.id) return;
-    if (job.status === "DONE") {
-      notifiedJob.current = job.id;
-      toast.success("تم حفظ الملف وأصبحت سجلاته جاهزة للبحث.");
-    } else if (job.status === "FAILED") {
-      notifiedJob.current = job.id;
-      toast.error(job.errorMessage ?? "فشل حفظ الملف.");
-    }
-  }, [job]);
 
   async function saveTemplate() {
     if (!job || !templateName.trim()) return;

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
-import { CategorySelector } from "@/components/category-selector";
+import { CategorySelector } from "@/features/categories/category-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

@@ -1,7 +1,15 @@
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { CategoryColumnBoard } from "@/components/category-column-board";
+import { describe, expect, it, vi } from "vitest";
+
+// The board renders MutationForm, whose shared action hook reads the
+// App Router; stub navigation since this test renders outside Next.js.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }),
+  usePathname: () => "/",
+}));
+
+import { CategoryColumnBoard } from "@/features/categories/category-column-board";
 
 describe("CategoryColumnBoard", () => {
   it("merges standard-field columns into one draggable item without exposing system weights", () => {

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { CategorySelector } from "@/components/category-selector";
+import { CategorySelector } from "@/features/categories/category-selector";
 import { MAX_TOTAL_CATEGORIES } from "@/lib/categories/config";
 
 describe("CategorySelector", () => {

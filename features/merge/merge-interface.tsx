@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { MappingForm } from "@/components/merge/mapping-form";
-import { ResultsView, type MergeClientResult } from "@/components/merge/results-view";
+import { MappingForm } from "@/features/merge/mapping-form";
+import { ResultsView, type MergeClientResult } from "@/features/merge/results-view";
 import { LoaderCircle, Play, RefreshCw, Upload } from "lucide-react";
 import {
   MERGE_RULES,

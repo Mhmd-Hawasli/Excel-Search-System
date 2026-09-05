@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { UploadWizard } from "@/components/upload-wizard";
+import { UploadWizard } from "@/features/upload/upload-wizard";
 import { Button } from "@/components/ui/button";
 import { readSearchParam } from "@/utils/search-params";
 

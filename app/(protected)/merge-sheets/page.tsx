@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { SheetMergeInterface } from "@/components/sheet-merge/sheet-merge-interface";
+import { SheetMergeInterface } from "@/features/sheet-merge/sheet-merge-interface";
 
 export default function MergeSheetsPage() {
   return (

@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { MergeInterface } from "@/components/merge/merge-interface";
+import { MergeInterface } from "@/features/merge/merge-interface";
 
 export default function MergePage() {
   return (

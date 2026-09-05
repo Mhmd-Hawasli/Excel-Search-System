@@ -1,37 +1,52 @@
 "use client";
 
-import { useState, useTransition, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { LoaderCircle, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import type { MutationResult } from "@/lib/actions/result";
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useServerAction, type ServerAction } from "@/hooks/use-server-action";
 
-export function TypedDeleteButton({ id, entityName, description, action }: { id: string; entityName: string; description: string; action: (formData: FormData) => Promise<MutationResult> }) {
-  const router = useRouter();
+/**
+ * Destructive action button with a typed-confirmation dialog. Delegates the
+ * action invocation to the shared `useServerAction` flow.
+ */
+export function TypedDeleteButton({
+  id,
+  entityName,
+  description,
+  action,
+}: {
+  id: string;
+  entityName: string;
+  description: string;
+  action: ServerAction;
+}) {
+  const { pending, run } = useServerAction();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  const [pending, startTransition] = useTransition();
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     const formData = new FormData(event.currentTarget);
-    startTransition(async () => {
-      const toastId = toast.loading("جارٍ تنفيذ الحذف…");
-      try {
-        const result = await action(formData);
-        if (!result.ok) return void toast.error(result.error, { id: toastId });
-        toast.success(result.message, { id: toastId });
+    run(action, formData, {
+      pendingMessage: "جارٍ تنفيذ الحذف…",
+      fallbackError: "تعذر تنفيذ الحذف. حاول مرة أخرى.",
+      onSuccess: () => {
         setOpen(false);
         setConfirmation("");
-        if (result.navigateTo) router.replace(result.navigateTo);
-      } catch {
-        toast.error("تعذر تنفيذ الحذف. حاول مرة أخرى.", { id: toastId });
-      }
+      },
     });
   }
 

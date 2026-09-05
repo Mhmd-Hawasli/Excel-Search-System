@@ -17,7 +17,7 @@ import {
   downloadPreparedExport,
   postNdJson,
   type ExportReady,
-} from "@/components/sheet-merge/client";
+} from "@/features/sheet-merge/client";
 import type { SheetMergeResult, SheetMergeSheetStat } from "@/lib/sheet-merge/types";
 
 /** عدد الأسطر غير المرتبطة المعروضة في الواجهة لكل صفحة. */

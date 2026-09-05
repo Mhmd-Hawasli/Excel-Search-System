@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { FileCheck2, FileWarning, LoaderCircle, RefreshCw, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
@@ -20,11 +20,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CategorySelector } from "@/components/category-selector";
-import { WorkbookSheetSelector } from "@/components/workbook-sheet-selector";
+import { CategorySelector } from "@/features/categories/category-selector";
+import { WorkbookSheetSelector } from "@/features/upload/workbook-sheet-selector";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { useUploadJobPolling } from "@/hooks/use-upload-job-polling";
 
 type ExistingColumn = {
   headerRaw: string;
@@ -36,14 +37,6 @@ type ExistingColumn = {
 type MappedColumn = SheetInspection["columns"][number] & {
   standardField: StandardFieldKey | null;
   categoryId: string | null;
-};
-type JobState = {
-  id: string;
-  fileId: string | null;
-  status: "PENDING" | "PARSING" | "INSERTING" | "DONE" | "FAILED";
-  totalRows: number;
-  processedRows: number;
-  errorMessage: string | null;
 };
 const selectClass =
   "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -68,8 +61,10 @@ export function FileUpdateWizard({
   const [sheet, setSheet] = useState<SheetInspection | null>(null);
   const [columns, setColumns] = useState<MappedColumn[]>([]);
   const [busy, setBusy] = useState(false);
-  const [job, setJob] = useState<JobState | null>(null);
-  const notifiedJob = useRef<string | null>(null);
+  const [job, setJob] = useUploadJobPolling({
+    doneMessage: "تم حفظ الإصدار الجديد واستبدال بيانات الملف بنجاح.",
+    failedFallbackMessage: "فشل تحديث الملف وبقيت البيانات السابقة محفوظة.",
+  });
 
   function applySheet(next: SheetInspection | null) {
     setSheet(next);
@@ -185,24 +180,6 @@ export function FileUpdateWizard({
       errorMessage: null,
     });
   }
-  useEffect(() => {
-    if (!job || job.status === "DONE" || job.status === "FAILED") return;
-    const timer = window.setInterval(async () => {
-      const response = await fetch(`/api/upload-jobs/${job.id}`, { cache: "no-store" });
-      if (response.ok) setJob((await response.json()) as JobState);
-    }, 1200);
-    return () => window.clearInterval(timer);
-  }, [job]);
-  useEffect(() => {
-    if (!job || notifiedJob.current === job.id) return;
-    if (job.status === "DONE") {
-      notifiedJob.current = job.id;
-      toast.success("تم حفظ الإصدار الجديد واستبدال بيانات الملف بنجاح.");
-    } else if (job.status === "FAILED") {
-      notifiedJob.current = job.id;
-      toast.error(job.errorMessage ?? "فشل تحديث الملف وبقيت البيانات السابقة محفوظة.");
-    }
-  }, [job]);
 
   if (job) {
     const percent =

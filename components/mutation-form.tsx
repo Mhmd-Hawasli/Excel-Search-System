@@ -1,44 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { toast } from "sonner";
-import type { MutationResult } from "@/lib/actions/result";
 import { cn } from "@/lib/cn";
+import { useServerAction, type ServerAction } from "@/hooks/use-server-action";
 
 type MutationFormProps = Omit<React.ComponentProps<"form">, "action" | "onSubmit"> & {
-  action: (formData: FormData) => Promise<MutationResult>;
+  action: ServerAction;
   pendingMessage?: string;
   resetOnSuccess?: boolean;
 };
 
-export function MutationForm({
-  action,
-  pendingMessage = "جارٍ الحفظ…",
-  resetOnSuccess = false,
-  className,
-  children,
-  ...props
-}: MutationFormProps) {
-  const [pending, startTransition] = React.useTransition();
+/**
+ * Form wrapper for server actions: prevents double submission while pending
+ * and reports the result through the shared toast flow.
+ */
+export function MutationForm({ action, pendingMessage, resetOnSuccess = false, className, children, ...props }: MutationFormProps) {
+  const { pending, run } = useServerAction();
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
-    startTransition(async () => {
-      const toastId = toast.loading(pendingMessage);
-      try {
-        const result = await action(formData);
-        if (!result.ok) {
-          toast.error(result.error, { id: toastId });
-          return;
-        }
+    run(action, formData, {
+      pendingMessage,
+      onSuccess: () => {
         if (resetOnSuccess) form.reset();
-        toast.success(result.message, { id: toastId });
-      } catch {
-        toast.error("تعذر حفظ التغيير. تحقق من الاتصال ثم حاول مجددًا.", { id: toastId });
-      }
+      },
     });
   }
 

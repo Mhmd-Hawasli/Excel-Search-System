@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Archive, LockKeyhole } from "lucide-react";
-import { LoginForm } from "@/components/login-form";
+import { LoginForm } from "@/features/auth/login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 

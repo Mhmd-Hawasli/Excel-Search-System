@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
-import { EditMappingWizard } from "@/components/edit-mapping-wizard";
+import { EditMappingWizard } from "@/features/files/edit-mapping-wizard";
 import type { StandardFieldKey } from "@/lib/excel/types";
 
 export const dynamic = "force-dynamic";

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowRight, ExternalLink, FileStack, IdCard, PencilLine } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
-import { RecordDetails } from "@/components/record-details";
+import { RecordDetails } from "@/features/records/record-details";
 import { getRecordEdits } from "@/lib/edits/service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

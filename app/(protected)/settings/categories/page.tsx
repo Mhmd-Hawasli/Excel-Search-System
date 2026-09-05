@@ -23,7 +23,7 @@ import type { StandardFieldKey } from "@/lib/excel/types";
 import {
   CategoryColumnBoard,
   type CategoryBoardGroup,
-} from "@/components/category-column-board";
+} from "@/features/categories/category-column-board";
 import { MutationForm } from "@/components/mutation-form";
 import { PageHeader } from "@/components/page-header";
 import { TypedDeleteButton } from "@/components/typed-delete-button";

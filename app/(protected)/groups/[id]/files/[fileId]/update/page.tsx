@@ -3,7 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import type { StandardFieldKey } from "@/lib/excel/types";
-import { FileUpdateWizard } from "@/components/file-update-wizard";
+import { FileUpdateWizard } from "@/features/files/file-update-wizard";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 

@@ -15,8 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { postNdJson, uploadWorkbookWithProgress } from "@/components/sheet-merge/client";
-import { SheetMergeResults } from "@/components/sheet-merge/sheet-merge-results";
+import { postNdJson, uploadWorkbookWithProgress } from "@/features/sheet-merge/client";
+import { SheetMergeResults } from "@/features/sheet-merge/sheet-merge-results";
 import {
   MIN_NATIONAL_ID_DIGITS,
   type SheetMergeResult,

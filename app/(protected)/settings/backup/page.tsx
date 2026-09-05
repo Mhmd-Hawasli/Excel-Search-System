@@ -1,4 +1,4 @@
-import { BackupManager } from "@/components/backup-manager";
+import { BackupManager } from "@/features/backup/backup-manager";
 import { PageHeader } from "@/components/page-header";
 
 export default function BackupPage() {
