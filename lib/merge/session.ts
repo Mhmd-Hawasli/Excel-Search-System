@@ -31,19 +31,30 @@ function pruneSessions() {
   for (const [id, session] of sessions) if (session.createdAt < cutoff) sessions.delete(id);
 }
 
+export type MergeProgressStage = "reading" | "rules" | "done";
+
 export async function createMergeSession(
   input: MergeRunInput,
+  onProgress?: (percent: number, stage: MergeProgressStage, detail: string | null) => void,
 ): Promise<{ session: MergeSession; result: MergeResult }> {
   pruneSessions();
-  const [leftSheet, rightSheet] = await Promise.all([
-    readMergeSheet(input.left.token, input.left.sheetName),
-    readMergeSheet(input.right.token, input.right.sheetName),
-  ]);
+  onProgress?.(5, "reading", "قراءة الجدول الأول…");
+  const leftSheet = await readMergeSheet(input.left.token, input.left.sheetName);
+  onProgress?.(20, "reading", "قراءة الجدول الثاني…");
+  const rightSheet = await readMergeSheet(input.right.token, input.right.sheetName);
+  onProgress?.(30, "rules", null);
   const result = runMerge(
     { headers: leftSheet.headers, rows: leftSheet.rows, mapping: input.left.mapping },
     { headers: rightSheet.headers, rows: rightSheet.rows, mapping: input.right.mapping },
     1,
+    (_rule, index, total) =>
+      onProgress?.(
+        30 + Math.round(((index + 1) / total) * 60),
+        "rules",
+        `تطبيق القاعدة ${index + 1} من ${total}…`,
+      ),
   );
+  onProgress?.(95, "done", "تجهيز النتائج…");
   const session: MergeSession = {
     id: randomUUID(),
     createdAt: Date.now(),

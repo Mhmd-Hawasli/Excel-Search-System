@@ -30,12 +30,18 @@ import {
  *  - Identifier comparison converts Arabic digits to Latin and keeps only
  *    digits (leading zeros are ignored).
  *  - Confirmation compares only the FIRST WORD of the confirmation value.
- *  - Every rule requires its link value to be unambiguous inside each file
- *    (rules 1/2 consider the pair {link value, confirmation value}, so two
- *    rows with the same full name but different mother names remain
- *    distinguishable).
- *  - When a confirmation column/cell is missing the link still happens, but
- *    the pair is flagged confirmed=false.
+ *  - Numeric rules confirm by the first word of the triple full name, falling
+ *    back to the first word of the الاسم column when the triple-name column
+ *    is unmapped or the cell is empty.
+ *  - Confirmed-only linking: a pair is linked ONLY on an exact confirmation
+ *    match. Rows without a usable confirmation stay unlinked, so results and
+ *    exports never contain unconfirmed pairs.
+ *  - Every rule requires its link value to appear exactly once inside each
+ *    file (Excel COUNTIF(column, current cell) = 1): a value repeated
+ *    anywhere in the file can never identify a single row, so every row
+ *    carrying it is skipped, whatever the confirmation is.
+ *  - When a confirmation column/cell is missing the rows stay unlinked
+ *    (no key is assigned at all).
  */
 
 type PreparedRow = {
@@ -89,12 +95,16 @@ function numericLink(value: string): { key: string; display: string } {
 
 function preparedRow(row: MergeRow, mapping: MergeMapping): PreparedRow {
   const full = textLink(cell(row, mapping.fullName));
+  const first = textLink(cell(row, mapping.firstName));
   const composed = textLink(
     [mapping.firstName, mapping.fatherName, mapping.lastName]
       .map((index) => trimmed(cell(row, index)))
       .filter(Boolean)
       .join(" "),
   );
+  // Numeric rules confirm by the first word of the triple name, or by the
+  // first word of الاسم when the triple-name column is unmapped/empty.
+  const confirmSource = full.key || first.key;
   return {
     row,
     full,
@@ -106,7 +116,7 @@ function preparedRow(row: MergeRow, mapping: MergeMapping): PreparedRow {
       phone: numericLink(cell(row, mapping.phone)),
     },
     motherWord: firstWord(cell(row, mapping.motherName)),
-    fullWord: full.key.split(/\s+/).filter(Boolean).slice(0, 1).join(" ") ?? "",
+    fullWord: confirmSource.split(/\s+/).filter(Boolean).slice(0, 1).join(" ") ?? "",
   };
 }
 
@@ -126,23 +136,20 @@ function confirmFor(rule: RuleDefinition, prepared: PreparedRow): string {
 }
 
 /**
- * Returns the set of link values that appear in more than one distinct
- * {link value, confirmation value} combination inside a file.
+ * Returns the set of link values that appear more than once inside a file
+ * (Excel COUNTIF(column, current cell) > 1). A repeated value can never
+ * identify a single row, so every row carrying one is skipped by the rule —
+ * regardless of the confirmation value.
  */
 function ambiguousLinks(rows: PreparedRow[], rule: RuleDefinition): Set<string> {
   const counts = new Map<string, number>();
   for (const prepared of rows) {
     const link = linkFor(rule, prepared);
     if (!link.key) continue;
-    const combination = `${link.key}::${confirmFor(rule, prepared)}`;
-    counts.set(combination, (counts.get(combination) ?? 0) + 1);
+    counts.set(link.key, (counts.get(link.key) ?? 0) + 1);
   }
   const ambiguous = new Set<string>();
-  for (const prepared of rows) {
-    const link = linkFor(rule, prepared);
-    if (link.key && (counts.get(`${link.key}::${confirmFor(rule, prepared)}`) ?? 0) > 1)
-      ambiguous.add(link.key);
-  }
+  for (const [key, count] of counts) if (count > 1) ambiguous.add(key);
   return ambiguous;
 }
 
@@ -157,32 +164,39 @@ export function applyRules(
   leftMapping: MergeMapping,
   rightMapping: MergeMapping,
   startKey: number,
+  onRuleDone?: (rule: MergeRuleKey, index: number, total: number) => void,
 ): { pairs: MatchPair[]; nextKey: number } {
   let counter = startKey;
   const pairs: MatchPair[] = [];
   const preparedLeft = left.map((row) => preparedRow(row, leftMapping));
   const preparedRight = right.map((row) => preparedRow(row, rightMapping));
 
-  for (const rule of MERGE_RULES) {
+  MERGE_RULES.forEach((rule, ruleIndex) => {
     const ambiguousLeft = ambiguousLinks(preparedLeft, rule);
     const ambiguousRight = ambiguousLinks(preparedRight, rule);
+    // Index the right side by link value (insertion order = sheet order) so
+    // each left row looks up its candidates in O(1) instead of scanning the
+    // whole table. `row.key` is checked live because rows are linked during
+    // this same loop; the resulting choice is identical to a full scan.
+    const rightByLink = new Map<string, PreparedRow[]>();
+    for (const b of preparedRight) {
+      const bLink = linkFor(rule, b);
+      if (!bLink.key) continue;
+      const bucket = rightByLink.get(bLink.key);
+      if (bucket) bucket.push(b);
+      else rightByLink.set(bLink.key, [b]);
+    }
 
     for (const a of preparedLeft) {
       if (a.row.key !== null) continue;
       const aLink = linkFor(rule, a);
-      if (!aLink.key || ambiguousLeft.has(aLink.key)) continue;
+      if (!aLink.key || ambiguousLeft.has(aLink.key) || ambiguousRight.has(aLink.key)) continue;
 
-      const candidates = preparedRight.filter((b) => {
-        if (b.row.key !== null) return false;
-        const bLink = linkFor(rule, b);
-        return bLink.key === aLink.key && !ambiguousRight.has(bLink.key);
-      });
+      const candidates = (rightByLink.get(aLink.key) ?? []).filter((b) => b.row.key === null);
       if (candidates.length === 0) continue;
 
-      // Confirmation: when the left side has a value, exact first-word match
-      // wins; otherwise a single candidate without a confirmation value links
-      // unconfirmed. When the left side has no value either, a single
-      // candidate links unconfirmed.
+      // Confirmation: the left value must match exactly one candidate with
+      // the same confirmation; anything else stays unlinked (confirmed-only).
       const aConfirm = confirmFor(rule, a);
       let chosen: PreparedRow | null = null;
       if (aConfirm) {
@@ -198,6 +212,9 @@ export function applyRules(
       if (!chosen) continue;
 
       const confirmed = aConfirm !== "" && confirmFor(rule, chosen) === aConfirm;
+      // Confirmed-only linking: unverifiable pairs stay unlinked so neither
+      // the results nor the export ever contain "غير مؤكد" values.
+      if (!confirmed) continue;
       const key = String(counter).padStart(4, "0");
       counter += 1;
       a.row.key = key;
@@ -216,7 +233,8 @@ export function applyRules(
         rightValue: linkFor(rule, chosen).display,
       });
     }
-  }
+    onRuleDone?.(rule.key, ruleIndex, MERGE_RULES.length);
+  });
   return { pairs, nextKey: counter };
 }
 
@@ -307,7 +325,12 @@ export function mergeStatus(leftCount: number, rightCount: number, pairCount: nu
  * Full merge: turns two raw tables into linked row sets, per-rule statistics
  * and the final status.
  */
-export function runMerge(left: MergeTableInput, right: MergeTableInput, startKey = 1): MergeResult {
+export function runMerge(
+  left: MergeTableInput,
+  right: MergeTableInput,
+  startKey = 1,
+  onRuleDone?: (rule: MergeRuleKey, index: number, total: number) => void,
+): MergeResult {
   const leftRows: MergeRow[] = left.rows.map((row) => ({
     rowNumber: row.rowNumber,
     cells: row.cells,
@@ -322,7 +345,7 @@ export function runMerge(left: MergeTableInput, right: MergeTableInput, startKey
     rule: null,
     confirmed: false,
   }));
-  const { pairs } = applyRules(leftRows, rightRows, left.mapping, right.mapping, startKey);
+  const { pairs } = applyRules(leftRows, rightRows, left.mapping, right.mapping, startKey, onRuleDone);
   return {
     left: leftRows,
     right: rightRows,

@@ -4,6 +4,7 @@ import { createMergeSession } from "@/lib/merge/session";
 import { MERGE_FIELD_KEYS } from "@/lib/merge/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const mappingSchema = z
   .record(z.enum(MERGE_FIELD_KEYS), z.number().int().min(0))
@@ -59,18 +60,34 @@ export async function POST(request: Request) {
       },
       { status: 422 },
     );
-  try {
-    const { session, result } = await createMergeSession(parsed.data);
-    return NextResponse.json({
-      sessionId: session.id,
-      leftHeaders: session.left.headers,
-      rightHeaders: session.right.headers,
-      ...result,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "تعذر تنفيذ الدمج." },
-      { status: 422 },
-    );
-  }
+  // Stream newline-delimited progress events followed by the final result, so
+  // the UI can show a real percentage while large tables are processed.
+  const stream = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const send = (message: unknown) =>
+        controller.enqueue(encoder.encode(`${JSON.stringify(message)}\n`));
+      try {
+        const { session, result } = await createMergeSession(parsed.data, (percent, _stage, detail) =>
+          send({ type: "progress", percent, detail }),
+        );
+        send({
+          type: "result",
+          payload: {
+            sessionId: session.id,
+            leftHeaders: session.left.headers,
+            rightHeaders: session.right.headers,
+            ...result,
+          },
+        });
+      } catch (error) {
+        send({ type: "error", error: error instanceof Error ? error.message : "تعذر تنفيذ الدمج." });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
+  });
 }

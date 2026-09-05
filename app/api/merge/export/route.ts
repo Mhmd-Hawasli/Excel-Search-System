@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "content-disposition": `attachment; filename*=UTF-8''${encoded}`,
+        "content-length": String(buffer.length),
         "cache-control": "no-store",
       },
     });

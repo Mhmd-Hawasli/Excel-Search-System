@@ -52,6 +52,8 @@ export const MERGE_RULES: ReadonlyArray<{
   key: MergeRuleKey;
   order: number;
   label: string;
+  /** Short "match via ..." phrase shown in the setup cards, e.g. "مطابقة عن طريق الرقم الوطني". */
+  method: string;
   description: string;
   /** Fields needed on BOTH tables for the rule to be available. */
   required: ReadonlyArray<MergeFieldKey>;
@@ -60,48 +62,54 @@ export const MERGE_RULES: ReadonlyArray<{
     key: "full_name",
     order: 1,
     label: "القاعدة الأولى — الربط بالاسم الثلاثي مع التأكد باسم الأم",
+    method: "مطابقة عن طريق الاسم الثلاثي",
     description:
-      "شرطها عدم تكرار الاسم الثلاثي مع اسم الأم في الملف الواحد. يُقارن الاسم الثلاثي بعد التنميط، والتأكد بمقارنة الكلمة الأولى من اسم الأم.",
+      "شرطها ظهور الاسم الثلاثي مرة واحدة فقط في الملف الواحد. يُقارن الاسم الثلاثي بعد التنميط، والتأكد بمقارنة الكلمة الأولى من اسم الأم.",
     required: ["fullName"],
   },
   {
     key: "composed_name",
     order: 2,
     label: "القاعدة الثانية — دمج الاسم مع اسم الأب مع النسبة",
+    method: "مطابقة عن طريق الاسم واسم الأب والنسبة",
     description:
-      "تُطبَّق على الأسطر التي لم يرتبط اسمها الثلاثي: يُكوَّن الاسم الثلاثي من الاسم + اسم الأب + النسبة ويُربط بالاسم الثلاثي في الجدول الآخر أو بالاسم المكوَّن إن كان غير مربوط، مع التأكد باسم الأم.",
+      "تُطبَّق على الأسطر التي لم يرتبط اسمها الثلاثي: يُكوَّن الاسم الثلاثي من الاسم + اسم الأب + النسبة ويُربط بالاسم الثلاثي في الجدول الآخر أو بالاسم المكوَّن إن كان غير مربوط، بشرط ظهوره مرة واحدة فقط في الملف الواحد، مع التأكد باسم الأم.",
     required: ["fullName", "firstName", "fatherName", "lastName"],
   },
   {
     key: "national_id",
     order: 3,
     label: "القاعدة الثالثة — الربط بالرقم الوطني",
+    method: "مطابقة عن طريق الرقم الوطني",
     description:
-      "شرطها عدم تكرار الرقم الوطني في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالاسم الثلاثي.",
+      "شرطها ظهور الرقم الوطني مرة واحدة فقط في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالكلمة الأولى من الاسم الثلاثي، أو من الاسم عند غياب عمود الاسم الثلاثي. لا تُربط الصفوف بلا تأكد مطابق.",
     required: ["nationalId"],
   },
   {
     key: "personal_no",
     order: 4,
     label: "القاعدة الرابعة — الربط بالرقم الذاتي",
+    method: "مطابقة عن طريق الرقم الذاتي",
     description:
-      "شرطها عدم تكرار الرقم الذاتي في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالاسم الثلاثي.",
+      "شرطها ظهور الرقم الذاتي مرة واحدة فقط في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالكلمة الأولى من الاسم الثلاثي، أو من الاسم عند غياب عمود الاسم الثلاثي. لا تُربط الصفوف بلا تأكد مطابق.",
     required: ["personalNo"],
   },
   {
     key: "sham_cash",
     order: 5,
     label: "القاعدة الخامسة — الربط بالشام كاش",
+    method: "مطابقة عن طريق الشام كاش",
     description:
-      "شرطها عدم تكرار الشام كاش في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالاسم الثلاثي.",
+      "شرطها ظهور الشام كاش مرة واحدة فقط في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالكلمة الأولى من الاسم الثلاثي، أو من الاسم عند غياب عمود الاسم الثلاثي. لا تُربط الصفوف بلا تأكد مطابق.",
     required: ["shamCash"],
   },
   {
     key: "phone",
     order: 6,
     label: "القاعدة السادسة — الربط برقم الهاتف",
+    method: "مطابقة عن طريق رقم الهاتف",
     description:
-      "شرطها عدم تكرار رقم الهاتف في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالاسم الثلاثي.",
+      "شرطها ظهور رقم الهاتف مرة واحدة فقط في الملف الواحد. يُقارن الرقم بعد تحويل الأرقام العربية وحذف الفراغات، والتأكد بالكلمة الأولى من الاسم الثلاثي، أو من الاسم عند غياب عمود الاسم الثلاثي. لا تُربط الصفوف بلا تأكد مطابق.",
     required: ["phone"],
   },
 ];
@@ -117,9 +125,8 @@ export type MergeRow = {
   /** The rule that produced the key, null when not linked. */
   rule: MergeRuleKey | null;
   /**
-   * True when the confirmation value existed on both sides and matched.
-   * False when the link was made without a usable confirmation (missing
-   * column/cell) — such rows are flagged in the UI.
+   * Links are created only on an exact confirmation match, so every linked
+   * row is confirmed. Kept for compatibility with stored results.
    */
   confirmed: boolean;
 };
@@ -190,5 +197,7 @@ export type MergeRunInput = {
 };
 
 export const MERGE_KEY_HEADER = "مفتاح الربط";
-export const MERGE_SHEET_NAMES = ["الجدول الأول", "الجدول الثاني"] as const;
-export const MAX_MERGE_ROWS = 5_000;
+export const MERGE_CONFIRM_HEADER = "التأكد";
+export const MERGE_CONFIRMED_TEXT = "مؤكد";
+export const MERGE_UNCONFIRMED_TEXT = "غير مؤكد";
+export const MERGE_SHEET_NAMES = ["الدمج الكامل", "الجدول A", "الجدول B"] as const;

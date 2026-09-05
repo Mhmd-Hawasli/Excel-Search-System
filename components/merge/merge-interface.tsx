@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { MappingForm } from "@/components/merge/mapping-form";
 import { ResultsView, type MergeClientResult } from "@/components/merge/results-view";
 import { LoaderCircle, Play, RefreshCw, Upload } from "lucide-react";
@@ -13,10 +14,13 @@ import {
   type MergeInspection,
   type MergeMapping,
 } from "@/lib/merge/types";
+import { suggestMergeMapping } from "@/lib/merge/suggest";
 
 type TableState = {
   file: File | null;
   uploading: boolean;
+  /** 0-100 while the bytes upload; stays 100 while the server inspects. */
+  progress: number;
   inspection: MergeInspection | null;
   sheetName: string;
   headers: string[];
@@ -30,6 +34,7 @@ function emptyTable(): TableState {
   return {
     file: null,
     uploading: false,
+    progress: 0,
     inspection: null,
     sheetName: "",
     headers: [],
@@ -53,6 +58,81 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 const steps = ["رفع الملفين وتحديد الأعمدة", "النتائج"];
 
+/** Upload with real byte progress (fetch cannot report upload progress). */
+function uploadWithProgress(
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<MergeInspection> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.set("file", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/merge/inspect");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable)
+        onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+    };
+    xhr.onload = () => {
+      onProgress(100);
+      try {
+        const payload = JSON.parse(xhr.responseText) as MergeInspection & { error?: string };
+        if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+        else reject(new Error(payload.error ?? "تعذر فحص الملف."));
+      } catch {
+        reject(new Error("تعذر فحص الملف."));
+      }
+    };
+    xhr.onerror = () => reject(new Error("تعذر الاتصال بالخادم."));
+    xhr.send(form);
+  });
+}
+
+/** Reads the NDJSON progress stream of /api/merge/run into the final result. */
+async function runMergeWithProgress(
+  body: unknown,
+  onProgress: (percent: number, detail: string | null) => void,
+): Promise<MergeClientResult> {
+  const response = await fetch("/api/merge/run", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("ndjson")) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? "تعذر تنفيذ الدمج.");
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("تعذر تنفيذ الدمج.");
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: MergeClientResult | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf("\n");
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line) {
+        const message = JSON.parse(line) as
+          | { type: "progress"; percent: number; detail: string | null }
+          | { type: "result"; payload: MergeClientResult }
+          | { type: "error"; error: string };
+        if (message.type === "progress") onProgress(message.percent, message.detail);
+        else if (message.type === "result") {
+          result = message.payload;
+          onProgress(100, "اكتمل الدمج.");
+        } else throw new Error(message.error);
+      }
+      newline = buffer.indexOf("\n");
+    }
+  }
+  if (!result) throw new Error("تعذر تنفيذ الدمج.");
+  return result;
+}
+
 function UploadPanel({
   title,
   state,
@@ -69,23 +149,22 @@ function UploadPanel({
       setState((current) => ({ ...current, file, error: "الصيغ المقبولة هي XLSX وXLS فقط." }));
       return;
     }
-    setState((current) => ({ ...current, file, uploading: true, error: null }));
+    setState((current) => ({ ...current, file, uploading: true, progress: 0, error: null }));
     try {
-      const form = new FormData();
-      form.set("file", file);
-      const response = await fetch("/api/merge/inspect", { method: "POST", body: form });
-      const payload = (await response.json()) as MergeInspection & { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? "تعذر فحص الملف.");
+      const payload = await uploadWithProgress(file, (progress) =>
+        setState((current) => ({ ...current, progress })),
+      );
       setState((current) => ({
         ...current,
         file,
         uploading: false,
+        progress: 0,
         inspection: payload,
         sheetName: payload.selected.sheetName,
         headers: payload.selected.headers,
         preview: payload.selected.preview,
         rowCount: payload.selected.rowCount,
-        mapping: {},
+        mapping: suggestMergeMapping(payload.selected.headers),
         error: null,
       }));
     } catch (error) {
@@ -113,6 +192,7 @@ function UploadPanel({
         headers: selected.headers,
         preview: selected.preview,
         rowCount: selected.rowCount,
+        mapping: suggestMergeMapping(selected.headers),
       }));
     } catch (error) {
       setState((current) => ({
@@ -144,10 +224,16 @@ function UploadPanel({
           }}
         />
         {state.uploading ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" />
-            جارٍ الرفع والفحص…
-          </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2">
+                <LoaderCircle className="size-4 animate-spin" />
+                {state.progress < 100 ? "جارٍ رفع الملف…" : "جارٍ فحص الملف على الخادم…"}
+              </span>
+              <span className="font-bold text-foreground ltr-numbers">{state.progress}%</span>
+            </div>
+            <Progress value={state.progress} aria-label="نسبة رفع الملف" />
+          </div>
         ) : null}
         {state.inspection && state.inspection.sheets.length > 1 ? (
           <label className="block space-y-1.5">
@@ -219,7 +305,8 @@ export function MergeInterface() {
   const [left, setLeft] = useState<TableState>(emptyTable());
   const [right, setRight] = useState<TableState>(emptyTable());
   const [running, setRunning] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [runProgress, setRunProgress] = useState(0);
+  const [runDetail, setRunDetail] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<MergeClientResult | null>(null);
   const [step, setStep] = useState(0);
@@ -234,40 +321,30 @@ export function MergeInterface() {
   async function run() {
     if (!left.inspection || !right.inspection) return;
     setRunning(true);
+    setRunProgress(0);
+    setRunDetail("بدء الدمج…");
     setRunError(null);
     try {
-      const payload = await postJson<MergeClientResult>("/api/merge/run", {
-        left: { token: left.inspection.token, sheetName: left.sheetName, mapping: left.mapping },
-        right: {
-          token: right.inspection.token,
-          sheetName: right.sheetName,
-          mapping: right.mapping,
+      const payload = await runMergeWithProgress(
+        {
+          left: { token: left.inspection.token, sheetName: left.sheetName, mapping: left.mapping },
+          right: {
+            token: right.inspection.token,
+            sheetName: right.sheetName,
+            mapping: right.mapping,
+          },
         },
-      });
+        (percent, detail) => {
+          setRunProgress(percent);
+          setRunDetail(detail);
+        },
+      );
       setResult(payload);
       setStep(1);
     } catch (error) {
       setRunError(error instanceof Error ? error.message : "تعذر تنفيذ الدمج.");
     } finally {
       setRunning(false);
-    }
-  }
-
-  async function deleteKey(table: "left" | "right", rowNumber: number) {
-    if (!result) return;
-    setDeleting(true);
-    setRunError(null);
-    try {
-      const payload = await postJson<MergeClientResult>("/api/merge/key", {
-        sessionId: result.sessionId,
-        table,
-        rowNumber,
-      });
-      setResult(payload);
-    } catch (error) {
-      setRunError(error instanceof Error ? error.message : "تعذر حذف المفتاح.");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -307,8 +384,12 @@ export function MergeInterface() {
           <section className="space-y-4" aria-label="تحديد أعمدة الربط">
             <h2 className="text-lg font-black">تحديد الأعمدة</h2>
             <p className="text-sm text-muted-foreground">
-              حدد أي عمود يمثل كل حقل. إذا لم يتوفر الحقل في الملف اتركه «غير مربوط» — وستُطبق
-              القواعد المتاحة فقط. اسم الأم يُستخدم للتأكد في القاعدتين الأولى والثانية.
+              تُقترح الأعمدة تلقائياً من عناوين Excel ويمكن تعديلها. حدد أي عمود يمثل كل حقل،
+              وإذا لم يتوفر الحقل في الملف اتركه «غير مربوط» — وستُطبق القواعد المتاحة فقط. أدخل
+              إما الاسم الثلاثي أو (الاسم واسم الأب والنسبة)، ولا يمكن الجمع بينهما. الربط مؤكد
+              فقط: لا يُربط أي صف إلا بتطابق التأكد (الكلمة الأولى من اسم الأم لقاعدتي الاسم،
+              والكلمة الأولى من الاسم الثلاثي — أو الاسم عند غيابه — لبقية القواعد)، والصفوف بلا
+              تأكد تبقى بلا مفتاح ولا تُصدَّر كغير مؤكد.
             </p>
             <div className="grid gap-5 xl:grid-cols-2">
               <MappingForm
@@ -354,7 +435,9 @@ export function MergeInterface() {
                         <span className="mt-1 size-2 rounded-full bg-muted-foreground/40" />
                       )}
                       <span>
-                        <span className="font-semibold">{rule.label.split(" — ")[0]}</span>
+                        <span className="font-semibold">
+                          {rule.label.split(" — ")[0]} ({rule.method})
+                        </span>
                         <span className="block text-xs text-muted-foreground">
                           {hint.ready
                             ? "ستُطبق على الأسطر غير المربوطة"
@@ -366,6 +449,15 @@ export function MergeInterface() {
                 })}
               </ul>
               {runError ? <p className="text-sm text-destructive">{runError}</p> : null}
+              {running ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                    <span>{runDetail ?? "جارٍ تطبيق قواعد الربط…"}</span>
+                    <span className="font-bold text-foreground ltr-numbers">{runProgress}%</span>
+                  </div>
+                  <Progress value={runProgress} aria-label="نسبة تطبيق قواعد الربط" />
+                </div>
+              ) : null}
               <Button size="lg" className="w-full" onClick={() => void run()} disabled={!canRun}>
                 {running ? (
                   <LoaderCircle className="size-5 animate-spin" />
@@ -378,7 +470,7 @@ export function MergeInterface() {
           </Card>
         </div>
       ) : result ? (
-        <ResultsView result={result} deleting={deleting} onDeleteKey={deleteKey} onReset={reset} />
+        <ResultsView result={result} onReset={reset} />
       ) : null}
 
       {step === 1 && runError ? (

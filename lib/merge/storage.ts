@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
 import { cellValueText } from "@/lib/excel/cell-value";
 import { headersForSheet, removeWorkbookFilters } from "@/lib/excel/workbook";
 import { normalizeStored } from "@/lib/normalization/arabic";
-import { MAX_MERGE_ROWS, type MergeInspection } from "@/lib/merge/types";
+import type { MergeInspection } from "@/lib/merge/types";
 
 /**
  * Isolated file storage for the merge section. Uploads live under
@@ -23,13 +23,6 @@ export function mergeFilePath(token: string) {
 
 function rowCount(worksheet: ExcelJS.Worksheet) {
   return Math.max(0, worksheet.actualRowCount - 1);
-}
-
-async function reportRowCount(rowCount: number) {
-  if (rowCount > MAX_MERGE_ROWS)
-    throw new Error(
-      `يتجاوز عدد الصفوف الحد المسموح (${MAX_MERGE_ROWS.toLocaleString("en-US")}) لكل جدول.`,
-    );
 }
 
 function inspectWorksheet(
@@ -127,8 +120,6 @@ export async function readMergeSheet(token: string, sheetName: string) {
   const worksheet = workbook.worksheets.find((sheet) => sheet.name === sheetName);
   if (!worksheet) throw new Error("الورقة المحددة غير موجودة في المصنف.");
   const headers = headersForSheet(worksheet);
-  const total = rowCount(worksheet);
-  await reportRowCount(total);
   const rows: Array<{ rowNumber: number; cells: string[] }> = [];
   for (let rowIndex = 2; rowIndex <= worksheet.actualRowCount; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);

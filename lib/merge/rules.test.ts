@@ -54,12 +54,6 @@ function table(
   return { headers: HEADERS, rows, mapping };
 }
 
-function linkedRows(rows: MergeRow[]) {
-  return rows
-    .filter((r) => r.key !== null)
-    .map((r) => ({ rowNumber: r.rowNumber, key: r.key, rule: r.rule, confirmed: r.confirmed }));
-}
-
 function rulePairs(result: ReturnType<typeof runMerge>, key: MergeRuleKey) {
   return result.rules.find((rule) => rule.key === key)!.pairs;
 }
@@ -120,7 +114,9 @@ describe("rule 1: full name + mother name", () => {
     expect(result.pairs[0].confirmed).toBe(true);
   });
 
-  it("disambiguates a repeated full name via different mothers", () => {
+  it("skips names that repeat anywhere in a file even with different mothers", () => {
+    // COUNTIF(column, current cell) = 1: the repeated name can never identify
+    // a single row, so neither right row links despite distinct mothers.
     const result = runMerge(
       table([row(2, { fullName: "خالد سعيد", motherName: "فاطمة" })]),
       table([
@@ -128,11 +124,8 @@ describe("rule 1: full name + mother name", () => {
         row(3, { fullName: "خالد سعيد", motherName: "سليمة" }),
       ]),
     );
-    expect(result.pairs).toHaveLength(1);
-    expect(result.pairs[0].rightRowNumber).toBe(2);
-    expect(linkedRows(result.right)).toEqual([
-      { rowNumber: 2, key: "0001", rule: "full_name", confirmed: true },
-    ]);
+    expect(result.pairs).toHaveLength(0);
+    expect(rulePairs(result, "full_name")).toHaveLength(0);
   });
 
   it("skips the rule when the full name repeats with the same mother in a file", () => {
@@ -151,14 +144,18 @@ describe("rule 1: full name + mother name", () => {
     expect(rulePairs(result, "national_id")).toHaveLength(2);
   });
 
-  it("links without confirmation and flags the pair when the mother column is absent", () => {
+  it("skips name rules without mother confirmation and links via the confirmed numeric rule", () => {
     const mapping: MergeMapping = { fullName: 0, nationalId: 5 };
     const result = runMerge(
       table([row(2, { fullName: "خالد سعيد", nationalId: "111" })], mapping),
       table([row(2, { fullName: "خالد سعيد", nationalId: "111" })], mapping),
     );
-    expect(result.pairs).toHaveLength(1);
-    expect(result.pairs[0].confirmed).toBe(false);
+    // Rule 1 and rule 2 cannot verify without the mother column, so they link
+    // nothing; the confirmed national ID still links the rows.
+    expect(rulePairs(result, "full_name")).toHaveLength(0);
+    expect(rulePairs(result, "composed_name")).toHaveLength(0);
+    expect(rulePairs(result, "national_id")).toHaveLength(1);
+    expect(result.pairs[0]).toMatchObject({ confirmed: true });
   });
 });
 
@@ -247,12 +244,52 @@ describe("numeric rules", () => {
     }
   });
 
+  it("confirms numeric links by the first-name column when the triple name is unmapped", () => {
+    const mapping: MergeMapping = { firstName: 1, nationalId: 5 };
+    const result = runMerge(
+      table([row(2, { firstName: "علي", nationalId: "123" })], mapping),
+      table([row(2, { firstName: "علي حسن", nationalId: "123" })], mapping),
+    );
+    expect(rulePairs(result, "national_id")).toHaveLength(1);
+    expect(result.pairs[0]).toMatchObject({ confirmed: true });
+  });
+
+  it("leaves numeric rows unlinked when neither side has a confirmation value", () => {
+    const mapping: MergeMapping = { nationalId: 5 };
+    const result = runMerge(
+      table([row(2, { nationalId: "123" })], mapping),
+      table([row(2, { nationalId: "123" })], mapping),
+    );
+    expect(result.pairs).toHaveLength(0);
+  });
+
+  it("does not link when only one side carries a confirmation value", () => {
+    const mapping: MergeMapping = { firstName: 1, nationalId: 5 };
+    const result = runMerge(
+      table([row(2, { firstName: "علي", nationalId: "123" })], mapping),
+      table([row(2, { nationalId: "123" })], mapping),
+    );
+    expect(result.pairs).toHaveLength(0);
+  });
+
   it("refuses a numeric link when the full-name confirmation differs", () => {
     const result = runMerge(
       table([row(2, { fullName: "علي حسن", nationalId: "123" })]),
       table([row(2, { fullName: "حسن علي", nationalId: "123" })]),
     );
     expect(rulePairs(result, "national_id")).toHaveLength(0);
+  });
+
+  it("blocks a repeated number even when confirmations differ (COUNTIF = 1)", () => {
+    const result = runMerge(
+      table([
+        row(2, { fullName: "علي حسن", nationalId: "123" }),
+        row(3, { fullName: "سامي نور", nationalId: "123" }),
+      ]),
+      table([row(2, { fullName: "علي حسن", nationalId: "123" })]),
+    );
+    expect(rulePairs(result, "national_id")).toHaveLength(0);
+    expect(result.pairs).toHaveLength(0);
   });
 
   it("rejects a rule when its number repeats inside the same file", () => {
@@ -412,8 +449,7 @@ describe("delete key and re-link", () => {
 });
 
 describe("applyRules", () => {
-  it("skips rows that already carry a key", () => {
-    const leftRow: MergeRow = {
+  it("skips rows that already carry a key", () => {    const leftRow: MergeRow = {
       rowNumber: 2,
       cells: values({ fullName: "محمد" }),
       key: "0001",
@@ -429,5 +465,28 @@ describe("applyRules", () => {
     };
     const { pairs } = applyRules([leftRow], [rightRow], FULL_MAPPING, FULL_MAPPING, 2);
     expect(pairs).toHaveLength(0);
+  });
+
+  it("reports each rule through the progress hook and scales via the link index", () => {
+    const size = 400;
+    const leftCells = Array.from({ length: size }, (_, index) =>
+      row(index + 2, {
+        fullName: `اسم مشترك ${index}`,
+        motherName: `أم ${index}`,
+        nationalId: `900000${index}`,
+      }),
+    );
+    const rightCells = Array.from({ length: size }, (_, index) =>
+      row(index + 2, {
+        fullName: `اسم مشترك ${size - 1 - index}`,
+        motherName: `أم ${size - 1 - index}`,
+        nationalId: `900000${size - 1 - index}`,
+      }),
+    );
+    const seen: string[] = [];
+    const result = runMerge(table(leftCells), table(rightCells), 1, (rule) => seen.push(rule));
+    expect(result.pairs).toHaveLength(size);
+    expect(result.pairs.every((pair) => pair.confirmed)).toBe(true);
+    expect(seen).toEqual(["full_name", "composed_name", "national_id", "personal_no", "sham_cash", "phone"]);
   });
 });

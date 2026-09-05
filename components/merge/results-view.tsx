@@ -4,10 +4,8 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CircleCheck, CircleX, Download, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleX, Download, LoaderCircle, RotateCcw, TriangleAlert } from "lucide-react";
 import {
-  MERGE_RULES,
   type MergeRow,
   type MergeRuleKey,
   type MergeStatus,
@@ -139,7 +137,7 @@ function RuleCard({ rule }: { rule: RuleStat }) {
               {rule.pairs.length > MAX_PAIRS_PER_RULE ? (
                 <p className="text-xs text-muted-foreground">
                   تُعرض أول {MAX_PAIRS_PER_RULE} حالة من {rule.pairs.length.toLocaleString("en-US")}{" "}
-                  — بقية الحالات ظاهرة في جدولي الجدولين أدناه.
+                  — الحالات الكاملة متوفرة في ملف Excel المصدَّر.
                 </p>
               ) : null}
               <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
@@ -157,130 +155,53 @@ function RuleCard({ rule }: { rule: RuleStat }) {
   );
 }
 
-function TableGrid({
-  title,
-  headers,
-  rows,
-  deleting,
-  onDeleteKey,
-}: {
-  title: string;
-  headers: string[];
-  rows: MergeRow[];
-  deleting: boolean;
-  onDeleteKey: (rowNumber: number) => void;
-}) {
-  const [collapsed, setCollapsed] = useState(true);
-  const shown = collapsed ? rows.slice(0, 200) : rows;
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between gap-3 py-4">
-        <CardTitle className="text-base">
-          {title}
-          <span className="ms-2 text-sm font-normal text-muted-foreground">
-            {rows.length.toLocaleString("en-US")} صف —{" "}
-            {rows.filter((row) => row.key).length.toLocaleString("en-US")} مربوط
-          </span>
-        </CardTitle>
-        {rows.length > 200 ? (
-          <Button variant="ghost" size="sm" onClick={() => setCollapsed((value) => !value)}>
-            {collapsed ? `عرض الجميع (${rows.length.toLocaleString("en-US")})` : "عرض أول 200"}
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="overflow-x-auto p-0">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="bg-muted/70">
-            <tr>
-              <th className="p-3 text-right">مفتاح الربط</th>
-              <th className="p-3 text-right">القاعدة</th>
-              <th className="p-3 text-right">التأكد</th>
-              <th className="p-3 text-right">صف Excel</th>
-              {headers.map((header, index) => (
-                <th key={index} className="whitespace-nowrap p-3 text-right">
-                  {header}
-                </th>
-              ))}
-              <th className="p-3 text-right" aria-label="إجراءات" />
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((row) => (
-              <tr key={row.rowNumber} className="border-t">
-                <td className="p-3 font-mono ltr-numbers">
-                  {row.key ?? <span className="text-muted-foreground">—</span>}
-                </td>
-                <td className="p-3">
-                  {row.rule
-                    ? MERGE_RULES.find((rule) => rule.key === row.rule)?.label.split(" — ")[0]
-                    : "—"}
-                </td>
-                <td className="p-3">
-                  {row.key ? (
-                    row.confirmed ? (
-                      <Badge variant="secondary">مؤكد</Badge>
-                    ) : (
-                      <Badge variant="outline">بدون تأكد</Badge>
-                    )
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="p-3 ltr-numbers">{row.rowNumber}</td>
-                {row.cells.map((cell, index) => (
-                  <td key={index} className="max-w-52 truncate whitespace-nowrap p-3">
-                    {cell || "—"}
-                  </td>
-                ))}
-                <td className="p-3">
-                  {row.key ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      aria-label={`حذف مفتاح الربط من صف ${row.rowNumber}`}
-                      disabled={deleting}
-                      onClick={() => onDeleteKey(row.rowNumber)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!shown.length ? (
-          <p className="p-6 text-center text-sm text-muted-foreground">
-            لا توجد صفوف في هذا الجدول.
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
 export function ResultsView({
   result,
-  deleting,
-  onDeleteKey,
   onReset,
 }: {
   result: MergeClientResult;
-  deleting: boolean;
-  onDeleteKey: (table: "left" | "right", rowNumber: number) => void;
   onReset: () => void;
 }) {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function downloadExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const response = await fetch(`/api/merge/export?sessionId=${result.sessionId}`);
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "تعذر تصدير الملف.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `دمج-الملفات-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "تعذر تصدير الملف.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusBanner status={result.status} />
         <div className="flex flex-wrap gap-2">
-          <Button asChild variant="default">
-            <a href={`/api/merge/export?sessionId=${result.sessionId}`}>
+          <Button variant="default" onClick={() => void downloadExport()} disabled={exporting}>
+            {exporting ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
               <Download className="size-4" />
-              تصدير ملف Excel
-            </a>
+            )}
+            {exporting ? `جارٍ تصدير الملف…` : "تصدير ملف Excel"}
           </Button>
           <Button variant="outline" onClick={onReset}>
             <RotateCcw className="size-4" />
@@ -288,6 +209,7 @@ export function ResultsView({
           </Button>
         </div>
       </div>
+      {exportError ? <p className="text-sm text-destructive">{exportError}</p> : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="ملخص الدمج">
         {[
@@ -333,37 +255,11 @@ export function ResultsView({
         </div>
       </section>
 
-      <Tabs defaultValue="left">
-        <TabsList>
-          <TabsTrigger value="left">الجدول الأول</TabsTrigger>
-          <TabsTrigger value="right">الجدول الثاني</TabsTrigger>
-        </TabsList>
-        <TabsContent value="left">
-          <TableGrid
-            title="الجدول الأول"
-            headers={result.leftHeaders ?? []}
-            rows={result.left}
-            deleting={deleting}
-            onDeleteKey={(rowNumber) => onDeleteKey("left", rowNumber)}
-          />
-        </TabsContent>
-        <TabsContent value="right">
-          <TableGrid
-            title="الجدول الثاني"
-            headers={result.rightHeaders ?? []}
-            rows={result.right}
-            deleting={deleting}
-            onDeleteKey={(rowNumber) => onDeleteKey("right", rowNumber)}
-          />
-        </TabsContent>
-      </Tabs>
-
       <div className="flex items-start gap-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
         <CircleX className="mt-0.5 size-4 shrink-0" />
         <p>
-          حذف مفتاح الربط من أي صف يزيله من الصف المرتبط في الجدول الآخر، ثم تعاد القواعد على الصفوف
-          غير المربوطة للبحث عن مفتاح بديل. إذا لم يوجد مفتاح يبقى الصفان فارغين. نتائج الدمج مؤقتة
-          وتختفي عند إغلاق الصفحة أو إعادة تشغيل الخادم.
+          نتائج الدمج مؤقتة وتختفي عند إغلاق الصفحة أو إعادة تشغيل الخادم. صدّر ملف Excel
+          للاحتفاظ بالنتيجة الكاملة.
         </p>
       </div>
     </div>
