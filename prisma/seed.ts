@@ -1,9 +1,9 @@
-import { ActivityAction, PrismaClient, StandardField } from "@prisma/client";
+import { ActivityAction, StandardField } from "../generated/prisma/client";
+import { prisma } from "../lib/db/prisma";
 import { digitsOnly, normalizeStored } from "../lib/normalization/arabic";
 import { nationalIdColumns } from "../lib/format/national-id";
 import { shamCashAsBigInt } from "../lib/format/sham-cash";
 
-const prisma = new PrismaClient();
 
 function searchableRecord(
   fileId: string,

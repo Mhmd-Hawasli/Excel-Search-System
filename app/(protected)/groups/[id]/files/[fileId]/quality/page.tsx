@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DataQualityIssueType } from "@prisma/client";
+import { DataQualityIssueType } from "@/generated/prisma/client";
 import { ArrowRight, CircleCheck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";

@@ -21,7 +21,7 @@ import {
   Search,
 } from "lucide-react";
 import type { StandardFieldKey } from "@/lib/excel/types";
-import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 import { SEARCH_FIELDS } from "@/lib/search/fields";
 import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
 import { digitsOnly, normalizeQuery, normalizeStored } from "@/lib/normalization/arabic";

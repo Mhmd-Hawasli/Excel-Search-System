@@ -1,4 +1,4 @@
-import { ActivityAction, UploadJobStatus } from "@prisma/client";
+import { ActivityAction, UploadJobStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { runImportJob } from "@/lib/excel/import-worker";
 

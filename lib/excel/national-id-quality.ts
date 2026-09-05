@@ -1,4 +1,4 @@
-import { DataQualityIssueType } from "@prisma/client";
+import { DataQualityIssueType } from "@/generated/prisma/client";
 import { nationalIdIssue } from "@/lib/format/national-id";
 import { nationalIdDigits } from "@/lib/normalization/arabic";
 

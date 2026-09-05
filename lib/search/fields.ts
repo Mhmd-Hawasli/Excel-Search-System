@@ -1,5 +1,5 @@
 import type { StandardFieldKey } from "@/lib/excel/types";
-import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 
 export type SearchFieldType = "text" | "numeric" | "functional_category";
 export type SearchField = { key: StandardFieldKey; label: string; type: SearchFieldType; column: string };

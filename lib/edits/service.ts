@@ -1,4 +1,4 @@
-import { ActivityAction, DataQualityIssueType, Prisma } from "@prisma/client";
+import { ActivityAction, DataQualityIssueType, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { digitsOnly, nationalIdDigits, normalizeStored } from "@/lib/normalization/arabic";

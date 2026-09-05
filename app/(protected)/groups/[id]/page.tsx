@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
+import { readSearchParam } from "@/utils/search-params";
 import { getEditedFileIds } from "@/lib/edits/service";
 import { EmptyState } from "@/components/empty-state";
 import { FileCard } from "@/components/file-card";
@@ -11,14 +12,10 @@ import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
-export default async function GroupDetailPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; success?: string }>;
-}) {
-  const [{ id }, { error, success }] = await Promise.all([params, searchParams]);
+export default async function GroupDetailPage(props: PageProps<"/groups/[id]">) {
+  const { id } = await props.params;
+  const error = readSearchParam(await props.searchParams, "error");
+  const success = readSearchParam(await props.searchParams, "success");
   const group = await prisma.group.findUnique({
     where: { id },
     include: { files: { orderBy: { uploadedAt: "desc" }, include: { _count: { select: { columns: true } } } } },

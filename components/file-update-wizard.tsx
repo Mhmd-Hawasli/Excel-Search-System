@@ -6,7 +6,7 @@ import { FileCheck2, FileWarning, LoaderCircle, RefreshCw, UploadCloud } from "l
 import { toast } from "sonner";
 import type { SheetInspection, StandardFieldKey, WorkbookInspection } from "@/lib/excel/types";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
-import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 import { ensureUniqueStandardFields } from "@/lib/excel/mapping";
 import {
   AlertDialog,

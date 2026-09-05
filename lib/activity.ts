@@ -1,4 +1,4 @@
-import { ActivityAction } from "@prisma/client";
+import { ActivityAction } from "@/generated/prisma/client";
 
 export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   FILE_UPLOADED: "رفع ملف", FILE_UPDATED: "تحديث ملف", FILE_REPLACED: "استبدال إصدار ملف", FILE_DELETED: "حذف ملف",

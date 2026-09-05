@@ -1,16 +1,13 @@
 import type { NextConfig } from "next";
-import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
+      // Large Excel workbook uploads travel through server actions.
       bodySizeLimit: "50mb",
     },
   },
-  serverExternalPackages: ["exceljs"],
+  serverExternalPackages: ["exceljs", "@prisma/client", "pg"],
 };
 
-export default (phase: string): NextConfig => ({
-  ...nextConfig,
-  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
-});
+export default nextConfig;

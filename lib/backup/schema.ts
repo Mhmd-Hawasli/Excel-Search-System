@@ -5,7 +5,7 @@ import {
   Prisma,
   StandardField,
   UploadJobStatus,
-} from "@prisma/client";
+} from "@/generated/prisma/client";
 import { z } from "zod";
 import { CATEGORY_LIMIT_MESSAGE, MAX_CUSTOM_CATEGORIES } from "@/lib/categories/config";
 import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";

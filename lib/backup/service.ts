@@ -1,4 +1,4 @@
-import { ActivityAction, UploadJobStatus } from "@prisma/client";
+import { ActivityAction, UploadJobStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { BACKUP_SCHEMA_VERSION, backupSchema } from "@/lib/backup/schema";
 

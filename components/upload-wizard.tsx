@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 import type { SheetInspection, StandardFieldKey, WorkbookInspection } from "@/lib/excel/types";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
-import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 import { ensureUniqueStandardFields } from "@/lib/excel/mapping";
 import { formatShamCash } from "@/lib/format/sham-cash";
 import { CategorySelector } from "@/components/category-selector";

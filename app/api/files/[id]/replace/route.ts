@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Prisma, UploadJobStatus } from "@prisma/client";
+import { Prisma, UploadJobStatus } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";

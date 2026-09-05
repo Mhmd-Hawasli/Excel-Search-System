@@ -1,5 +1,5 @@
 import { unlink } from "node:fs/promises";
-import { ActivityAction, DataQualityIssueType, Prisma, UploadJobStatus } from "@prisma/client";
+import { ActivityAction, DataQualityIssueType, Prisma, UploadJobStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { uploadConfigSchema, type UploadConfig } from "@/lib/excel/config";
 import { PRISMA_STANDARD_FIELDS } from "@/lib/excel/standard-fields";

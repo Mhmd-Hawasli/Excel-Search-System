@@ -4,16 +4,14 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { UploadWizard } from "@/components/upload-wizard";
 import { Button } from "@/components/ui/button";
+import { readSearchParam } from "@/utils/search-params";
 
 export const dynamic = "force-dynamic";
 
-export default async function UploadPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ group?: string }>;
-}) {
-  const [{ group }, groups, categories, templates] = await Promise.all([
-    searchParams,
+export default async function UploadPage(props: PageProps<"/upload">) {
+  const searchParams = await props.searchParams;
+  const [group, groups, categories, templates] = await Promise.all([
+    Promise.resolve(readSearchParam(searchParams, "group")),
     prisma.group.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       select: { id: true, name: true },

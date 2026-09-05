@@ -10,3 +10,4 @@ coverage/
 *.xlsx
 *.xls
 tmp/
+generated/

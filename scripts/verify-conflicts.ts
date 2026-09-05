@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/db/prisma";
 import { CONFLICT_RULES, type ConflictRuleKey } from "../lib/conflicts/catalog";
 import { normalizeTextSql, queryConflicts } from "../lib/conflicts/query";

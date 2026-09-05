@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { buildSearchPlan, type SearchMode } from "@/lib/search/plan";

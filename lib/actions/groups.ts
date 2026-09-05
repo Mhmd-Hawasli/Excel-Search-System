@@ -1,6 +1,6 @@
 "use server";
 
-import { ActivityAction, Prisma } from "@prisma/client";
+import { ActivityAction, Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { MutationResult } from "@/lib/actions/result";

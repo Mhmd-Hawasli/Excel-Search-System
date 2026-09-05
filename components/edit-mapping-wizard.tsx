@@ -7,7 +7,7 @@ import { Check, ChevronRight, LoaderCircle, Save, ArrowRight } from "lucide-reac
 import { toast } from "sonner";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
 import type { StandardFieldKey } from "@/lib/excel/types";
-import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
+import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-field-catalog";
 import { CategorySelector } from "@/components/category-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

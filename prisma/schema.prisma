@@ -1,10 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  runtime  = "nodejs"
+  moduleFormat = "esm"
+  generatedFileExtension = "ts"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum StandardField {

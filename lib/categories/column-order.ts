@@ -1,4 +1,4 @@
-import type { Prisma, StandardField } from "@prisma/client";
+import type { Prisma, StandardField } from "@/generated/prisma/client";
 
 export type ColumnPlacement = {
   categoryId: string | null;

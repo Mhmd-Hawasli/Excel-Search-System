@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { unlink } from "node:fs/promises";
+import { dirname } from "node:path";
+import { mkdir, unlink } from "node:fs/promises";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import { documentRows } from "@/lib/excel/document-rows";
 import { workbookPath } from "@/lib/excel/workbook";
 import type { UploadConfig } from "@/lib/excel/config";
+
+/** Writes a workbook to the upload directory, creating the directory if needed. */
+async function writeWorkbook(filePath: string, workbook: ExcelJS.Workbook) {
+  await mkdir(dirname(filePath), { recursive: true });
+  await workbook.xlsx.writeFile(filePath);
+}
 
 function configFor(token: string): UploadConfig {
   return {
@@ -32,7 +39,7 @@ describe("document-model row fallback", () => {
     sheet.addRow(["الاسم", "الرقم"]);
     sheet.addRow(["ليلى سمير حداد", "00123456789"]);
     sheet.addRow(["سامي حداد", "12345678901"]);
-    await workbook.xlsx.writeFile(filePath);
+    await writeWorkbook(filePath, workbook);
     try {
       const rows = [];
       for await (const row of documentRows(configFor(token))) rows.push(row);
@@ -53,7 +60,7 @@ describe("document-model row fallback", () => {
     const filePath = workbookPath(token);
     const workbook = new ExcelJS.Workbook();
     workbook.addWorksheet("Sheet1").addRow(["الاسم"]);
-    await workbook.xlsx.writeFile(filePath);
+    await writeWorkbook(filePath, workbook);
     try {
       const config = { ...configFor(token), sheetName: "غير موجودة", sheetIndex: 99 };
       await expect(async () => {

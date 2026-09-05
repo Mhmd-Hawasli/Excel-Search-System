@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
-import { Cairo } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const cairo = Cairo({ subsets: ["arabic"], display: "swap", variable: "--font-cairo" });
+/**
+ * Cairo variable font, self-hosted (Arabic + Latin subsets) so builds never
+ * depend on Google's CDN and no font request leaves the server.
+ */
+const cairo = localFont({
+  src: [
+    { path: "./fonts/cairo-arabic-wght-normal.woff2", weight: "200 1000", style: "normal" },
+    { path: "./fonts/cairo-latin-wght-normal.woff2", weight: "200 1000", style: "normal" },
+  ],
+  display: "swap",
+  variable: "--font-cairo",
+});
 
 export const metadata: Metadata = {
   title: { default: "نظام أرشفة ملفات الإكسل", template: "%s | أرشيف الإكسل" },
