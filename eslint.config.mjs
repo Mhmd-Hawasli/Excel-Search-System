@@ -6,9 +6,10 @@ const ignores = globalIgnores([
   "node_modules/**",
   ".next/**",
   ".next-dev/**",
-  "generated/**",
+  "src/generated/**",
   "coverage/**",
   "test-artifacts/**",
+  "tmp/**",
   "next-env.d.ts",
 ]);
 

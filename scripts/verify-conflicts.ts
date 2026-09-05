@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Prisma } from "../generated/prisma/client";
-import { prisma } from "../lib/db/prisma";
-import { CONFLICT_RULES, type ConflictRuleKey } from "../lib/conflicts/catalog";
-import { normalizeTextSql, queryConflicts } from "../lib/conflicts/query";
-import { normalizeStored } from "../lib/normalization/arabic";
-import { recordInput } from "../lib/excel/import-worker";
-import { STANDARD_FIELD_KEYS } from "../lib/excel/types";
-import type { UploadConfig } from "../lib/excel/config";
+import { Prisma } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db/prisma";
+import { CONFLICT_RULES, type ConflictRuleKey } from "@/lib/conflicts/catalog";
+import { normalizeTextSql, queryConflicts } from "@/lib/conflicts/query";
+import { normalizeStored } from "@/lib/normalization/arabic";
+import { recordInput } from "@/lib/excel/import-worker";
+import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
+import type { UploadConfig } from "@/lib/excel/config";
 
 async function main() {
   await prisma.$transaction(

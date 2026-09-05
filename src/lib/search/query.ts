@@ -11,6 +11,7 @@ export type SearchRequest = {
   mode: SearchMode;
   field?: StandardFieldKey;
   groupIds?: string[];
+  fileIds?: string[];
   page: number;
   pageSize: number;
   sortBy?: SearchSortKey;
@@ -165,10 +166,20 @@ export async function searchRecords(input: SearchRequest) {
     prefixFor(field, plan.normalizedText, plan.numericNeedle, categoryNeedle),
   );
   const groupIds = Array.from(new Set(input.groupIds ?? []));
+  const fileIds = Array.from(new Set(input.fileIds ?? []));
   const groupScope = groupIds.length
     ? Prisma.sql`AND f."group_id" IN (${Prisma.join(groupIds.map((groupId) => Prisma.sql`${groupId}::uuid`))})`
     : Prisma.empty;
-  const where = Prisma.sql`(${Prisma.join(conditions, " OR ")}) ${groupScope}`;
+  const fileScope = fileIds.length
+    ? Prisma.sql`AND f.id IN (${Prisma.join(fileIds.map((fileId) => Prisma.sql`${fileId}::uuid`))})`
+    : Prisma.empty;
+  const scope =
+    groupIds.length && fileIds.length
+      ? Prisma.sql`AND (f."group_id" IN (${Prisma.join(groupIds.map((groupId) => Prisma.sql`${groupId}::uuid`))}) OR f.id IN (${Prisma.join(fileIds.map((fileId) => Prisma.sql`${fileId}::uuid`))}))`
+      : groupIds.length
+        ? groupScope
+        : fileScope;
+  const where = Prisma.sql`(${Prisma.join(conditions, " OR ")}) ${scope}`;
   const fieldCases = plan.fields.map(
     (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${field.key}`,
   );

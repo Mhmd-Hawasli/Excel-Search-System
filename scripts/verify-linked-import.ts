@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import ExcelJS from "exceljs";
-import { prisma } from "../lib/db/prisma";
-import { getAdminCredentials } from "../lib/auth/config";
-import { ensureUniqueStandardFields } from "../lib/excel/mapping";
-import { workbookPath } from "../lib/excel/workbook";
-import type { SheetInspection, WorkbookInspection } from "../lib/excel/types";
+import { prisma } from "@/lib/db/prisma";
+import { getAdminCredentials } from "@/lib/auth/config";
+import { ensureUniqueStandardFields } from "@/lib/excel/mapping";
+import { workbookPath } from "@/lib/excel/workbook";
+import type { SheetInspection, WorkbookInspection } from "@/lib/excel/types";
 
 // Exercises the running local app using one uniquely named temporary group.
 // Cleanup is restricted to this run's group, jobs, uploaded copies and activity names.

@@ -31,7 +31,11 @@ export default async function SearchPage(props: PageProps<"/search">) {
   const [groups] = await Promise.all([
     prisma.group.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        files: { select: { id: true, name: true }, orderBy: { name: "asc" } },
+      },
     }),
   ]);
 
@@ -49,11 +53,16 @@ export default async function SearchPage(props: PageProps<"/search">) {
         query={request?.q ?? ""}
         mode={request?.mode ?? "full"}
         field={request?.field ?? null}
-        groupIds={request?.groupIds ?? groups.map((group) => group.id)}
+        groupIds={request?.groupIds ?? []}
+        fileIds={request?.fileIds ?? []}
       />
       {request?.q ? (
         <Suspense key={params.toString()} fallback={<ResultsSkeleton />}>
-          <SearchResults request={{ ...request, query: request.q }} pathname={PAGE_PATH} params={params} />
+          <SearchResults
+            request={{ ...request, query: request.q }}
+            pathname={PAGE_PATH}
+            params={params}
+          />
         </Suspense>
       ) : (
         <div className="rounded-xl border border-dashed bg-card p-6 text-center sm:p-12">

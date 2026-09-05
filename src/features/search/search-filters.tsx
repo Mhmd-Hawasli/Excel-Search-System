@@ -24,14 +24,16 @@ export function SearchFilters({
   mode,
   field,
   groupIds,
+  fileIds,
 }: {
   pathname: string;
   params: URLSearchParams;
-  groups: { id: string; name: string }[];
+  groups: { id: string; name: string; files: { id: string; name: string }[] }[];
   query: string;
   mode: SearchMode;
   field: StandardFieldKey | null;
   groupIds: string[];
+  fileIds: string[];
 }) {
   const { setParams } = useParamNavigation(pathname, params);
   const [draft, setDraft] = useState(query);
@@ -108,8 +110,18 @@ export function SearchFilters({
           ) : null}
           <GroupMultiSelect
             groups={groups}
-            value={groupIds}
-            onChange={(next) => setParams({ groupId: next.length === groups.length ? [] : next })}
+            groupIds={groupIds}
+            fileIds={fileIds}
+            onChange={({ groupIds: nextGroupIds, fileIds: nextFileIds }) =>
+              setParams({
+                groupId:
+                  nextGroupIds.length === groups.length && nextFileIds.length === 0
+                    ? []
+                    : nextGroupIds,
+                fileId: nextFileIds,
+                page: 1,
+              })
+            }
           />
         </div>
       </div>

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { prisma } from "../lib/db/prisma";
-import { nationalIdColumns } from "../lib/format/national-id";
-import { nationalIdQualityIssue } from "../lib/excel/national-id-quality";
+import { prisma } from "@/lib/db/prisma";
+import { nationalIdColumns } from "@/lib/format/national-id";
+import { nationalIdQualityIssue } from "@/lib/excel/national-id-quality";
 
 async function main() {
   const sql = await readFile(

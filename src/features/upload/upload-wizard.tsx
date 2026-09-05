@@ -344,7 +344,7 @@ export function UploadWizard({
 
   return (
     <div className="space-y-6">
-      <ol className="grid grid-cols-2 gap-2 md:grid-cols-5" aria-label="خطوات رفع الملف">
+      <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5" aria-label="خطوات رفع الملف">
         {steps.map((label, index) => (
           <li
             key={label}
