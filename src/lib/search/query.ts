@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { buildSearchPlan, type SearchMode } from "@/lib/search/plan";
+import { FUZZY_ERROR_DIVISOR } from "@/lib/search/fuzzy";
 import { functionalCategoryQuery } from "@/lib/format/functional-category";
 import type { SearchField } from "@/lib/search/fields";
 import type { SearchSortDirection, SearchSortKey } from "@/lib/search/sort";
@@ -70,6 +71,38 @@ function conditionFor(
     textTokens.map((token) => Prisma.sql`${fieldColumn} ILIKE ${`%${token}%`}`),
     " AND ",
   )})`;
+}
+
+/**
+ * Fuzzy full-name matching at 80% similarity (see `FUZZY_ERROR_DIVISOR`): the
+ * total typo distance of the written query tokens — each token paying the
+ * `levenshtein()` distance to its closest stored word — must stay within 20%
+ * of the written length. Stored words with no matching query token are free,
+ * so typing two name parts out of three still matches (omission is not an
+ * error); a written token with no counterpart pays its full length. The `ال`
+ * prefix is stripped on the stored side with the same rule `normalizeQuery`
+ * applies to the query side, so `العيد` still matches `العبد`.
+ */
+function fuzzyNameCondition(field: SearchField, textTokens: string[]) {
+  if (field.key !== "full_name" || textTokens.length === 0) return Prisma.sql`FALSE`;
+  const baseLength = Array.from(textTokens.join("")).length;
+  return Prisma.sql`(
+    SELECT COALESCE(SUM(best.distance), 0) * ${FUZZY_ERROR_DIVISOR} <= ${baseLength}
+    FROM unnest(ARRAY[${Prisma.join(textTokens.map((token) => Prisma.sql`${token}`))}]) AS token
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(
+        MIN(
+          levenshtein(
+            CASE WHEN word LIKE 'ال%' AND char_length(word) >= 5 THEN substring(word FROM 3) ELSE word END,
+            token
+          )
+        ),
+        char_length(token)
+      ) AS distance
+      FROM string_to_table(COALESCE(r."n_full_name", ''), ' ') AS word
+      WHERE word <> ''
+    ) AS best
+  )`;
 }
 
 function exactFor(
@@ -159,6 +192,9 @@ export async function searchRecords(input: SearchRequest) {
   const conditions = plan.fields.map((field) =>
     conditionFor(field, plan.textTokens, plan.numericNeedle, categoryNeedle),
   );
+  const fuzzyNameConditions = plan.fields.map((field) =>
+    fuzzyNameCondition(field, plan.textTokens),
+  );
   const exact = plan.fields.map((field) =>
     exactFor(field, plan.normalizedText, plan.numericNeedle, categoryNeedle),
   );
@@ -179,12 +215,18 @@ export async function searchRecords(input: SearchRequest) {
       : groupIds.length
         ? groupScope
         : fileScope;
-  const where = Prisma.sql`(${Prisma.join(conditions, " OR ")}) ${scope}`;
+  const where = Prisma.sql`(${Prisma.join([...conditions, ...fuzzyNameConditions], " OR ")}) ${scope}`;
   const fieldCases = plan.fields.map(
     (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${field.key}`,
   );
+  const fuzzyFieldCases = plan.fields.map(
+    (field, index) => Prisma.sql`WHEN ${fuzzyNameConditions[index]} THEN ${field.key}`,
+  );
   const matchedValueCases = plan.fields.map(
     (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${displayColumn(field)}`,
+  );
+  const fuzzyMatchedValueCases = plan.fields.map(
+    (field, index) => Prisma.sql`WHEN ${fuzzyNameConditions[index]} THEN ${displayColumn(field)}`,
   );
   const order = searchOrder(input.sortBy, input.sortDirection);
   const offset = (page - 1) * pageSize;
@@ -199,9 +241,9 @@ export async function searchRecords(input: SearchRequest) {
         r."sf_first_name" AS "sfFirstName", r."sf_father_name" AS "sfFatherName", r."sf_last_name" AS "sfLastName",
         r."sf_phone" AS "sfPhone", r."sf_contract_code" AS "sfContractCode", r."sf_secondary_contract_code" AS "sfSecondaryContractCode",
         r."sf_job_title" AS "sfJobTitle", r."sf_functional_category" AS "sfFunctionalCategory", r."sf_organizational_level" AS "sfOrganizationalLevel",
-        CASE ${Prisma.join(fieldCases, " ")} ELSE NULL END AS "matchedField",
-        CASE ${Prisma.join(matchedValueCases, " ")} ELSE NULL END AS "matchedValue",
-        CASE WHEN (${Prisma.join(exact, " OR ")}) THEN 0 WHEN (${Prisma.join(prefix, " OR ")}) THEN 1 ELSE 2 END AS "matchRank"
+        CASE ${Prisma.join([...fieldCases, ...fuzzyFieldCases], " ")} ELSE NULL END AS "matchedField",
+        CASE ${Prisma.join([...matchedValueCases, ...fuzzyMatchedValueCases], " ")} ELSE NULL END AS "matchedValue",
+        CASE WHEN (${Prisma.join(exact, " OR ")}) THEN 0 WHEN (${Prisma.join(prefix, " OR ")}) THEN 1 WHEN (${Prisma.join(conditions, " OR ")}) THEN 2 ELSE 3 END AS "matchRank"
       FROM "records" r JOIN "files" f ON f.id = r."file_id" JOIN "groups" g ON g.id = f."group_id"
       WHERE ${where}
       ORDER BY ${order}

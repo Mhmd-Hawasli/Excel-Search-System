@@ -29,11 +29,12 @@ export function normalizeStored(value: unknown) {
     .toLowerCase();
 }
 
+export function stripDefiniteArticle(token: string) {
+  return token.startsWith("ال") && token.length - 2 >= 3 ? token.slice(2) : token;
+}
+
 export function normalizeQuery(value: unknown) {
-  return normalizeStored(value)
-    .split(/\s+/)
-    .map((token) => (token.startsWith("ال") && token.length - 2 >= 3 ? token.slice(2) : token))
-    .filter(Boolean);
+  return normalizeStored(value).split(/\s+/).map(stripDefiniteArticle).filter(Boolean);
 }
 
 export function digitsOnly(value: unknown) {

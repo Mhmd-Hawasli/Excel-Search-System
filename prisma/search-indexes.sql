@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
 
 CREATE INDEX IF NOT EXISTS "records_n_first_name_trgm_idx" ON "records" USING GIN ("n_first_name" gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS "records_n_father_name_trgm_idx" ON "records" USING GIN ("n_father_name" gin_trgm_ops);

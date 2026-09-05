@@ -98,7 +98,7 @@ export function GroupMultiSelect({
           role="listbox"
           aria-label="تخصيص نطاق البحث"
           aria-multiselectable="true"
-          className="absolute start-0 top-full z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border bg-card p-1 text-card-foreground shadow-lg sm:min-w-80"
+          className="absolute end-0  top-full z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border bg-white p-1 text-card-foreground shadow-lg sm:min-w-80"
         >
           <button
             type="button"
@@ -111,6 +111,7 @@ export function GroupMultiSelect({
           </button>
           {groups.map((group) => {
             const groupSelected =
+              allSelected ||
               groupIds.includes(group.id) ||
               (group.files.length > 0 && group.files.every((file) => fileIds.includes(file.id)));
             const isExpanded = expanded.includes(group.id);
@@ -124,6 +125,7 @@ export function GroupMultiSelect({
                     className={`flex min-w-0 flex-1 items-center gap-2 rounded-sm px-3 py-2 text-right text-sm font-semibold hover:bg-accent ${groupSelected ? "bg-primary/5 text-primary" : ""}`}
                     onClick={() => toggleGroup(group)}
                   >
+                    {" "}
                     {option(groupSelected, `${group.name} — جميع الملفات`)}
                   </button>
                   <button
@@ -147,18 +149,24 @@ export function GroupMultiSelect({
                 </div>
                 {isExpanded ? (
                   <div className="mb-1 ms-3 border-s ps-2">
-                    {group.files.map((file) => (
-                      <button
-                        key={file.id}
-                        type="button"
-                        role="option"
-                        aria-selected={fileIds.includes(file.id)}
-                        className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-right text-sm hover:bg-accent"
-                        onClick={() => toggleFile(group, file.id)}
-                      >
-                        {option(fileIds.includes(file.id), file.name)}
-                      </button>
-                    ))}
+                    {group.files.map((file) =>
+                      (() => {
+                        const fileSelected =
+                          allSelected || groupIds.includes(group.id) || fileIds.includes(file.id);
+                        return (
+                          <button
+                            key={file.id}
+                            type="button"
+                            role="option"
+                            aria-selected={fileSelected}
+                            className={`flex w-full items-center gap-2 rounded-sm px-3 py-2 text-right text-sm hover:bg-accent ${fileSelected ? "text-primary" : ""}`}
+                            onClick={() => toggleFile(group, file.id)}
+                          >
+                            {option(fileSelected, file.name)}
+                          </button>
+                        );
+                      })(),
+                    )}
                   </div>
                 ) : null}
               </div>
