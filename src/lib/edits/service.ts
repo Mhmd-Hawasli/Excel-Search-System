@@ -392,9 +392,10 @@ export async function getEditedFileIds(fileIds: string[]): Promise<Set<string>> 
   return new Set(rows.map((r) => r.fileId));
 }
 
-export async function getEditedFilesSummary() {
+export async function getEditedFilesSummary(fileIds?: string[]) {
   const groups = await prisma.recordEdit.groupBy({
     by: ["fileId"],
+    where: fileIds ? { fileId: { in: fileIds } } : undefined,
     _count: { id: true },
     _max: { createdAt: true },
     orderBy: { _max: { createdAt: "desc" } },
@@ -424,12 +425,17 @@ export async function getEditedFilesSummary() {
 
 export async function listEdits(input: {
   fileId?: string;
+  fileIds?: string[];
   page?: number;
   pageSize?: number;
 }) {
   const page = Math.max(1, input.page ?? 1);
   const pageSize = Math.min(100, Math.max(10, input.pageSize ?? 25));
-  const where = input.fileId ? { fileId: input.fileId } : {};
+  const where = input.fileId
+    ? { fileId: input.fileId }
+    : input.fileIds
+      ? { fileId: { in: input.fileIds } }
+      : {};
   const [total, edits] = await prisma.$transaction([
     prisma.recordEdit.count({ where }),
     prisma.recordEdit.findMany({

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Upload } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getSessionUser, hasPermission, resolveDataScope } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { readSearchParam } from "@/utils/search-params";
 import { getEditedFileIds } from "@/lib/edits/service";
@@ -16,12 +17,20 @@ export default async function GroupDetailPage(props: PageProps<"/groups/[id]">) 
   const { id } = await props.params;
   const error = readSearchParam(await props.searchParams, "error");
   const success = readSearchParam(await props.searchParams, "success");
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const canUpload = hasPermission(actor, "upload.view");
+  const showEditedBadge = hasPermission(actor, "edits.badge");
   const group = await prisma.group.findUnique({
     where: { id },
     include: { files: { orderBy: { uploadedAt: "desc" }, include: { _count: { select: { columns: true } } } } },
   });
   if (!group) notFound();
-  const editedIds = await getEditedFileIds(group.files.map((f) => f.id));
+  const scope = await resolveDataScope(actor);
+  if (scope.groupIds !== null && !scope.groupIds.includes(group.id)) notFound();
+  const files =
+    scope.fileIds === null ? group.files : group.files.filter((file) => scope.fileIds?.includes(file.id));
+  const editedIds = showEditedBadge ? await getEditedFileIds(files.map((f) => f.id)) : new Set<string>();
   return (
     <div className="space-y-7">
       <Button asChild variant="ghost" size="sm">
@@ -34,28 +43,32 @@ export default async function GroupDetailPage(props: PageProps<"/groups/[id]">) 
         title={group.name}
         description={group.description || "ملفات هذه المجموعة وسجلاتها — اضغط على أي ملف لعرض تفاصيله وخيارات التعديل."}
         actions={
+          canUpload ? (
           <Button asChild>
             <Link href={`/upload?group=${group.id}`}>
               <Upload className="size-4" />
               رفع ملف
             </Link>
           </Button>
+          ) : undefined
         }
       />
       <FlashMessage error={error} success={success} />
-      {group.files.length === 0 ? (
+      {files.length === 0 ? (
         <EmptyState
           title="لا توجد ملفات في هذه المجموعة"
           description="ارفع ملف Excel وحدد الورقة والحقول القياسية لبدء البحث في بياناته."
           action={
+            canUpload ? (
             <Button asChild>
               <Link href={`/upload?group=${group.id}`}>رفع الملف الأول</Link>
             </Button>
+            ) : undefined
           }
         />
       ) : (
         <div className="grid gap-3">
-          {group.files.map((file) => (
+          {files.map((file) => (
             <FileCard
               key={file.id}
               href={`/groups/${group.id}/files/${file.id}`}

@@ -60,7 +60,9 @@ export const ModelName = {
   DataQualityIssue: 'DataQualityIssue',
   ActivityLog: 'ActivityLog',
   RecordEdit: 'RecordEdit',
-  MappingTemplate: 'MappingTemplate'
+  MappingTemplate: 'MappingTemplate',
+  User: 'User',
+  UserPermission: 'UserPermission'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -235,6 +237,31 @@ export const MappingTemplateScalarFieldEnum = {
 } as const
 
 export type MappingTemplateScalarFieldEnum = (typeof MappingTemplateScalarFieldEnum)[keyof typeof MappingTemplateScalarFieldEnum]
+
+
+export const UserScalarFieldEnum = {
+  id: 'id',
+  username: 'username',
+  passwordHash: 'passwordHash',
+  displayName: 'displayName',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const UserPermissionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  permission: 'permission',
+  groupId: 'groupId',
+  fileId: 'fileId',
+  createdAt: 'createdAt'
+} as const
+
+export type UserPermissionScalarFieldEnum = (typeof UserPermissionScalarFieldEnum)[keyof typeof UserPermissionScalarFieldEnum]
 
 
 export const SortOrder = {

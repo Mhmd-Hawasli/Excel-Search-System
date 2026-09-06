@@ -1,31 +1,28 @@
 export const SESSION_COOKIE = "excel_archive_session";
 export const SESSION_DURATION_SECONDS = 60 * 60 * 12;
 
-export function getAdminCredentials() {
-  return {
-    username: process.env.ADMIN_USERNAME ?? "admin",
-    password: process.env.ADMIN_PASSWORD ?? "admin123",
-  };
+function sessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET is not set. حدد سرًا عشوائيًا طويلًا في .env.");
+  }
+  // Development fallback only: sessions expire with the process restart.
+  return "excel-archive-search/dev-only-session-secret-change-me";
 }
 
-let signingKeyCache: { credentials: string; key: Promise<CryptoKey> } | undefined;
+let signingKeyCache: { secret: string; key: Promise<CryptoKey> } | undefined;
 
 export function getSessionSigningKey(): Promise<CryptoKey> {
-  const { username, password } = getAdminCredentials();
-  const credentials = JSON.stringify([username, password]);
-  if (signingKeyCache?.credentials === credentials) return signingKeyCache.key;
-  // Web Crypto works in both middleware and Node. Derive once per credential
-  // pair, so login needs no separately configured secret and credential changes
-  // invalidate existing tokens. Never put the password in the cookie payload.
+  const secret = sessionSecret();
+  if (signingKeyCache?.secret === secret) return signingKeyCache.key;
+  // Web Crypto works in both middleware and Node. Derived once per secret, so
+  // rotating SESSION_SECRET invalidates existing tokens.
   const key = (async () => {
     const encoder = new TextEncoder();
-    const material = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(credentials),
-      "PBKDF2",
-      false,
-      ["deriveKey"],
-    );
+    const material = await crypto.subtle.importKey("raw", encoder.encode(secret), "PBKDF2", false, [
+      "deriveKey",
+    ]);
     return crypto.subtle.deriveKey(
       {
         name: "PBKDF2",
@@ -39,7 +36,7 @@ export function getSessionSigningKey(): Promise<CryptoKey> {
       ["sign", "verify"],
     );
   })();
-  signingKeyCache = { credentials, key };
+  signingKeyCache = { secret, key };
   return key;
 }
 

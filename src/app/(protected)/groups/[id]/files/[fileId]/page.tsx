@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowRight, Download, RefreshCw, ShieldCheck, SlidersHorizontal, PencilLine } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { deleteFile } from "@/lib/actions/files";
+import { getSessionUser, hasPermission, isFileVisible } from "@/lib/auth/session-user";
 import { STANDARD_FIELD_LABELS } from "@/lib/excel/standard-fields";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { prisma } from "@/lib/db/prisma";
@@ -16,6 +17,13 @@ export const dynamic = "force-dynamic";
 
 export default async function FilePage({ params }: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await params;
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const canEditMapping = hasPermission(actor, "upload.view");
+  const canViewHistory = hasPermission(actor, "edits.view");
+  const canExport = hasPermission(actor, "export.run");
+  const canManageFiles = hasPermission(actor, "groups.view");
+  const showEditedBadge = hasPermission(actor, "edits.badge");
   const file = await prisma.file.findFirst({
     where: { id: fileId, groupId: id },
     include: {
@@ -24,7 +32,10 @@ export default async function FilePage({ params }: { params: Promise<{ id: strin
     },
   });
   if (!file) notFound();
-  const editCount = await prisma.recordEdit.count({ where: { fileId: file.id } });
+  if (!(await isFileVisible(actor, file))) notFound();
+  const editCount = canViewHistory
+    ? await prisma.recordEdit.count({ where: { fileId: file.id } })
+    : 0;
 
   return (
     <div className="space-y-7">
@@ -47,56 +58,70 @@ export default async function FilePage({ params }: { params: Promise<{ id: strin
                 تقرير الجودة
               </Link>
             </Button>
+            {canEditMapping ? (
             <Button asChild variant="secondary">
               <Link href={`/groups/${id}/files/${file.id}/edit`}>
                 <SlidersHorizontal className="size-4" />
                 تعديل الأعمدة والفئات
               </Link>
             </Button>
+            ) : null}
+            {canEditMapping ? (
             <Button asChild>
               <Link href={`/groups/${id}/files/${file.id}/update`}>
                 <RefreshCw className="size-4" />
                 تحديث الملف
               </Link>
             </Button>
+            ) : null}
+            {canViewHistory ? (
             <Button asChild variant="outline">
               <Link href={`/edits?fileId=${file.id}`}>
                 <PencilLine className="size-4" />
                 سجل التعديلات{editCount ? ` (${editCount})` : ""}
               </Link>
             </Button>
+            ) : null}
+            {canExport ? (
             <Button asChild variant="outline">
               <a href={`/api/files/${file.id}/export`}>
                 <Download className="size-4" />
                 تصدير Excel
               </a>
             </Button>
+            ) : null}
+            {canManageFiles ? (
             <TypedDeleteButton
               id={file.id}
               entityName={file.name}
               description={`سيُحذف ${file.rowCount.toLocaleString("en-US")} سجل و${file.columns.length} عمود نهائيًا. لا يمكن التراجع عن ذلك.`}
               action={deleteFile}
             />
+            ) : null}
           </div>
         }
       />
 
-      {editCount > 0 ? (
+      {showEditedBadge && editCount > 0 ? (
         <div className="flex flex-col gap-3 rounded-xl border border-amber-400/60 bg-amber-50 p-4 text-sm md:flex-row md:items-center md:justify-between dark:bg-amber-950/20">
           <p className="font-bold flex items-center gap-2 text-amber-900 dark:text-amber-100">
             <PencilLine className="size-4" />
             هذا الملف تم تعديله يدويًا
           </p>
           <div className="flex flex-wrap gap-2">
+            {canViewHistory ? (
             <Button asChild size="sm" variant="outline">
               <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
             </Button>
+            ) : null}
+            {canExport ? (
             <Button asChild size="sm">
               <a href={`/api/files/${file.id}/export`}>
                 <Download className="size-4" />
                 تصدير Excel بالقيم المعدلة
               </a>
             </Button>
+            ) : null}
           </div>
         </div>
       ) : null}

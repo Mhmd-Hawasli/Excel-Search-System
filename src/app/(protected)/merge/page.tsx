@@ -1,7 +1,9 @@
+import { requirePagePermission } from "@/lib/auth/session-user";
 import { PageHeader } from "@/components/page-header";
 import { MergeInterface } from "@/features/merge/merge-interface";
 
-export default function MergePage() {
+export default async function MergePage() {
+  await requirePagePermission("merge.view");
   return (
     <div className="space-y-7">
       <PageHeader

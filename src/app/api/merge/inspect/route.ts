@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { saveAndInspectMergeFile } from "@/lib/merge/storage";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("merge.view");
+  if (auth instanceof NextResponse) return auth;
   const formData = await request.formData();
   const file = formData.get("file");
   if (!(file instanceof File))

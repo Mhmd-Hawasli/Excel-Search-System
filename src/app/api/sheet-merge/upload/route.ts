@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { storeUploadedWorkbook } from "@/lib/sheet-merge/store";
 import { buildUploadInspection, parseUploadedWorkbook } from "@/lib/sheet-merge/workbook";
 
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
  * wizard can show a real percentage while a large workbook is read.
  */
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("sheetMerge.view");
+  if (auth instanceof NextResponse) return auth;
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");
   if (!(file instanceof File))

@@ -1,5 +1,6 @@
 import { ActivityAction, StandardField } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
+import { ensureSystemOwner } from "./seed-owner";
 import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";
 import { nationalIdColumns } from "@/lib/format/national-id";
 import { shamCashAsBigInt } from "@/lib/format/sham-cash";
@@ -56,6 +57,7 @@ function searchableRecord(
 }
 
 async function main() {
+  await ensureSystemOwner();
   const [personal, employment] = await Promise.all([
     prisma.category.upsert({
       where: { name: "البيانات الذاتية" },

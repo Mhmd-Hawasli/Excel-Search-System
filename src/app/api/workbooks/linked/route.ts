@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { uploadConfigSchema } from "@/lib/excel/config";
 import { loadLinkedSheets } from "@/lib/excel/linked-sheets";
 
@@ -10,6 +11,8 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, UploadJobStatus } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiNotFound, isFileVisible, requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { uploadConfigSchema, linkedMappingError } from "@/lib/excel/config";
 import { runReplacementJob } from "@/lib/excel/replacement-worker";
@@ -14,6 +15,8 @@ const requestSchema = uploadConfigSchema
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const [target, input] = await Promise.all([
     prisma.file.findUnique({
       where: { id },
@@ -23,6 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   ]);
   if (!target)
     return NextResponse.json({ error: "الملف المراد تحديثه غير موجود." }, { status: 404 });
+  if (!(await isFileVisible(auth.user, target))) return apiNotFound();
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success)
     return NextResponse.json({ error: "إعدادات الاستبدال غير مكتملة." }, { status: 400 });

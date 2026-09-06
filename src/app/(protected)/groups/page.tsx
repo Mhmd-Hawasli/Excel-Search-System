@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowDown, ArrowUp, FolderOpen, Plus } from "lucide-react";
 import { createGroup, deleteGroup, reorderGroup, updateGroup } from "@/lib/actions/groups";
+import { getSessionUser, hasPermission, resolveDataScope } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { EmptyState } from "@/components/empty-state";
 import { MutationForm } from "@/components/mutation-form";
@@ -15,14 +17,26 @@ import { Label } from "@/components/ui/label";
 export const dynamic = "force-dynamic";
 
 export default async function GroupsPage() {
-  const groups = await prisma.group.findMany({
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const canManage = hasPermission(actor, "groups.view");
+  const scope = await resolveDataScope(actor);
+  const allGroups = await prisma.group.findMany({
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    include: { files: { select: { rowCount: true } } },
+    include: {
+      files: {
+        select: { id: true, rowCount: true },
+        where: scope.fileIds === null ? undefined : { id: { in: scope.fileIds } },
+      },
+    },
   });
+  const groups =
+    scope.groupIds === null ? allGroups : allGroups.filter((group) => scope.groupIds?.includes(group.id));
 
   return (
     <div className="space-y-7">
       <PageHeader eyebrow="تنظيم الأرشيف" title="المجموعات" description="اجمع الملفات ذات الغرض المشترك، ورتبها بالطريقة التي تناسب سير العمل." />
+      {canManage ? (
       <Card>
         <CardHeader>
           <CardTitle>مجموعة جديدة</CardTitle>
@@ -36,6 +50,7 @@ export default async function GroupsPage() {
           </MutationForm>
         </CardContent>
       </Card>
+      ) : null}
 
       {groups.length === 0 ? (
         <EmptyState title="لا توجد مجموعات بعد" description="أنشئ المجموعة الأولى، وبعدها ستتمكن من رفع ملفات Excel إليها." />
@@ -49,12 +64,13 @@ export default async function GroupsPage() {
                   <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <CardTitle>{group.name}</CardTitle>
+                        <CardTitle><Link href={`/groups/${group.id}`} className="hover:underline">{group.name}</Link></CardTitle>
                         <Badge variant="secondary">{group.files.length} ملف</Badge>
                         <Badge variant="outline">{records.toLocaleString("en-US")} سجل</Badge>
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">{group.description || "لا يوجد وصف لهذه المجموعة."}</p>
                     </div>
+                    {canManage ? (
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm"><Link href={`/groups/${group.id}`}><FolderOpen className="size-4" />فتح</Link></Button>
                       <MutationForm action={reorderGroup} pendingMessage="جارٍ حفظ الترتيب…">
@@ -67,7 +83,9 @@ export default async function GroupsPage() {
                       </MutationForm>
                       <TypedDeleteButton id={group.id} entityName={group.name} description={`سيُحذف ${group.files.length} ملف و${records.toLocaleString("en-US")} سجل نهائيًا. لا يمكن التراجع عن هذا الإجراء.`} action={deleteGroup} />
                     </div>
+                    ) : null}
                   </div>
+                  {canManage ? (
                   <details className="mt-4 border-t pt-4">
                     <summary className="cursor-pointer text-sm font-bold text-primary">تعديل الاسم والوصف</summary>
                     <MutationForm action={updateGroup} className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr_auto] md:items-end">
@@ -77,6 +95,7 @@ export default async function GroupsPage() {
                       <Button type="submit" variant="secondary">حفظ التعديلات</Button>
                     </MutationForm>
                   </details>
+                  ) : null}
                 </CardContent>
               </Card>
             );

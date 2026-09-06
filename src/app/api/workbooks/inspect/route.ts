@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { saveAndInspectWorkbook } from "@/lib/excel/workbook";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const formData = await request.formData();
   const file = formData.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "يرجى اختيار ملف Excel." }, { status: 400 });

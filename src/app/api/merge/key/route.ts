@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { deletePairKeyAndRelink, sessionContent } from "@/lib/merge/session";
 
 export const runtime = "nodejs";
@@ -11,6 +12,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("merge.view");
+  if (auth instanceof NextResponse) return auth;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "بيانات غير صالحة." }, { status: 400 });
   try {

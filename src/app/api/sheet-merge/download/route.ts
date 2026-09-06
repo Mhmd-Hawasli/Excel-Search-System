@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { getSheetMergeExport } from "@/lib/sheet-merge/store";
 
 export const runtime = "nodejs";
@@ -5,6 +7,8 @@ export const dynamic = "force-dynamic";
 
 /** Serves the workbook prepared in memory by /api/sheet-merge/export. */
 export async function GET(request: Request) {
+  const auth = await requireApiPermission("sheetMerge.view");
+  if (auth instanceof NextResponse) return auth;
   const downloadId = new URL(request.url).searchParams.get("id");
   if (!downloadId) return Response.json({ error: "معرّف التصدير مفقود." }, { status: 400 });
   try {

@@ -67,3 +67,13 @@ export type RecordEdit = Prisma.RecordEditModel
  * 
  */
 export type MappingTemplate = Prisma.MappingTemplateModel
+/**
+ * Model User
+ * 
+ */
+export type User = Prisma.UserModel
+/**
+ * Model UserPermission
+ * 
+ */
+export type UserPermission = Prisma.UserPermissionModel

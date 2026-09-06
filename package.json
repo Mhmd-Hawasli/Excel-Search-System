@@ -20,6 +20,7 @@
     "db:push": "prisma db push && prisma db execute --schema prisma/schema.prisma --file prisma/search-indexes.sql",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-owner": "tsx --env-file=.env prisma/seed-owner.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",

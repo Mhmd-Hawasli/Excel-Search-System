@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/db/prisma";
-import { getAdminCredentials } from "@/lib/auth/config";
 import { ensureUniqueStandardFields } from "@/lib/excel/mapping";
 import { workbookPath } from "@/lib/excel/workbook";
 import type { SheetInspection, WorkbookInspection } from "@/lib/excel/types";
@@ -21,7 +20,7 @@ async function main() {
   const login = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(getAdminCredentials()),
+    body: JSON.stringify({ username: "mhmd", password: "mhmd123" }),
   });
   assert.equal(login.status, 200);
   const cookie = login.headers.get("set-cookie")!.split(";")[0];

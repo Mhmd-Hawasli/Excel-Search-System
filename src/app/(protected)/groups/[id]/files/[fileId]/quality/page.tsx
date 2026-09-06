@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { DataQualityIssueType } from "@/generated/prisma/client";
 import { ArrowRight, CircleCheck } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getSessionUser, isFileVisible } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -25,11 +26,14 @@ export default async function QualityPage({
   params: Promise<{ id: string; fileId: string }>;
 }) {
   const { id, fileId } = await params;
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
   const file = await prisma.file.findFirst({
     where: { id: fileId, groupId: id },
     include: { dataQualityIssues: { orderBy: { rowIndex: "asc" } } },
   });
   if (!file) notFound();
+  if (!(await isFileVisible(actor, file))) notFound();
   const counts = Object.values(DataQualityIssueType).map((type) => ({
     type,
     count: file.dataQualityIssues.filter((issue) => issue.issueType === type).length,

@@ -3,11 +3,14 @@
 import { ActivityAction } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import type { MutationResult } from "@/lib/actions/result";
+import { ACTION_FORBIDDEN_MESSAGE, requireActionPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 
 function text(formData: FormData, key: string) { const item = formData.get(key); return typeof item === "string" ? item : ""; }
 
 export async function deleteFile(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("groups.view");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = text(formData, "id"); const confirmation = text(formData, "confirmName");
   const file = await prisma.file.findUnique({ where: { id } });
   if (!file) return { ok: false, error: "الملف غير موجود." };

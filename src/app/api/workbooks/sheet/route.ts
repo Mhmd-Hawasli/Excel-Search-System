@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { inspectSavedSheet } from "@/lib/excel/workbook";
 
 export const runtime = "nodejs";
 const schema = z.object({ token: z.string().uuid(), sheetName: z.string().min(1) });
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "بيانات الورقة غير صالحة." }, { status: 400 });
   try { return NextResponse.json(await inspectSavedSheet(parsed.data.token, parsed.data.sheetName)); }

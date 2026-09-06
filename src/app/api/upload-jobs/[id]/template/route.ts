@@ -1,6 +1,7 @@
 import { ActivityAction, Prisma, UploadJobStatus } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { uploadConfigSchema } from "@/lib/excel/config";
 import { columnSignature } from "@/lib/excel/workbook";
@@ -9,6 +10,8 @@ const schema = z.object({ name: z.string().trim().min(2).max(120) });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return NextResponse.json({ error: "أدخل اسمًا واضحًا للقالب." }, { status: 400 });
   const job = await prisma.uploadJob.findUnique({ where: { id } });

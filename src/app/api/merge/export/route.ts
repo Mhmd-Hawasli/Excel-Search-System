@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { exportMergeWorkbook } from "@/lib/merge/exporter";
 import { sessionContent } from "@/lib/merge/session";
 
@@ -5,6 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const auth = await requireApiPermission("merge.view");
+  if (auth instanceof NextResponse) return auth;
   const sessionId = new URL(request.url).searchParams.get("sessionId");
   if (!sessionId) return Response.json({ error: "معرّف الجلسة مفقود." }, { status: 400 });
   try {

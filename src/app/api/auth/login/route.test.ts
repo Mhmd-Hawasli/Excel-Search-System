@@ -4,10 +4,33 @@ import { POST as logout } from "../logout/route";
 import { SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
 
+const storedUser = {
+  id: "11111111-1111-4111-8111-111111111111",
+  username: "network-admin",
+  passwordHash: "stored-hash",
+  isActive: true,
+};
+
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: {
+    user: {
+      findUnique: vi.fn(async ({ where }: { where: { username: string } }) =>
+        where.username === storedUser.username ? storedUser : null,
+      ),
+    },
+  },
+}));
+
+vi.mock("@/lib/auth/password", () => ({
+  hashPassword: vi.fn(async (password: string) => `hashed:${password}`),
+  verifyPassword: vi.fn(
+    async (password: string, stored: string) =>
+      password === "test-only-password" && stored === storedUser.passwordHash,
+  ),
+}));
+
 beforeEach(() => {
-  vi.stubEnv("ADMIN_USERNAME", "network-admin");
-  vi.stubEnv("ADMIN_PASSWORD", "test-only-password");
-  vi.stubEnv("SESSION_SECRET", undefined);
+  vi.stubEnv("SESSION_SECRET", "test-only-session-secret-at-least-32-chars");
   vi.stubEnv("NODE_ENV", "production");
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -34,7 +57,7 @@ describe("network login", () => {
       expect(cookie.httpOnly).toBe(true);
       expect(cookie.secure).toBe(false);
       expect(await verifySessionToken(cookie.value)).toEqual({
-        sub: "admin",
+        userId: storedUser.id,
         username: "network-admin",
       });
     },

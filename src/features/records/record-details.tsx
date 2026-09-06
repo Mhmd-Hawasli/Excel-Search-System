@@ -46,10 +46,12 @@ export function RecordDetails({
   recordId,
   columns: initialColumns,
   editedHeaders: initialEdited,
+  canEdit,
 }: {
   recordId: string;
   columns: DetailColumn[];
   editedHeaders?: Record<string, EditedHeaderInfo>;
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [columns, setColumns] = useState(initialColumns);
@@ -103,12 +105,13 @@ export function RecordDetails({
   }
 
   function startEdit(column: DetailColumn) {
+    if (!canEdit) return;
     setEditingId(column.id);
     setDraft(column.value);
   }
 
   async function saveEdit(column: DetailColumn) {
-    if (saving) return;
+    if (saving || !canEdit) return;
     if (draft === column.value) {
       setEditingId(null);
       return;
@@ -287,6 +290,7 @@ export function RecordDetails({
                                 ) : null}
                               </span>
                               <span className="flex shrink-0 gap-1">
+                                {canEdit ? (
                                 <Button
                                   type="button"
                                   size="icon"
@@ -298,6 +302,7 @@ export function RecordDetails({
                                 >
                                   <Pencil className="size-4" />
                                 </Button>
+                                ) : null}
                                 <Button
                                   type="button"
                                   size="icon"

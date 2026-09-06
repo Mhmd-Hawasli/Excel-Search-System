@@ -69,6 +69,10 @@ enum ActivityAction {
   TEMPLATE_CREATED   @map("template_created")
   BACKUP_RESTORED    @map("backup_restored")
   RECORD_EDITED      @map("record_edited")
+  USER_CREATED       @map("user_created")
+  USER_UPDATED       @map("user_updated")
+  USER_DELETED       @map("user_deleted")
+  USER_PERMISSIONS_UPDATED @map("user_permissions_updated")
 
   @@map("activity_action")
 }
@@ -82,6 +86,7 @@ model Group {
   updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   files       File[]
   templates   MappingTemplate[]
+  scopedPermissions UserPermission[]
 
   @@map("groups")
 }
@@ -104,6 +109,7 @@ model File {
   uploadJobs        UploadJob[]
   dataQualityIssues DataQualityIssue[]
   recordEdits       RecordEdit[]
+  scopedPermissions UserPermission[]
 
   @@index([groupId])
   @@map("files")
@@ -258,4 +264,34 @@ model MappingTemplate {
   @@unique([groupId, name])
   @@index([groupId, headerSignature])
   @@map("mapping_templates")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  displayName  String?  @map("display_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  permissions  UserPermission[]
+
+  @@map("users")
+}
+
+model UserPermission {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  permission String
+  groupId    String?  @map("group_id") @db.Uuid
+  fileId     String?  @map("file_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group      Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  file       File?    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([groupId])
+  @@index([fileId])
+  @@map("user_permissions")
 }

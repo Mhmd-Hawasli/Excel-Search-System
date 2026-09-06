@@ -1,4 +1,6 @@
 import ExcelJS from "exceljs";
+import { NextResponse } from "next/server";
+import { apiNotFound, isFileVisible, requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { parseStoredDate } from "@/lib/format/date";
 
@@ -75,6 +77,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const auth = await requireApiPermission("export.run");
+  if (auth instanceof NextResponse) return auth;
   const file = await prisma.file.findUnique({
     where: { id },
     include: {
@@ -85,6 +89,7 @@ export async function GET(
   if (!file) {
     return Response.json({ error: "الملف غير موجود." }, { status: 404 });
   }
+  if (!(await isFileVisible(auth.user, file))) return apiNotFound();
 
   const [records, edits] = await prisma.$transaction([
     prisma.record.findMany({

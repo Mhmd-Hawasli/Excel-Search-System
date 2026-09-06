@@ -274,6 +274,7 @@ export type FileWhereInput = {
   uploadJobs?: Prisma.UploadJobListRelationFilter
   dataQualityIssues?: Prisma.DataQualityIssueListRelationFilter
   recordEdits?: Prisma.RecordEditListRelationFilter
+  scopedPermissions?: Prisma.UserPermissionListRelationFilter
 }
 
 export type FileOrderByWithRelationInput = {
@@ -294,6 +295,7 @@ export type FileOrderByWithRelationInput = {
   uploadJobs?: Prisma.UploadJobOrderByRelationAggregateInput
   dataQualityIssues?: Prisma.DataQualityIssueOrderByRelationAggregateInput
   recordEdits?: Prisma.RecordEditOrderByRelationAggregateInput
+  scopedPermissions?: Prisma.UserPermissionOrderByRelationAggregateInput
 }
 
 export type FileWhereUniqueInput = Prisma.AtLeast<{
@@ -317,6 +319,7 @@ export type FileWhereUniqueInput = Prisma.AtLeast<{
   uploadJobs?: Prisma.UploadJobListRelationFilter
   dataQualityIssues?: Prisma.DataQualityIssueListRelationFilter
   recordEdits?: Prisma.RecordEditListRelationFilter
+  scopedPermissions?: Prisma.UserPermissionListRelationFilter
 }, "id" | "name">
 
 export type FileOrderByWithAggregationInput = {
@@ -372,6 +375,7 @@ export type FileCreateInput = {
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateInput = {
@@ -391,6 +395,7 @@ export type FileUncheckedCreateInput = {
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileUpdateInput = {
@@ -410,6 +415,7 @@ export type FileUpdateInput = {
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateInput = {
@@ -429,6 +435,7 @@ export type FileUncheckedUpdateInput = {
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateManyInput = {
@@ -658,6 +665,22 @@ export type FileUpdateOneRequiredWithoutRecordEditsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.FileUpdateToOneWithWhereWithoutRecordEditsInput, Prisma.FileUpdateWithoutRecordEditsInput>, Prisma.FileUncheckedUpdateWithoutRecordEditsInput>
 }
 
+export type FileCreateNestedOneWithoutScopedPermissionsInput = {
+  create?: Prisma.XOR<Prisma.FileCreateWithoutScopedPermissionsInput, Prisma.FileUncheckedCreateWithoutScopedPermissionsInput>
+  connectOrCreate?: Prisma.FileCreateOrConnectWithoutScopedPermissionsInput
+  connect?: Prisma.FileWhereUniqueInput
+}
+
+export type FileUpdateOneWithoutScopedPermissionsNestedInput = {
+  create?: Prisma.XOR<Prisma.FileCreateWithoutScopedPermissionsInput, Prisma.FileUncheckedCreateWithoutScopedPermissionsInput>
+  connectOrCreate?: Prisma.FileCreateOrConnectWithoutScopedPermissionsInput
+  upsert?: Prisma.FileUpsertWithoutScopedPermissionsInput
+  disconnect?: Prisma.FileWhereInput | boolean
+  delete?: Prisma.FileWhereInput | boolean
+  connect?: Prisma.FileWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.FileUpdateToOneWithWhereWithoutScopedPermissionsInput, Prisma.FileUpdateWithoutScopedPermissionsInput>, Prisma.FileUncheckedUpdateWithoutScopedPermissionsInput>
+}
+
 export type FileCreateWithoutGroupInput = {
   id?: string
   name: string
@@ -674,6 +697,7 @@ export type FileCreateWithoutGroupInput = {
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutGroupInput = {
@@ -692,6 +716,7 @@ export type FileUncheckedCreateWithoutGroupInput = {
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutGroupInput = {
@@ -753,6 +778,7 @@ export type FileCreateWithoutColumnsInput = {
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutColumnsInput = {
@@ -771,6 +797,7 @@ export type FileUncheckedCreateWithoutColumnsInput = {
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutColumnsInput = {
@@ -805,6 +832,7 @@ export type FileUpdateWithoutColumnsInput = {
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutColumnsInput = {
@@ -823,6 +851,7 @@ export type FileUncheckedUpdateWithoutColumnsInput = {
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateWithoutRecordsInput = {
@@ -841,6 +870,7 @@ export type FileCreateWithoutRecordsInput = {
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutRecordsInput = {
@@ -859,6 +889,7 @@ export type FileUncheckedCreateWithoutRecordsInput = {
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutRecordsInput = {
@@ -893,6 +924,7 @@ export type FileUpdateWithoutRecordsInput = {
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutRecordsInput = {
@@ -911,6 +943,7 @@ export type FileUncheckedUpdateWithoutRecordsInput = {
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateWithoutUploadJobsInput = {
@@ -929,6 +962,7 @@ export type FileCreateWithoutUploadJobsInput = {
   records?: Prisma.RecordCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutUploadJobsInput = {
@@ -947,6 +981,7 @@ export type FileUncheckedCreateWithoutUploadJobsInput = {
   records?: Prisma.RecordUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutUploadJobsInput = {
@@ -981,6 +1016,7 @@ export type FileUpdateWithoutUploadJobsInput = {
   records?: Prisma.RecordUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutUploadJobsInput = {
@@ -999,6 +1035,7 @@ export type FileUncheckedUpdateWithoutUploadJobsInput = {
   records?: Prisma.RecordUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateWithoutDataQualityIssuesInput = {
@@ -1017,6 +1054,7 @@ export type FileCreateWithoutDataQualityIssuesInput = {
   records?: Prisma.RecordCreateNestedManyWithoutFileInput
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutDataQualityIssuesInput = {
@@ -1035,6 +1073,7 @@ export type FileUncheckedCreateWithoutDataQualityIssuesInput = {
   records?: Prisma.RecordUncheckedCreateNestedManyWithoutFileInput
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutDataQualityIssuesInput = {
@@ -1069,6 +1108,7 @@ export type FileUpdateWithoutDataQualityIssuesInput = {
   records?: Prisma.RecordUpdateManyWithoutFileNestedInput
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutDataQualityIssuesInput = {
@@ -1087,6 +1127,7 @@ export type FileUncheckedUpdateWithoutDataQualityIssuesInput = {
   records?: Prisma.RecordUncheckedUpdateManyWithoutFileNestedInput
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateWithoutRecordEditsInput = {
@@ -1105,6 +1146,7 @@ export type FileCreateWithoutRecordEditsInput = {
   records?: Prisma.RecordCreateNestedManyWithoutFileInput
   uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionCreateNestedManyWithoutFileInput
 }
 
 export type FileUncheckedCreateWithoutRecordEditsInput = {
@@ -1123,6 +1165,7 @@ export type FileUncheckedCreateWithoutRecordEditsInput = {
   records?: Prisma.RecordUncheckedCreateNestedManyWithoutFileInput
   uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedCreateNestedManyWithoutFileInput
 }
 
 export type FileCreateOrConnectWithoutRecordEditsInput = {
@@ -1157,6 +1200,7 @@ export type FileUpdateWithoutRecordEditsInput = {
   records?: Prisma.RecordUpdateManyWithoutFileNestedInput
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutRecordEditsInput = {
@@ -1175,6 +1219,99 @@ export type FileUncheckedUpdateWithoutRecordEditsInput = {
   records?: Prisma.RecordUncheckedUpdateManyWithoutFileNestedInput
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
+}
+
+export type FileCreateWithoutScopedPermissionsInput = {
+  id?: string
+  name: string
+  description?: string
+  originalFilename: string
+  sheetName: string
+  rowCount?: number
+  columnSignature: string
+  version?: number
+  uploadedAt?: Date | string
+  updatedAt?: Date | string
+  group: Prisma.GroupCreateNestedOneWithoutFilesInput
+  columns?: Prisma.FileColumnCreateNestedManyWithoutFileInput
+  records?: Prisma.RecordCreateNestedManyWithoutFileInput
+  uploadJobs?: Prisma.UploadJobCreateNestedManyWithoutFileInput
+  dataQualityIssues?: Prisma.DataQualityIssueCreateNestedManyWithoutFileInput
+  recordEdits?: Prisma.RecordEditCreateNestedManyWithoutFileInput
+}
+
+export type FileUncheckedCreateWithoutScopedPermissionsInput = {
+  id?: string
+  groupId: string
+  name: string
+  description?: string
+  originalFilename: string
+  sheetName: string
+  rowCount?: number
+  columnSignature: string
+  version?: number
+  uploadedAt?: Date | string
+  updatedAt?: Date | string
+  columns?: Prisma.FileColumnUncheckedCreateNestedManyWithoutFileInput
+  records?: Prisma.RecordUncheckedCreateNestedManyWithoutFileInput
+  uploadJobs?: Prisma.UploadJobUncheckedCreateNestedManyWithoutFileInput
+  dataQualityIssues?: Prisma.DataQualityIssueUncheckedCreateNestedManyWithoutFileInput
+  recordEdits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutFileInput
+}
+
+export type FileCreateOrConnectWithoutScopedPermissionsInput = {
+  where: Prisma.FileWhereUniqueInput
+  create: Prisma.XOR<Prisma.FileCreateWithoutScopedPermissionsInput, Prisma.FileUncheckedCreateWithoutScopedPermissionsInput>
+}
+
+export type FileUpsertWithoutScopedPermissionsInput = {
+  update: Prisma.XOR<Prisma.FileUpdateWithoutScopedPermissionsInput, Prisma.FileUncheckedUpdateWithoutScopedPermissionsInput>
+  create: Prisma.XOR<Prisma.FileCreateWithoutScopedPermissionsInput, Prisma.FileUncheckedCreateWithoutScopedPermissionsInput>
+  where?: Prisma.FileWhereInput
+}
+
+export type FileUpdateToOneWithWhereWithoutScopedPermissionsInput = {
+  where?: Prisma.FileWhereInput
+  data: Prisma.XOR<Prisma.FileUpdateWithoutScopedPermissionsInput, Prisma.FileUncheckedUpdateWithoutScopedPermissionsInput>
+}
+
+export type FileUpdateWithoutScopedPermissionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.StringFieldUpdateOperationsInput | string
+  originalFilename?: Prisma.StringFieldUpdateOperationsInput | string
+  sheetName?: Prisma.StringFieldUpdateOperationsInput | string
+  rowCount?: Prisma.IntFieldUpdateOperationsInput | number
+  columnSignature?: Prisma.StringFieldUpdateOperationsInput | string
+  version?: Prisma.IntFieldUpdateOperationsInput | number
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  group?: Prisma.GroupUpdateOneRequiredWithoutFilesNestedInput
+  columns?: Prisma.FileColumnUpdateManyWithoutFileNestedInput
+  records?: Prisma.RecordUpdateManyWithoutFileNestedInput
+  uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
+  dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
+  recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+}
+
+export type FileUncheckedUpdateWithoutScopedPermissionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  groupId?: Prisma.StringFieldUpdateOperationsInput | string
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  description?: Prisma.StringFieldUpdateOperationsInput | string
+  originalFilename?: Prisma.StringFieldUpdateOperationsInput | string
+  sheetName?: Prisma.StringFieldUpdateOperationsInput | string
+  rowCount?: Prisma.IntFieldUpdateOperationsInput | number
+  columnSignature?: Prisma.StringFieldUpdateOperationsInput | string
+  version?: Prisma.IntFieldUpdateOperationsInput | number
+  uploadedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  columns?: Prisma.FileColumnUncheckedUpdateManyWithoutFileNestedInput
+  records?: Prisma.RecordUncheckedUpdateManyWithoutFileNestedInput
+  uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
+  dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
+  recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileCreateManyGroupInput = {
@@ -1206,6 +1343,7 @@ export type FileUpdateWithoutGroupInput = {
   uploadJobs?: Prisma.UploadJobUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateWithoutGroupInput = {
@@ -1224,6 +1362,7 @@ export type FileUncheckedUpdateWithoutGroupInput = {
   uploadJobs?: Prisma.UploadJobUncheckedUpdateManyWithoutFileNestedInput
   dataQualityIssues?: Prisma.DataQualityIssueUncheckedUpdateManyWithoutFileNestedInput
   recordEdits?: Prisma.RecordEditUncheckedUpdateManyWithoutFileNestedInput
+  scopedPermissions?: Prisma.UserPermissionUncheckedUpdateManyWithoutFileNestedInput
 }
 
 export type FileUncheckedUpdateManyWithoutGroupInput = {
@@ -1250,6 +1389,7 @@ export type FileCountOutputType = {
   uploadJobs: number
   dataQualityIssues: number
   recordEdits: number
+  scopedPermissions: number
 }
 
 export type FileCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1258,6 +1398,7 @@ export type FileCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   uploadJobs?: boolean | FileCountOutputTypeCountUploadJobsArgs
   dataQualityIssues?: boolean | FileCountOutputTypeCountDataQualityIssuesArgs
   recordEdits?: boolean | FileCountOutputTypeCountRecordEditsArgs
+  scopedPermissions?: boolean | FileCountOutputTypeCountScopedPermissionsArgs
 }
 
 /**
@@ -1305,6 +1446,13 @@ export type FileCountOutputTypeCountRecordEditsArgs<ExtArgs extends runtime.Type
   where?: Prisma.RecordEditWhereInput
 }
 
+/**
+ * FileCountOutputType without action
+ */
+export type FileCountOutputTypeCountScopedPermissionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.UserPermissionWhereInput
+}
+
 
 export type FileSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -1324,6 +1472,7 @@ export type FileSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   uploadJobs?: boolean | Prisma.File$uploadJobsArgs<ExtArgs>
   dataQualityIssues?: boolean | Prisma.File$dataQualityIssuesArgs<ExtArgs>
   recordEdits?: boolean | Prisma.File$recordEditsArgs<ExtArgs>
+  scopedPermissions?: boolean | Prisma.File$scopedPermissionsArgs<ExtArgs>
   _count?: boolean | Prisma.FileCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["file"]>
 
@@ -1379,6 +1528,7 @@ export type FileInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   uploadJobs?: boolean | Prisma.File$uploadJobsArgs<ExtArgs>
   dataQualityIssues?: boolean | Prisma.File$dataQualityIssuesArgs<ExtArgs>
   recordEdits?: boolean | Prisma.File$recordEditsArgs<ExtArgs>
+  scopedPermissions?: boolean | Prisma.File$scopedPermissionsArgs<ExtArgs>
   _count?: boolean | Prisma.FileCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type FileIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1397,6 +1547,7 @@ export type $FilePayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     uploadJobs: Prisma.$UploadJobPayload<ExtArgs>[]
     dataQualityIssues: Prisma.$DataQualityIssuePayload<ExtArgs>[]
     recordEdits: Prisma.$RecordEditPayload<ExtArgs>[]
+    scopedPermissions: Prisma.$UserPermissionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1810,6 +1961,7 @@ export interface Prisma__FileClient<T, Null = never, ExtArgs extends runtime.Typ
   uploadJobs<T extends Prisma.File$uploadJobsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.File$uploadJobsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UploadJobPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   dataQualityIssues<T extends Prisma.File$dataQualityIssuesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.File$dataQualityIssuesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$DataQualityIssuePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   recordEdits<T extends Prisma.File$recordEditsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.File$recordEditsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RecordEditPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  scopedPermissions<T extends Prisma.File$scopedPermissionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.File$scopedPermissionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$UserPermissionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2368,6 +2520,30 @@ export type File$recordEditsArgs<ExtArgs extends runtime.Types.Extensions.Intern
   take?: number
   skip?: number
   distinct?: Prisma.RecordEditScalarFieldEnum | Prisma.RecordEditScalarFieldEnum[]
+}
+
+/**
+ * File.scopedPermissions
+ */
+export type File$scopedPermissionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the UserPermission
+   */
+  select?: Prisma.UserPermissionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the UserPermission
+   */
+  omit?: Prisma.UserPermissionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.UserPermissionInclude<ExtArgs> | null
+  where?: Prisma.UserPermissionWhereInput
+  orderBy?: Prisma.UserPermissionOrderByWithRelationInput | Prisma.UserPermissionOrderByWithRelationInput[]
+  cursor?: Prisma.UserPermissionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.UserPermissionScalarFieldEnum | Prisma.UserPermissionScalarFieldEnum[]
 }
 
 /**

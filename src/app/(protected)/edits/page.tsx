@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import {
+  getSessionUser,
+  hasPermission,
+  resolveDataScope,
+} from "@/lib/auth/session-user";
 import {
   ArrowLeft,
   ChevronLeft,
@@ -26,11 +32,28 @@ export default async function EditsPage({
   const { fileId, page: pageParam, pageSize: pageSizeParam } = await searchParams;
   const page = Math.max(1, Number(pageParam ?? "1") || 1);
   const pageSize = Math.min(100, Math.max(10, Number(pageSizeParam ?? "25") || 25));
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const canViewHistory = hasPermission(actor, "edits.view");
+  const canExport = hasPermission(actor, "export.run");
+  const showEditedBadge = hasPermission(actor, "edits.badge");
+  if (!canViewHistory && !hasPermission(actor, "export.view")) redirect("/");
+  const scope = await resolveDataScope(actor);
+  const visibleFileIds = scope.fileIds === null ? undefined : scope.fileIds;
+  const trimmedFileId = fileId?.trim() || undefined;
+  if (trimmedFileId && visibleFileIds && !visibleFileIds.includes(trimmedFileId)) notFound();
 
-  const [files, table] = await Promise.all([
-    getEditedFilesSummary(),
-    listEdits({ fileId: fileId?.trim() || undefined, page, pageSize }),
-  ]);
+  const [files, table] = canViewHistory
+    ? await Promise.all([
+        getEditedFilesSummary(visibleFileIds),
+        listEdits({
+          fileId: trimmedFileId,
+          fileIds: trimmedFileId ? undefined : visibleFileIds,
+          page,
+          pageSize,
+        }),
+      ])
+    : [[], { edits: [], total: 0, page, pageSize, pageCount: 1 }];
 
   const activeFile = fileId?.trim() ? files.find((f) => f.fileId === fileId.trim()) : undefined;
 
@@ -50,6 +73,7 @@ export default async function EditsPage({
         description="كل تعديل يدوي على حقول السجلات محفوظ في سجل منفصل مع القيمة القديمة والجديدة. صدّر أي ملف معدل إلى Excel كامل بالقيم الحالية."
       />
 
+      {canViewHistory ? (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -88,6 +112,7 @@ export default async function EditsPage({
                       >
                         {file.fileName}
                       </Link>
+                      {showEditedBadge ? (
                       <Badge
                         variant="outline"
                         className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
@@ -95,6 +120,7 @@ export default async function EditsPage({
                         <PencilLine className="size-3" />
                         معدّل
                       </Badge>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {file.groupName} · {file.rowCount.toLocaleString("en-US")} سجل ·{" "}
@@ -125,12 +151,14 @@ export default async function EditsPage({
                         )}
                       </Link>
                     </Button>
+                    {canExport ? (
                     <Button asChild size="sm">
                       <a href={`/api/files/${file.fileId}/export`}>
                         <Download className="size-4" />
                         تصدير Excel
                       </a>
                     </Button>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -138,7 +166,13 @@ export default async function EditsPage({
           )}
         </CardContent>
       </Card>
+      ) : (
+      <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+        سجل التعديلات مخفي عن حسابك. يمكنك التصدير من صفحات الملفات التي تملك صلاحية تصديرها.
+      </p>
+      )}
 
+      {canViewHistory ? (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -250,6 +284,7 @@ export default async function EditsPage({
           )}
         </CardContent>
       </Card>
+      ) : null}
     </div>
   );
 }

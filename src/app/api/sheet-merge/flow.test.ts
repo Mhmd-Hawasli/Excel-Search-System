@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
 import { POST as upload } from "@/app/api/sheet-merge/upload/route";
 import { POST as run } from "@/app/api/sheet-merge/run/route";
 import { POST as exportRoute } from "@/app/api/sheet-merge/export/route";
 import { GET as download } from "@/app/api/sheet-merge/download/route";
 import type { SheetMergeResult, UploadInspection } from "@/lib/sheet-merge/types";
+
+vi.mock("@/lib/auth/session-user", () => ({
+  requireApiPermission: vi.fn(async () => ({
+    user: { id: "test-user", username: "tester", displayName: null, permissions: [] },
+  })),
+}));
 
 /**
  * End-to-end check of the section's own API: upload → run → export →

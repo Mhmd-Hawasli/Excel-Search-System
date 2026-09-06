@@ -1,8 +1,12 @@
+import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { restoreBackup } from "@/lib/backup/service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("backup.restore");
+  if (auth instanceof NextResponse) return auth;
   const formData = await request.formData();
   const file = formData.get("file");
   const confirmation = formData.get("confirmation");

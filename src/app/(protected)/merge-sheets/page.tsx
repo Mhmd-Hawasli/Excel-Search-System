@@ -1,7 +1,9 @@
+import { requirePagePermission } from "@/lib/auth/session-user";
 import { PageHeader } from "@/components/page-header";
 import { SheetMergeInterface } from "@/features/sheet-merge/sheet-merge-interface";
 
-export default function MergeSheetsPage() {
+export default async function MergeSheetsPage() {
+  await requirePagePermission("sheetMerge.view");
   return (
     <div className="space-y-7">
       <PageHeader

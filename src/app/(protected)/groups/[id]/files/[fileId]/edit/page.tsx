@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getSessionUser, isFileVisible, requirePagePermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { EditMappingWizard } from "@/features/files/edit-mapping-wizard";
 import type { StandardFieldKey } from "@/lib/excel/types";
@@ -11,11 +12,15 @@ export default async function EditMappingPage({
   params: Promise<{ id: string; fileId: string }>;
 }) {
   const { id: groupId, fileId } = await params;
+  await requirePagePermission("upload.view");
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
   const file = await prisma.file.findFirst({
     where: { id: fileId, groupId },
     include: { columns: { orderBy: { columnIndex: "asc" } } },
   });
   if (!file) notFound();
+  if (!(await isFileVisible(actor, file))) notFound();
 
   const categories = await prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
 

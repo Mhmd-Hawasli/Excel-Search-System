@@ -1,4 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import {
+  getSessionUser,
+  hasPermission,
+  resolveDataScope,
+} from "@/lib/auth/session-user";
 import {
   ArrowUpLeft,
   ChevronLeft,
@@ -64,18 +70,45 @@ const quickActions = [
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const scope = await resolveDataScope(actor);
+  const canBrowseGroups =
+    scope.groupIds === null || scope.groupIds.length > 0 || (scope.fileIds?.length ?? 0) > 0;
+  const canManageGroups = hasPermission(actor, "groups.view");
+  const canSearch = hasPermission(actor, "search.view");
+  const canUpload = hasPermission(actor, "upload.view");
+  const canExportSection = hasPermission(actor, "export.view");
+  const canMerge = hasPermission(actor, "merge.view");
+  const canSheetMerge = hasPermission(actor, "sheetMerge.view");
+  const canBackup = hasPermission(actor, "backup.view");
+  const showEditedBadge = hasPermission(actor, "edits.badge");
+  const groupWhere = scope.groupIds === null ? {} : { id: { in: scope.groupIds } };
+  const fileWhere = scope.fileIds === null ? {} : { id: { in: scope.fileIds } };
   const [groupCount, fileCount, recordCount, recentFiles] = await Promise.all([
-    prisma.group.count(),
-    prisma.file.count(),
-    prisma.record.count(),
+    prisma.group.count({ where: groupWhere }),
+    prisma.file.count({ where: fileWhere }),
+    prisma.record.count({
+      where: scope.fileIds === null ? {} : { fileId: { in: scope.fileIds } },
+    }),
     prisma.file.findMany({
+      where: fileWhere,
       orderBy: { uploadedAt: "desc" },
       take: 5,
       include: { group: true, _count: { select: { columns: true } } },
     }),
   ]);
   const values = [groupCount, fileCount, recordCount];
-  const editedIds = await getEditedFileIds(recentFiles.map((file) => file.id));
+  const editedIds = showEditedBadge
+    ? await getEditedFileIds(recentFiles.map((file) => file.id))
+    : new Set<string>();
+  const statVisible = [canBrowseGroups, canBrowseGroups, canSearch];
+  const actionAllowed: Record<string, boolean> = {
+    "/upload": canUpload,
+    "/edits": canExportSection,
+    "/merge": canMerge,
+    "/merge-sheets": canSheetMerge,
+  };
 
   return (
     <div className="space-y-7">
@@ -84,16 +117,18 @@ export default async function DashboardPage() {
         title="نظرة عامة على الأرشيف"
         description="ملفاتك وسجلاتك وأدوات العمل، في مكان واحد."
         actions={
+          canUpload ? (
           <Button asChild>
             <Link href="/upload">
               <Plus className="size-4" />
               رفع ملف جديد
             </Link>
           </Button>
+          ) : undefined
         }
       />
       <section className="grid gap-4 sm:grid-cols-3" aria-label="ملخص الأرشيف">
-        {stats.map(({ label, detail, icon: Icon, href, tone }, index) => (
+        {stats.map(({ label, detail, icon: Icon, href, tone }, index) => (statVisible[index] ? (
           <Link href={href} key={label} className="stat-card group">
             <div>
               <p className="text-sm font-medium text-muted-foreground">{label}</p>
@@ -106,10 +141,11 @@ export default async function DashboardPage() {
               <Icon className="size-5" strokeWidth={1.8} aria-hidden="true" />
             </span>
           </Link>
-        ))}
+        ) : null))}
       </section>
 
       <div className="dashboard-panels">
+        {canBrowseGroups ? (
         <Card className="overflow-hidden">
           <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0 p-5">
             <div>
@@ -140,7 +176,7 @@ export default async function DashboardPage() {
                   uploadedAt={file.uploadedAt}
                   groupName={file.group.name}
                   showGroup
-                  hasEdits={editedIds.has(file.id)}
+                  hasEdits={showEditedBadge && editedIds.has(file.id)}
                 />
               ))}
               <div className="flex items-center justify-between border-t bg-muted/30 px-5 py-3 text-xs text-muted-foreground">
@@ -157,15 +193,18 @@ export default async function DashboardPage() {
               <p className="text-sm leading-7 text-muted-foreground">
                 أنشئ مجموعة لتنظيم ملفاتك، ثم ارفع ملف إكسل لبدء البحث في سجلاته.
               </p>
+              {canManageGroups ? (
               <Button asChild variant="outline">
                 <Link href="/groups">
                   إنشاء مجموعة
                   <ArrowUpLeft className="size-4" />
                 </Link>
               </Button>
+              ) : null}
             </CardContent>
           )}
         </Card>
+        ) : null}
 
         <div className="dashboard-supplementary space-y-5 max-xl:space-y-0">
           <Card>
@@ -174,7 +213,7 @@ export default async function DashboardPage() {
               <CardDescription>أدواتك اليومية، بخطوة واحدة</CardDescription>
             </CardHeader>
             <CardContent className="p-2 pt-0">
-              {quickActions.map(({ href, label, description, icon: Icon }) => (
+              {quickActions.filter((action) => actionAllowed[action.href]).map(({ href, label, description, icon: Icon }) => (
                 <Link className="quick-action group" href={href} key={href}>
                   <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-background text-muted-foreground group-hover:border-primary/25 group-hover:text-primary">
                     <Icon className="size-[18px]" aria-hidden="true" />
@@ -193,6 +232,7 @@ export default async function DashboardPage() {
               ))}
             </CardContent>
           </Card>
+          {canBackup ? (
           <div className="rounded-xl border border-primary/15 bg-accent p-5">
             <DatabaseBackup
               className="mb-3 size-6 text-primary"
@@ -211,8 +251,10 @@ export default async function DashboardPage() {
               <ArrowUpLeft className="size-4" />
             </Link>
           </div>
+          ) : null}
         </div>
       </div>
+      {canSearch ? (
       <Link
         href="/search"
         className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed bg-card/50 px-5 py-4 transition hover:border-primary/40 hover:bg-card"
@@ -227,6 +269,7 @@ export default async function DashboardPage() {
           <ChevronLeft className="size-4" />
         </span>
       </Link>
+      ) : null}
     </div>
   );
 }

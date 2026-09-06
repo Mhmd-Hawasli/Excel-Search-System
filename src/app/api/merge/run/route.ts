@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { createMergeSession } from "@/lib/merge/session";
 import { MERGE_FIELD_KEYS } from "@/lib/merge/types";
 
@@ -45,6 +46,8 @@ function hasCommonRule(left: z.infer<typeof mappingSchema>, right: z.infer<typeo
 }
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("merge.view");
+  if (auth instanceof NextResponse) return auth;
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(

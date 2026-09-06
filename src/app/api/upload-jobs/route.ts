@@ -1,5 +1,6 @@
 import { Prisma, UploadJobStatus } from "@/generated/prisma/client";
 import { NextResponse } from "next/server";
+import { apiNotFound, isGroupVisible, requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { uploadConfigSchema, linkedMappingError } from "@/lib/excel/config";
 import { runImportJob } from "@/lib/excel/import-worker";
@@ -7,6 +8,8 @@ import { runImportJob } from "@/lib/excel/import-worker";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
   const parsed = uploadConfigSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(
@@ -37,6 +40,7 @@ export async function POST(request: Request) {
     }),
   ]);
   if (!group) return NextResponse.json({ error: "المجموعة المحددة غير موجودة." }, { status: 404 });
+  if (!(await isGroupVisible(auth.user, group.id))) return apiNotFound();
   const selectedCategoryIds = new Set(
     parsed.data.columns.map((column) => column.categoryId).filter(Boolean),
   );

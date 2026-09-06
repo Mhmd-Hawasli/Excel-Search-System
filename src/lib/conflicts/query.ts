@@ -7,6 +7,23 @@ import {
   type ConflictRuleKey,
 } from "@/lib/conflicts/catalog";
 import type { ConflictRequest } from "@/lib/conflicts/request";
+import type { DataScope } from "@/lib/auth/session-user";
+
+/** Restricts the conflict report to visible groups/files (empty = nothing). */
+export function conflictScopeFilter(scope: DataScope): Prisma.Sql {
+  if (scope.groupIds === null) return Prisma.empty;
+  const conditions: Prisma.Sql[] = [];
+  if (scope.groupIds.length > 0)
+    conditions.push(
+      Prisma.sql`f.group_id IN (${Prisma.join(scope.groupIds.map((id) => Prisma.sql`${id}::uuid`))})`,
+    );
+  if ((scope.fileIds ?? []).length > 0)
+    conditions.push(
+      Prisma.sql`f.id IN (${Prisma.join((scope.fileIds ?? []).map((id) => Prisma.sql`${id}::uuid`))})`,
+    );
+  if (conditions.length === 0) return Prisma.sql`AND FALSE`;
+  return Prisma.sql`AND (${Prisma.join(conditions, " OR ")})`;
+}
 
 // Keep the SQL equivalent of normalizeStored local to this read-only report.
 // In particular, do not strip characters before validating an identifier.
@@ -82,7 +99,8 @@ function rawField(field: (typeof rawFields)[number]) {
   return Prisma.sql`btrim(COALESCE(${original}, ''), ${trimCharacters}) AS ${Prisma.raw(field)}`;
 }
 
-const baseCtes = Prisma.sql`
+function baseCtes(scope: Prisma.Sql) {
+  return Prisma.sql`
   mappings AS (
     SELECT file_id, jsonb_object_agg(standard_field::text, header_raw) FILTER (WHERE standard_field IS NOT NULL) AS mapping
     FROM file_columns GROUP BY file_id
@@ -95,6 +113,7 @@ const baseCtes = Prisma.sql`
       r.sf_functional_category::text AS functional_category_stored
     FROM records r JOIN files f ON f.id = r.file_id LEFT JOIN mappings m ON m.file_id = r.file_id
     WHERE NOT EXISTS (SELECT 1 FROM upload_jobs j WHERE j.file_id = f.id AND j.status IN ('pending', 'parsing', 'inserting'))
+    ${scope}
   ),
   normalized AS MATERIALIZED (
     SELECT s.*, ${normalizeTextSql(Prisma.sql`display_name`)} AS name_key,
@@ -112,6 +131,7 @@ const baseCtes = Prisma.sql`
     SELECT n.*, CASE WHEN name_key <> '' AND mother_key <> '' THEN jsonb_build_array(name_key, mother_key) END AS person_key
     FROM normalized n
   )`;
+}
 
 const dateCtes = Prisma.sql`,
   date_originals AS MATERIALIZED (
@@ -389,7 +409,7 @@ function sortOrderSql(input: import("@/lib/conflicts/request").ConflictRequest):
   return Prisma.sql`${base} ${dir} ${nulls}, issue_number ASC, name_key ASC`;
 }
 
-export function buildConflictQuery(input: ConflictRequest) {
+export function buildConflictQuery(input: ConflictRequest, scope: Prisma.Sql = Prisma.empty) {
   const rules = CONFLICT_RULES.filter(
     (rule) =>
       rule.category === input.category &&
@@ -406,7 +426,7 @@ export function buildConflictQuery(input: ConflictRequest) {
     ? Prisma.sql`ROW_NUMBER() OVER (ORDER BY name_key ASC, mother_key ASC, file_name ASC, row_index ASC, id ASC)`
     : Prisma.sql`DENSE_RANK() OVER (ORDER BY group_key ASC)`;
 
-  return Prisma.sql`WITH ${baseCtes}
+  return Prisma.sql`WITH ${baseCtes(scope)}
     ${rules.some((rule) => rule.field === "date") ? dateCtes : Prisma.empty}
     ${rules.some((rule) => rule.key === "person_job") ? jobCtes : Prisma.empty},
     issues AS (${Prisma.join(selects, " UNION ALL ")}),
@@ -443,9 +463,10 @@ export function buildConflictQuery(input: ConflictRequest) {
 export async function queryConflicts(
   input: ConflictRequest,
   database: Pick<Prisma.TransactionClient, "$queryRaw"> = prisma,
+  scope: Prisma.Sql = Prisma.empty,
 ): Promise<ConflictResponse> {
   const [result] = await database.$queryRaw<Pick<ConflictResponse, "total" | "rows">[]>(
-    buildConflictQuery(input),
+    buildConflictQuery(input, scope),
   );
   const total = result?.total ?? 0;
   return {

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { toLatinDigits } from "@/lib/normalization/arabic";
 import type { ConflictResponse, ConflictSortBy, ConflictSortDir } from "@/lib/conflicts/catalog";
 import type { ConflictRequest } from "@/lib/conflicts/request";
-import { queryConflicts } from "@/lib/conflicts/query";
+import type { DataScope } from "@/lib/auth/session-user";
+import { conflictScopeFilter, queryConflicts } from "@/lib/conflicts/query";
 import { formatFunctionalCategory } from "@/lib/format/functional-category";
 import { formatNationalId } from "@/lib/format/national-id";
 import { formatShamCash } from "@/lib/format/sham-cash";
@@ -37,12 +38,14 @@ export async function ConflictResults({
   request,
   pathname,
   params,
+  scope,
 }: {
   request: ConflictRequest;
   pathname: string;
   params: URLSearchParams;
+  scope: DataScope;
 }) {
-  const data: ConflictResponse = await queryConflicts(request);
+  const data: ConflictResponse = await queryConflicts(request, undefined, conflictScopeFilter(scope));
   const isDefaultSort = request.sortBy === "issueNumber";
 
   if (data.rows.length === 0) {

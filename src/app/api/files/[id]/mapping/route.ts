@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { apiNotFound, isFileVisible, requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
 import { updateFileMappingAndRecompute } from "@/lib/excel/update-mapping-service";
@@ -22,10 +23,14 @@ export async function POST(
 ) {
   const { id: fileId } = await params;
 
+  const auth = await requireApiPermission("upload.run");
+  if (auth instanceof NextResponse) return auth;
+
   const file = await prisma.file.findUnique({ where: { id: fileId } });
   if (!file) {
     return NextResponse.json({ error: "الملف غير موجود." }, { status: 404 });
   }
+  if (!(await isFileVisible(auth.user, file))) return apiNotFound();
 
   let body: unknown;
   try {
@@ -85,11 +90,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: fileId } = await params;
+  const auth = await requireApiPermission("upload.view");
+  if (auth instanceof NextResponse) return auth;
   const file = await prisma.file.findFirst({
     where: { id: fileId },
     include: { columns: { orderBy: { columnIndex: "asc" }, include: { category: true } } },
   });
   if (!file) return NextResponse.json({ error: "الملف غير موجود." }, { status: 404 });
+  if (!(await isFileVisible(auth.user, file))) return apiNotFound();
   return NextResponse.json({
     fileId: file.id,
     name: file.name,

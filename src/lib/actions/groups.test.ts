@@ -31,6 +31,16 @@ vi.mock("@/lib/db/prisma", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+vi.mock("@/lib/auth/session-user", () => ({
+  ACTION_FORBIDDEN_MESSAGE: "غير موجود.",
+  requireActionPermission: vi.fn(async () => ({
+    id: "test-user",
+    username: "tester",
+    displayName: null,
+    permissions: [],
+  })),
+}));
+
 import { createGroup, deleteGroup, updateGroup } from "@/lib/actions/groups";
 import { prisma } from "@/lib/db/prisma";
 

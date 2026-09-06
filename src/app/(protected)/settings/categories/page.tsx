@@ -24,6 +24,7 @@ import {
   CategoryColumnBoard,
   type CategoryBoardGroup,
 } from "@/features/categories/category-column-board";
+import { getSessionUser, hasPermission, requirePagePermission } from "@/lib/auth/session-user";
 import { MutationForm } from "@/components/mutation-form";
 import { PageHeader } from "@/components/page-header";
 import { TypedDeleteButton } from "@/components/typed-delete-button";
@@ -74,6 +75,9 @@ function groupColumns(columns: PageColumn[]) {
 }
 
 export default async function CategoriesPage() {
+  await requirePagePermission("categories.view");
+  const actor = await getSessionUser();
+  const canManage = actor ? hasPermission(actor, "categories.manage") : false;
   const [categories, otherColumns] = await Promise.all([
     prisma.category.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -109,6 +113,7 @@ export default async function CategoriesPage() {
         title="فئات وأعمدة البيانات"
         description="أدر الفئات ورتّب أعمدة المشروع بالسحب والإفلات. الأعمدة المرتبطة بالحقل القياسي نفسه تظهر وتتحرك معًا."
       />
+      {canManage ? (
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -145,6 +150,7 @@ export default async function CategoriesPage() {
           ) : null}
         </CardContent>
       </Card>
+      ) : null}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -185,7 +191,7 @@ export default async function CategoriesPage() {
               </summary>
 
               <div className="border-t">
-                {category.id ? (
+                {category.id ? (canManage ? (
                   <div className="flex flex-col justify-between gap-3 bg-muted/25 p-4 lg:flex-row lg:items-end">
                     <MutationForm action={updateCategory} className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end">
                       <input type="hidden" name="id" value={category.id} />
@@ -224,17 +230,34 @@ export default async function CategoriesPage() {
                       />
                     </div>
                   </div>
-                ) : (
+                ) : null) : (
                   <p className="bg-muted/25 px-5 py-3 text-sm text-muted-foreground">
                     لا يمكن حذف هذه الفئة. تستقبل تلقائيًا الأعمدة غير المصنفة وأعمدة الفئات المحذوفة.
                   </p>
                 )}
 
+                {canManage ? (
                 <CategoryColumnBoard
                   categoryId={category.id}
                   groups={groupedColumns}
                   categoryOptions={categoryOptions}
                 />
+                ) : (
+                <div className="space-y-3 p-4">
+                  {groupedColumns.map((group) => (
+                    <div key={group.key} className="rounded-lg border p-3">
+                      <p className="text-sm font-bold">{group.label}</p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {group.columns.map((column) => (
+                          <span key={column.id} className="rounded-md bg-muted px-2 py-1 text-xs">
+                            {column.headerRaw}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                )}
               </div>
             </details>
           );

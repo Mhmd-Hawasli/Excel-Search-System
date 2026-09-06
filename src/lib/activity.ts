@@ -7,6 +7,8 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   COLUMN_REORDERED: "ترتيب عمود", COLUMN_RECATEGORIZED: "نقل عمود بين الفئات",
   TEMPLATE_CREATED: "حفظ قالب ربط", BACKUP_RESTORED: "استعادة نسخة احتياطية",
   RECORD_EDITED: "تعديل سجل",
+  USER_CREATED: "إنشاء مستخدم", USER_UPDATED: "تحديث مستخدم", USER_DELETED: "حذف مستخدم",
+  USER_PERMISSIONS_UPDATED: "تحديث صلاحيات مستخدم",
 };
 
 export function relativeArabic(date: Date) {

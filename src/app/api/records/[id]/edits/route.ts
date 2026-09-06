@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import {
+  apiNotFound,
+  isFileVisible,
+  requireApiPermission,
+} from "@/lib/auth/session-user";
+import { prisma } from "@/lib/db/prisma";
 import { getRecordEdits, saveRecordEdit } from "@/lib/edits/service";
 
 export const runtime = "nodejs";
@@ -16,6 +22,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const auth = await requireApiPermission("edits.view");
+  if (auth instanceof NextResponse) return auth;
+  const record = await prisma.record.findUnique({
+    where: { id },
+    select: { fileId: true, file: { select: { groupId: true } } },
+  });
+  if (!record) return NextResponse.json({ error: "غير موجود." }, { status: 404 });
+  if (!(await isFileVisible(auth.user, { id: record.fileId, groupId: record.file.groupId })))
+    return apiNotFound();
   try {
     return NextResponse.json(await getRecordEdits(id), {
       headers: { "Cache-Control": "no-store" },
@@ -30,6 +45,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const auth = await requireApiPermission("edits.update");
+  if (auth instanceof NextResponse) return auth;
+  const record = await prisma.record.findUnique({
+    where: { id },
+    select: { fileId: true, file: { select: { groupId: true } } },
+  });
+  if (!record) return NextResponse.json({ error: "غير موجود." }, { status: 404 });
+  if (!(await isFileVisible(auth.user, { id: record.fileId, groupId: record.file.groupId })))
+    return apiNotFound();
   let body: unknown;
   try {
     body = await request.json();

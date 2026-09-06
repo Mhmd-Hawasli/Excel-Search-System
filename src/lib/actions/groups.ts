@@ -4,6 +4,7 @@ import { ActivityAction, Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { MutationResult } from "@/lib/actions/result";
+import { ACTION_FORBIDDEN_MESSAGE, requireActionPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 
 const groupSchema = z.object({
@@ -22,6 +23,8 @@ function databaseMessage(error: unknown) {
 }
 
 export async function createGroup(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("groups.view");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const parsed = groupSchema.safeParse({ name: value(formData, "name"), description: value(formData, "description") });
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "بيانات المجموعة غير صالحة." };
   try {
@@ -38,6 +41,8 @@ export async function createGroup(formData: FormData): Promise<MutationResult> {
 }
 
 export async function updateGroup(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("groups.view");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = value(formData, "id");
   const parsed = groupSchema.safeParse({ name: value(formData, "name"), description: value(formData, "description") });
   if (!id || !parsed.success) return { ok: false, error: parsed.success ? "المجموعة غير موجودة." : parsed.error.issues[0]?.message ?? "بيانات غير صالحة." };
@@ -55,6 +60,8 @@ export async function updateGroup(formData: FormData): Promise<MutationResult> {
 }
 
 export async function reorderGroup(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("groups.view");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = value(formData, "id");
   const direction = value(formData, "direction");
   const groups = await prisma.group.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, sortOrder: true } });
@@ -77,6 +84,8 @@ export async function reorderGroup(formData: FormData): Promise<MutationResult> 
 }
 
 export async function deleteGroup(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("groups.view");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = value(formData, "id");
   const confirmName = value(formData, "confirmName");
   const group = await prisma.group.findUnique({ where: { id }, include: { files: { select: { rowCount: true } } } });

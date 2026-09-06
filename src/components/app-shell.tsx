@@ -23,50 +23,84 @@ import {
   Settings2,
   ScanSearch,
   UserRound,
+  UsersRound,
   X,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
-const navigation = [
+type NavigationLink = { href: string; label: string; icon: typeof Search; permission?: string };
+type NavigationSection = { label: string; links: NavigationLink[] };
+
+const fullNavigation: NavigationSection[] = [
   {
     label: "مساحة العمل",
     links: [
       { href: "/", label: "الرئيسية", icon: LayoutDashboard },
-      { href: "/search", label: "البحث", icon: Search },
-      { href: "/groups", label: "المجموعات", icon: FolderKanban },
-      { href: "/settings/categories", label: "الفئات", icon: Settings2 },
-      { href: "/conflicts", label: "تضارب البيانات", icon: ScanSearch },
+      { href: "/search", label: "البحث", icon: Search, permission: "search.view" },
+      { href: "/groups", label: "المجموعات", icon: FolderKanban, permission: "groups.browse" },
+      { href: "/settings/categories", label: "الفئات", icon: Settings2, permission: "categories.view" },
+      { href: "/conflicts", label: "تضارب البيانات", icon: ScanSearch, permission: "conflicts.view" },
     ],
   },
   {
     label: "استيراد وتصدير",
     links: [
-      { href: "/upload", label: "رفع ملف", icon: FileUp },
-      { href: "/edits", label: "تصدير ملفات الإكسل", icon: Download },
+      { href: "/upload", label: "رفع ملف", icon: FileUp, permission: "upload.view" },
+      { href: "/edits", label: "تصدير ملفات الإكسل", icon: Download, permission: "export.view" },
     ],
   },
   {
     label: "أدوات الدمج",
     links: [
-      { href: "/merge", label: "دمج ملفات", icon: Merge },
-      { href: "/merge-sheets", label: "دمج صفحات ملف إكسل", icon: Layers },
+      { href: "/merge", label: "دمج ملفات", icon: Merge, permission: "merge.view" },
+      { href: "/merge-sheets", label: "دمج صفحات ملف إكسل", icon: Layers, permission: "sheetMerge.view" },
     ],
   },
   {
     label: "إدارة النظام",
     links: [
-      { href: "/settings/backup", label: "النسخ الاحتياطي", icon: DatabaseBackup },
-      { href: "/logs", label: "سجل النشاط", icon: History },
+      { href: "/settings/users", label: "المستخدمون", icon: UsersRound, permission: "users.view" },
+      { href: "/settings/backup", label: "النسخ الاحتياطي", icon: DatabaseBackup, permission: "backup.view" },
+      { href: "/logs", label: "سجل النشاط", icon: History, permission: "activity.view" },
     ],
   },
 ];
+
+export type ShellVisibility = {
+  permissions: string[];
+  username: string;
+  canBrowseGroups: boolean;
+};
+
+function visibleNavigation(visibility: ShellVisibility): NavigationSection[] {
+  const granted = new Set(visibility.permissions);
+  const allowed = (link: NavigationLink) => {
+    if (!link.permission) return true;
+    if (link.permission === "groups.browse")
+      return granted.has("groups.view") || visibility.canBrowseGroups;
+    return granted.has(link.permission);
+  };
+  return fullNavigation
+    .map((section) => ({ ...section, links: section.links.filter(allowed) }))
+    .filter((section) => section.links.length > 0);
+}
 
 function isActive(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function SidebarContent({
+  pathname,
+  navigation,
+  username,
+  onNavigate,
+}: {
+  pathname: string;
+  navigation: NavigationSection[];
+  username: string;
+  onNavigate?: () => void;
+}) {
   return (
     <>
       <Link
@@ -118,7 +152,7 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           <UserRound className="size-[18px]" aria-hidden="true" />
         </span>
         <div className="sidebar-label">
-          <p className="text-sm font-bold">مسؤول الأرشيف</p>
+          <p className="text-sm font-bold">{username}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">مساحة العمل المحلية</p>
         </div>
       </div>
@@ -126,8 +160,17 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  permissions,
+  username,
+  canBrowseGroups,
+}: {
+  children: React.ReactNode;
+} & ShellVisibility) {
   const pathname = usePathname();
+  const navigation = visibleNavigation({ permissions, username, canBrowseGroups });
+  const canSearch = permissions.includes("search.view");
   const [collapsed, setCollapsed] = useLocalStorageFlag("archive-sidebar-collapsed");
   const [mobileOpen, setMobileOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -175,7 +218,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           الانتقال إلى المحتوى
         </a>
         <aside id="desktop-sidebar" className="dashboard-sidebar">
-          <SidebarContent pathname={pathname} />
+          <SidebarContent pathname={pathname} navigation={navigation} username={username} />
         </aside>
         <div className="dashboard-workspace">
           <header className="dashboard-topbar">
@@ -219,31 +262,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="truncate font-semibold">{currentPage}</span>
               </div>
             </div>
-            <form action="/search" role="search" className="global-search">
-              <Search className="size-[18px] shrink-0 text-muted-foreground" aria-hidden="true" />
-              <input
-                ref={searchRef}
-                type="search"
-                name="q"
-                aria-label="البحث العام في جميع السجلات"
-                placeholder="ابحث بالاسم، الرقم الوطني أو الهاتف…"
-                autoComplete="off"
-              />
-              <kbd
-                className="hidden shrink-0 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground sm:block"
-                dir="ltr"
-              >
-                Ctrl K
-              </kbd>
-              <button
-                type="submit"
-                className="search-submit"
-                aria-label="تنفيذ البحث العام"
-                title="بحث"
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-            </form>
+            {canSearch ? (
+              <form action="/search" role="search" className="global-search">
+                <Search className="size-[18px] shrink-0 text-muted-foreground" aria-hidden="true" />
+                <input
+                  ref={searchRef}
+                  type="search"
+                  name="q"
+                  aria-label="البحث العام في جميع السجلات"
+                  placeholder="ابحث بالاسم، الرقم الوطني أو الهاتف…"
+                  autoComplete="off"
+                />
+                <kbd
+                  className="hidden shrink-0 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground sm:block"
+                  dir="ltr"
+                >
+                  Ctrl K
+                </kbd>
+                <button
+                  type="submit"
+                  className="search-submit"
+                  aria-label="تنفيذ البحث العام"
+                  title="بحث"
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+              </form>
+            ) : null}
             <div className="topbar-actions">
               <ThemeToggle />
               <span className="h-5 w-px bg-border" aria-hidden="true" />
@@ -283,7 +328,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <X className="size-5" />
             </Button>
           </Dialog.Close>
-          <SidebarContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+          <SidebarContent
+            pathname={pathname}
+            navigation={navigation}
+            username={username}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

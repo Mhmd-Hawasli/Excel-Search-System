@@ -34,7 +34,7 @@ export default async function LoginPage({
           <LoginForm nextPath={next} />
           <div className="mt-6 flex items-center justify-center gap-2 border-t pt-5 text-xs text-muted-foreground">
             <LockKeyhole className="size-3.5 shrink-0" />
-            الدخول مخصص لمسؤول الأرشيف
+            الدخول مخصص للمستخدمين المصرح لهم
           </div>
         </CardContent>
       </Card>

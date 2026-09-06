@@ -4,6 +4,7 @@ import { ActivityAction, Prisma } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { MutationResult } from "@/lib/actions/result";
+import { ACTION_FORBIDDEN_MESSAGE, requireActionPermission } from "@/lib/auth/session-user";
 import { CATEGORY_LIMIT_MESSAGE, MAX_CUSTOM_CATEGORIES } from "@/lib/categories/config";
 import { prisma } from "@/lib/db/prisma";
 import { assignColumnSortOrders } from "@/lib/categories/column-order";
@@ -17,6 +18,8 @@ const dbMessage = (error: unknown) => error instanceof Prisma.PrismaClientKnownR
 class CategoryLimitError extends Error {}
 
 export async function createCategory(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const parsed = nameSchema.safeParse(text(formData, "name"));
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "اسم الفئة غير صالح." };
   const name = parsed.data;
@@ -36,6 +39,8 @@ export async function createCategory(formData: FormData): Promise<MutationResult
 }
 
 export async function updateCategory(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = text(formData, "id");
   const parsed = nameSchema.safeParse(text(formData, "name"));
   if (!id) return { ok: false, error: "الفئة غير موجودة." };
@@ -53,6 +58,8 @@ export async function updateCategory(formData: FormData): Promise<MutationResult
 }
 
 export async function reorderCategory(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = text(formData, "id");
   const direction = text(formData, "direction");
   const categories = await prisma.category.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, sortOrder: true } });
@@ -71,6 +78,8 @@ export async function reorderCategory(formData: FormData): Promise<MutationResul
 }
 
 export async function deleteCategory(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const id = text(formData, "id");
   const confirmName = text(formData, "confirmName");
   const category = await prisma.category.findUnique({ where: { id }, include: { columns: { select: { fileId: true } } } });
@@ -94,6 +103,8 @@ export async function deleteCategory(formData: FormData): Promise<MutationResult
 
 const uuidSchema = z.string().uuid("معرّف العمود غير صالح.");
 export async function moveColumnToCategory(formData: FormData): Promise<MutationResult> {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false, error: ACTION_FORBIDDEN_MESSAGE };
   const parsedId = uuidSchema.safeParse(text(formData, "columnId"));
   const rawCategoryId = text(formData, "categoryId");
   const targetCategoryId = rawCategoryId === "other" ? null : rawCategoryId;
@@ -128,6 +139,8 @@ export async function reorderCategoryColumnGroups(
   categoryId: string | null,
   orderedGroupKeys: string[],
 ) {
+  const actor = await requireActionPermission("categories.manage");
+  if (!actor) return { ok: false as const, error: ACTION_FORBIDDEN_MESSAGE };
   const parsedCategoryId = categoryId === null ? { success: true as const, data: null } : uuidSchema.safeParse(categoryId);
   const parsedGroups = orderedGroupsSchema.safeParse(orderedGroupKeys);
   if (!parsedCategoryId.success || !parsedGroups.success) return { ok: false as const, error: "ترتيب الأعمدة المرسل غير صالح." };

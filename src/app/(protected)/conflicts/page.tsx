@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { ConflictFilters } from "@/features/conflicts/conflict-filters";
 import { ConflictResults } from "@/features/conflicts/conflict-results";
+import { getSessionUser, hasPermission, requirePagePermission, resolveDataScope } from "@/lib/auth/session-user";
 import { parseConflictParameters } from "@/lib/conflicts/request";
 import { toUrlSearchParams } from "@/utils/query-params";
 
@@ -21,10 +22,20 @@ function ResultsSkeleton() {
 }
 
 export default async function ConflictsPage(props: PageProps<"/conflicts">) {
+  await requirePagePermission("conflicts.view");
+  const actor = await getSessionUser();
+  const canEditFilters = actor ? hasPermission(actor, "conflicts.filters") : false;
   const rawParams = await props.searchParams;
   const params = toUrlSearchParams(rawParams);
   const parsed = parseConflictParameters(params);
   const request = parsed.success ? parsed.data : null;
+  // Without the filters permission the report always runs with the default
+  // filters; only navigation (page, page size, sorting) stays adjustable.
+  const effective =
+    request && !canEditFilters
+      ? { ...request, category: "invalid" as const, field: "all", rule: "all" }
+      : request;
+  const scope = actor ? await resolveDataScope(actor) : { groupIds: [], fileIds: [] };
 
   return (
     <div className="space-y-7">
@@ -33,19 +44,25 @@ export default async function ConflictsPage(props: PageProps<"/conflicts">) {
         title="تضارب البيانات"
         description="راجع البيانات الخاطئة والناقصة وتشابه الأسماء والتضارب بين سجلات جميع الملفات، مع توضيح المشكلة في كل سجل."
       />
-      <ConflictFilters
-        pathname={PAGE_PATH}
-        params={params}
-        category={request?.category ?? "invalid"}
-        field={request?.field ?? "all"}
-        rule={request?.rule ?? "all"}
-        pageSize={request?.pageSize ?? 25}
-      />
+      {canEditFilters ? (
+        <ConflictFilters
+          pathname={PAGE_PATH}
+          params={params}
+          category={request?.category ?? "invalid"}
+          field={request?.field ?? "all"}
+          rule={request?.rule ?? "all"}
+          pageSize={request?.pageSize ?? 25}
+        />
+      ) : (
+        <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+          عرض افتراضي: الحقول غير الصالحة في جميع الحقول.
+        </p>
+      )}
       <section aria-label="نتائج تضارب البيانات" className="space-y-3">
         <h2 className="text-lg font-bold">السجلات المطابقة</h2>
-        {request ? (
+        {effective ? (
           <Suspense key={params.toString()} fallback={<ResultsSkeleton />}>
-            <ConflictResults request={request} pathname={PAGE_PATH} params={params} />
+            <ConflictResults request={effective} pathname={PAGE_PATH} params={params} scope={scope} />
           </Suspense>
         ) : (
           <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">

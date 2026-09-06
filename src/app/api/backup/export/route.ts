@@ -1,8 +1,12 @@
+import { NextResponse } from "next/server";
+import { requireApiPermission } from "@/lib/auth/session-user";
 import { exportBackup } from "@/lib/backup/service";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const auth = await requireApiPermission("backup.export");
+  if (auth instanceof NextResponse) return auth;
   try {
     const date = new Date().toISOString().slice(0, 10);
     return new Response(JSON.stringify(await exportBackup()), { headers: { "content-type": "application/json; charset=utf-8", "content-disposition": `attachment; filename="excel-archive-backup-${date}.json"`, "cache-control": "no-store" } });

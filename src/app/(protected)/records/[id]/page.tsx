@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, ExternalLink, FileStack, IdCard, PencilLine } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getSessionUser, hasPermission, isFileVisible, resolveDataScope } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { RecordDetails } from "@/features/records/record-details";
 import { getRecordEdits } from "@/lib/edits/service";
@@ -44,6 +45,11 @@ function rowData(value: unknown): Record<string, string> {
 
 export default async function RecordPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const actor = await getSessionUser();
+  if (!actor) redirect("/login");
+  const canViewHistory = hasPermission(actor, "edits.view");
+  const canEdit = hasPermission(actor, "edits.update");
+  const showEditedBadge = hasPermission(actor, "edits.badge");
   const record = await prisma.record.findUnique({
     where: { id },
     include: {
@@ -59,12 +65,24 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
     },
   });
   if (!record) notFound();
-  const { edits: recordEdits, editedHeaders } = await getRecordEdits(id);
+  if (!(await isFileVisible(actor, record.file))) notFound();
+  const scope = await resolveDataScope(actor);
+  const { edits: recordEdits, editedHeaders } = canViewHistory
+    ? await getRecordEdits(id)
+    : { edits: [], editedHeaders: {} };
   const related =
     record.nationalIdNum === null
       ? []
       : await prisma.record.findMany({
-          where: { nationalIdNum: record.nationalIdNum, id: { not: record.id } },
+          where: {
+            nationalIdNum: record.nationalIdNum,
+            id: { not: record.id },
+            ...(scope.fileIds === null
+              ? {}
+              : {
+                  fileId: { in: scope.fileIds },
+                }),
+          },
           orderBy: { createdAt: "desc" },
           include: { file: { include: { group: true } } },
         });
@@ -108,7 +126,7 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
               <Badge variant="secondary">
                 {record.file.group.name} — {record.file.name}
               </Badge>
-              {recordEdits.length ? (
+              {showEditedBadge && recordEdits.length ? (
                 <Badge
                   variant="outline"
                   className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
@@ -140,13 +158,18 @@ export default async function RecordPage({ params }: { params: Promise<{ id: str
         <CardContent>
           <RecordDetails
             recordId={record.id}
+            canEdit={canEdit}
             columns={columns}
-            editedHeaders={Object.fromEntries(
-              Object.entries(editedHeaders).map(([header, info]) => [
-                header,
-                { ...info, lastAt: info.lastAt.toISOString() },
-              ]),
-            )}
+            editedHeaders={
+              showEditedBadge
+                ? Object.fromEntries(
+                    Object.entries(editedHeaders).map(([header, info]) => [
+                      header,
+                      { ...info, lastAt: info.lastAt.toISOString() },
+                    ]),
+                  )
+                : {}
+            }
           />
         </CardContent>
       </Card>
