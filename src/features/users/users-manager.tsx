@@ -18,6 +18,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
+import { FileAccessSelector } from "@/features/users/file-access-selector";
+import { selectedPermissionFiles, withPermissionFiles } from "@/lib/users/file-permissions";
 
 export type PermissionRow = { permission: string; groupId: string | null; fileId: string | null };
 
@@ -125,7 +127,9 @@ function PermissionMatrix({
       {catalog.map((group) => (
         <fieldset key={group.key} className="space-y-2.5">
           <legend className="mb-1 text-sm font-extrabold text-primary">{group.label}</legend>
-          {group.permissions.map((permission) => {
+          {group.key === "groups" ? (
+            <FileAccessSelector idPrefix={idPrefix} assignments={assignments} groups={groups} onChange={onChange} />
+          ) : group.permissions.map((permission) => {
             if (!permission.scoped) {
               const checked = hasAssignment(assignments, permission.key);
               return (
@@ -243,7 +247,7 @@ export function UsersManager({
       password: createForm.password,
       displayName: createForm.displayName || undefined,
       isActive: createForm.isActive,
-      permissions: createPermissions,
+      permissions: withPermissionFiles(createPermissions, selectedPermissionFiles(createPermissions, groups)),
     });
     setPending(false);
     if (!result.ok) {
@@ -299,7 +303,7 @@ export function UsersManager({
     setPending(true);
     setNotice(null);
     const result = await requestJson(`/api/users/${user.id}/permissions`, "PUT", {
-      permissions: permsAssignments,
+      permissions: withPermissionFiles(permsAssignments, selectedPermissionFiles(permsAssignments, groups)),
     });
     setPending(false);
     if (!result.ok) {

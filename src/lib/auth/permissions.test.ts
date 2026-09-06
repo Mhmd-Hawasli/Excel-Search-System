@@ -5,6 +5,7 @@ import {
   PERMISSIONS,
   isPermissionKey,
   permissionScopeKind,
+  unifyDataPermissions,
 } from "./permissions";
 
 describe("permission catalog", () => {
@@ -21,12 +22,23 @@ describe("permission catalog", () => {
     }
   });
   it("declares scope only for group/file permissions", () => {
-    expect(permissionScopeKind("groups.viewScoped")).toBe("group");
+    expect(permissionScopeKind("groups.viewScoped")).toBe("groupOrFile");
     expect(permissionScopeKind("files.viewScoped")).toBe("file");
     expect(permissionScopeKind("search.scoped")).toBe("groupOrFile");
     expect(permissionScopeKind("users.view")).toBeNull();
     expect(permissionScopeKind("search.view")).toBeNull();
     expect(permissionScopeKind("nope")).toBeNull();
+  });
+  it("shows one shared data section and upgrades existing grants without granting new files", () => {
+    expect(PERMISSION_GROUPS.some((group) => String(group.key) === "search")).toBe(false);
+    expect(PERMISSION_GROUPS.find((group) => group.key === "groups")?.permissions.map((p) => p.key))
+      .toEqual(["groups.view", "groups.viewScoped"]);
+    expect(unifyDataPermissions([
+      { permission: "files.viewScoped", groupId: null, fileId: "f1" },
+      { permission: "groups.viewScoped", groupId: null, fileId: "f1" },
+      { permission: "search.view", groupId: null, fileId: null },
+      { permission: "search.scoped", groupId: "g2", fileId: null },
+    ])).toEqual([{ permission: "groups.viewScoped", groupId: null, fileId: "f1" }]);
   });
   it("validates known and unknown keys", () => {
     expect(isPermissionKey("backup.restore")).toBe(true);

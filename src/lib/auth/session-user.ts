@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { SESSION_COOKIE } from "@/lib/auth/config";
 import { verifySessionToken } from "@/lib/auth/session";
+import { unifyDataPermissions } from "@/lib/auth/permissions";
 
 export type SessionPermissionRow = {
   permission: string;
@@ -39,12 +40,18 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
-    permissions: user.permissions,
+    permissions: unifyDataPermissions(user.permissions),
   };
 });
 
 /** Global (unscoped) grant check. Scoped rows never satisfy a global permission. */
 export function hasPermission(user: SessionUser, key: string): boolean {
+  if (key === "search.view") {
+    return unifyDataPermissions(user.permissions).some((row) =>
+      (row.permission === "groups.view" && !row.groupId && !row.fileId) ||
+      (row.permission === "groups.viewScoped" && Boolean(row.groupId || row.fileId)),
+    );
+  }
   return user.permissions.some(
     (row) => row.permission === key && row.groupId === null && row.fileId === null,
   );
@@ -66,9 +73,17 @@ export async function resolveDataScope(user: SessionUser): Promise<DataScope> {
   if (hasPermission(user, "groups.view")) return { groupIds: null, fileIds: null };
   const groupIds = new Set<string>();
   const fileIds = new Set<string>();
-  for (const row of user.permissions) {
+  for (const row of unifyDataPermissions(user.permissions)) {
     if (row.permission === "groups.viewScoped" && row.groupId) groupIds.add(row.groupId);
-    if (row.permission === "files.viewScoped" && row.fileId) fileIds.add(row.fileId);
+    if (row.permission === "groups.viewScoped" && row.fileId) fileIds.add(row.fileId);
+  }
+  // Expand only explicitly granted groups, before adding parents for navigation.
+  if (groupIds.size > 0) {
+    const inside = await prisma.file.findMany({
+      where: { groupId: { in: [...groupIds] } },
+      select: { id: true },
+    });
+    for (const file of inside) fileIds.add(file.id);
   }
   if (fileIds.size > 0) {
     const parents = await prisma.file.findMany({
@@ -76,56 +91,16 @@ export async function resolveDataScope(user: SessionUser): Promise<DataScope> {
       select: { groupId: true },
     });
     for (const parent of parents) groupIds.add(parent.groupId);
-  }
-  if (groupIds.size > 0) {
-    const inside = await prisma.file.findMany({
-      where: { groupId: { in: [...groupIds] } },
-      select: { id: true },
-    });
-    for (const file of inside) fileIds.add(file.id);
   }
   return { groupIds: [...groupIds], fileIds: [...fileIds] };
 }
 
 /**
- * Effective search scope, or null when search is not allowed at all. Explicit
- * `search.scoped` rows narrow the browsable scope and can never widen it, so
- * search results never leak records from invisible groups or files.
+ * Viewing and searching always share the same grants.
  */
 export async function resolveSearchScope(user: SessionUser): Promise<DataScope | null> {
   if (!hasPermission(user, "search.view")) return null;
-  const data = await resolveDataScope(user);
-  const scoped = user.permissions.filter(
-    (row) => row.permission === "search.scoped" && (row.groupId ?? row.fileId),
-  );
-  if (scoped.length === 0) return data;
-  const groupIds = new Set<string>();
-  const fileIds = new Set<string>();
-  for (const row of scoped) {
-    if (row.groupId) groupIds.add(row.groupId);
-    if (row.fileId) fileIds.add(row.fileId);
-  }
-  if (fileIds.size > 0) {
-    const parents = await prisma.file.findMany({
-      where: { id: { in: [...fileIds] } },
-      select: { groupId: true },
-    });
-    for (const parent of parents) groupIds.add(parent.groupId);
-  }
-  if (groupIds.size > 0) {
-    const inside = await prisma.file.findMany({
-      where: { groupId: { in: [...groupIds] } },
-      select: { id: true },
-    });
-    for (const file of inside) fileIds.add(file.id);
-  }
-  if (data.groupIds === null) return { groupIds: [...groupIds], fileIds: [...fileIds] };
-  const allowedGroups = new Set(data.groupIds);
-  const allowedFiles = new Set(data.fileIds ?? []);
-  return {
-    groupIds: [...groupIds].filter((id) => allowedGroups.has(id)),
-    fileIds: [...fileIds].filter((id) => allowedFiles.has(id)),
-  };
+  return resolveDataScope(user);
 }
 
 /** Pages: signed-out users go to login, unauthorized users go home (hidden). */
@@ -176,5 +151,5 @@ export async function isFileVisible(
 ): Promise<boolean> {
   const scope = await resolveDataScope(user);
   if (scope.groupIds === null) return true;
-  return scope.groupIds.includes(file.groupId) || (scope.fileIds ?? []).includes(file.id);
+  return (scope.fileIds ?? []).includes(file.id);
 }

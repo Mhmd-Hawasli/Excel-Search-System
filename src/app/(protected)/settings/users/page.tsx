@@ -2,6 +2,7 @@ import { PERMISSION_GROUPS } from "@/lib/auth/permissions";
 import { getSessionUser, hasPermission, requirePagePermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
 import { UsersManager } from "@/features/users/users-manager";
+import { serializeUser } from "@/lib/users/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function UsersPage() {
   ]);
   return (
     <UsersManager
-      initialUsers={users.map((user) => ({ ...user, createdAt: user.createdAt.toISOString() }))}
+      initialUsers={users.map(serializeUser)}
       groups={groups}
       catalog={PERMISSION_GROUPS.map((group) => ({
         key: group.key,

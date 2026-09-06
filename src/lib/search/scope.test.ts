@@ -18,17 +18,19 @@ describe("applySearchScope", () => {
   });
 
   it("defaults to the effective scope when nothing is requested", () => {
-    expect(applySearchScope({ groupIds: [], fileIds: [] }, SCOPED)).toEqual(SCOPED);
+    expect(applySearchScope({ groupIds: [], fileIds: [] }, SCOPED)).toEqual({ ...SCOPED, allowedFileIds: SCOPED.fileIds });
   });
 
   it("intersects requested filters with the scope", () => {
     expect(applySearchScope({ groupIds: ["g1", "g2"], fileIds: [] }, SCOPED)).toEqual({
       groupIds: ["g1"],
       fileIds: [],
+      allowedFileIds: SCOPED.fileIds,
     });
     expect(applySearchScope({ groupIds: [], fileIds: ["f9", "fx"] }, SCOPED)).toEqual({
       groupIds: [],
       fileIds: ["f9"],
+      allowedFileIds: SCOPED.fileIds,
     });
   });
 

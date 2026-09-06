@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isPermissionKey, permissionScopeKind } from "@/lib/auth/permissions";
+import { isPermissionKey, permissionScopeKind, unifyDataPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 
 export const permissionAssignmentSchema = z
@@ -34,7 +34,7 @@ export const createUserSchema = z.object({
   password: z.string().min(6, "كلمة المرور قصيرة جدًا.").max(200),
   displayName: z.string().trim().max(120).optional(),
   isActive: z.boolean().default(true),
-  permissions: z.array(permissionAssignmentSchema).default([]),
+  permissions: z.array(permissionAssignmentSchema).default([]).transform(unifyDataPermissions),
 });
 
 export const updateUserSchema = z.object({
@@ -44,7 +44,7 @@ export const updateUserSchema = z.object({
 });
 
 export const replacePermissionsSchema = z.object({
-  permissions: z.array(permissionAssignmentSchema),
+  permissions: z.array(permissionAssignmentSchema).transform(unifyDataPermissions),
 });
 
 export type PermissionAssignment = z.infer<typeof permissionAssignmentSchema>;
@@ -58,6 +58,26 @@ export function dedupeAssignments(rows: PermissionAssignment[]): PermissionAssig
     seen.add(key);
     return true;
   });
+}
+
+/** Snapshot legacy group/all selections as explicit files when saving permissions. */
+export async function resolveFileAssignments(rows: PermissionAssignment[]): Promise<PermissionAssignment[]> {
+  const normalized = unifyDataPermissions(rows);
+  const all = normalized.some((row) => row.permission === "groups.view");
+  const groupIds = [...new Set(normalized
+    .filter((row) => row.permission === "groups.viewScoped" && row.groupId)
+    .map((row) => row.groupId as string))];
+  const files = all || groupIds.length > 0
+    ? await prisma.file.findMany({
+        where: all ? {} : { groupId: { in: groupIds } },
+        select: { id: true },
+      })
+    : [];
+  return dedupeAssignments([
+    ...normalized.filter((row) => row.permission !== "groups.view" &&
+      !(row.permission === "groups.viewScoped" && row.groupId)),
+    ...files.map((file) => ({ permission: "groups.viewScoped", groupId: null, fileId: file.id })),
+  ]);
 }
 
 /** Ensures every referenced group/file exists. Returns an Arabic error or null. */
@@ -89,7 +109,7 @@ export function serializeUser<T extends {
     displayName: user.displayName,
     isActive: user.isActive,
     createdAt: user.createdAt.toISOString(),
-    permissions: user.permissions.map((row) => ({
+    permissions: unifyDataPermissions(user.permissions).map((row) => ({
       permission: row.permission,
       groupId: row.groupId,
       fileId: row.fileId,

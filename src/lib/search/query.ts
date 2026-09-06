@@ -13,6 +13,8 @@ export type SearchRequest = {
   field?: StandardFieldKey;
   groupIds?: string[];
   fileIds?: string[];
+  /** Server-resolved authorization boundary, independent of requested filters. */
+  allowedFileIds?: string[];
   page: number;
   pageSize: number;
   sortBy?: SearchSortKey;
@@ -186,7 +188,7 @@ export async function searchRecords(input: SearchRequest) {
   const page = Math.max(1, input.page);
   const pageSize = Math.min(100, Math.max(10, input.pageSize));
   const plan = buildSearchPlan(input);
-  if (!input.query.trim() || plan.fields.length === 0)
+  if (!input.query.trim() || plan.fields.length === 0 || input.allowedFileIds?.length === 0)
     return { rows: [] as SearchResultRow[], total: 0, page, pageSize, pageCount: 0 };
   const categoryNeedle = functionalCategoryQuery(input.query);
   const conditions = plan.fields.map((field) =>
@@ -215,7 +217,10 @@ export async function searchRecords(input: SearchRequest) {
       : groupIds.length
         ? groupScope
         : fileScope;
-  const where = Prisma.sql`(${Prisma.join([...conditions, ...fuzzyNameConditions], " OR ")}) ${scope}`;
+  const authorizedFiles = input.allowedFileIds
+    ? Prisma.sql`AND f.id IN (${Prisma.join(input.allowedFileIds.map((id) => Prisma.sql`${id}::uuid`))})`
+    : Prisma.empty;
+  const where = Prisma.sql`(${Prisma.join([...conditions, ...fuzzyNameConditions], " OR ")}) ${scope} ${authorizedFiles}`;
   const fieldCases = plan.fields.map(
     (field, index) => Prisma.sql`WHEN ${conditions[index]} THEN ${field.key}`,
   );

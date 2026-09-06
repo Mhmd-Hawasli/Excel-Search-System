@@ -2,8 +2,9 @@
  * Single source of truth for user permissions.
  *
  * - Global permissions have no scope (`groupId`/`fileId` are null).
- * - Scoped permissions carry exactly one scope: a group (`groups.viewScoped`,
- *   `search.scoped`) or a file (`files.viewScoped`, `search.scoped`).
+ * - `groups.view` grants viewing and searching all data; `groups.viewScoped`
+ *   grants both operations for exactly one group or file per row.
+ * - Legacy search/file keys are accepted for compatibility and normalized on read/write.
  * - Anything a user is not granted is hidden from the UI and rejected by the
  *   API with 404, so restricted users never learn it exists.
  */
@@ -91,23 +92,10 @@ export const PERMISSION_GROUPS = [
     key: "groups",
     label: "المجموعات والملفات",
     permissions: [
-      { key: "groups.view", label: "إظهار المجموعات" },
-      { key: "groups.viewScoped", label: "إظهار مجموعة معينة فقط", scoped: "group" as const },
+      { key: "groups.view", label: "إظهار والبحث في جميع المجموعات والملفات" },
       {
-        key: "files.viewScoped",
-        label: "إظهار ملف ضمن مجموعة معينة فقط",
-        scoped: "file" as const,
-      },
-    ],
-  },
-  {
-    key: "search",
-    label: "البحث",
-    permissions: [
-      { key: "search.view", label: "البحث" },
-      {
-        key: "search.scoped",
-        label: "البحث فقط في مجموعات وملفات يحددها مالك النظام",
+        key: "groups.viewScoped",
+        label: "إظهار والبحث في المجموعات والملفات المحددة",
         scoped: "groupOrFile" as const,
       },
     ],
@@ -138,11 +126,32 @@ const SCOPED_KEYS = new Map<string, PermissionScopeKind>(
 );
 
 export function permissionScopeKind(key: string): PermissionScopeKind | null {
+  if (key === "files.viewScoped") return "file";
+  if (key === "search.scoped") return "groupOrFile";
   return SCOPED_KEYS.get(key) ?? null;
 }
 
 export function isPermissionKey(key: string): key is PermissionKey {
-  return PERMISSION_KEYS.has(key);
+  return PERMISSION_KEYS.has(key) || ["files.viewScoped", "search.view", "search.scoped"].includes(key);
+}
+
+/** Upgrade legacy view grants; old search restrictions no longer form a separate permission. */
+export function unifyDataPermissions<T extends {
+  permission: string;
+  groupId?: string | null;
+  fileId?: string | null;
+}>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.flatMap((row) => {
+    if (row.permission === "search.view" || row.permission === "search.scoped") return [];
+    const next = row.permission === "files.viewScoped"
+      ? { ...row, permission: "groups.viewScoped" }
+      : row;
+    const key = `${next.permission}|${next.groupId ?? ""}|${next.fileId ?? ""}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [next];
+  });
 }
 
 /** Global (unscoped) permission keys granted to a fully privileged owner. */

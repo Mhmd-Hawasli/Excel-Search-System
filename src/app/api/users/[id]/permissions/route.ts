@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { ActivityAction } from "@/generated/prisma/client";
 import { requireApiPermission } from "@/lib/auth/session-user";
+import { unifyDataPermissions } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/db/prisma";
 import {
   dedupeAssignments,
   replacePermissionsSchema,
   validateAssignmentTargets,
+  resolveFileAssignments,
 } from "@/lib/users/validation";
 
 export const runtime = "nodejs";
@@ -26,7 +28,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     },
   });
   if (!user) return NextResponse.json({ error: "غير موجود." }, { status: 404 });
-  return NextResponse.json({ userId: user.id, username: user.username, permissions: user.permissions });
+  return NextResponse.json({ userId: user.id, username: user.username, permissions: unifyDataPermissions(user.permissions) });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -46,10 +48,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const assignments = dedupeAssignments(parsed.data.permissions);
   const targetError = await validateAssignmentTargets(assignments);
   if (targetError) return NextResponse.json({ error: targetError }, { status: 422 });
+  const fileAssignments = await resolveFileAssignments(assignments);
   const permissions = await prisma.$transaction(async (tx) => {
     await tx.userPermission.deleteMany({ where: { userId: id } });
     await tx.userPermission.createMany({
-      data: assignments.map((row) => ({
+      data: fileAssignments.map((row) => ({
         userId: id,
         permission: row.permission,
         groupId: row.groupId ?? null,
@@ -60,7 +63,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       data: {
         action: ActivityAction.USER_PERMISSIONS_UPDATED,
         targetName: existing.username,
-        details: { by: auth.user.username, permissions: assignments.map((row) => row.permission) },
+        details: { by: auth.user.username, permissions: fileAssignments.map((row) => row.permission) },
       },
     });
     return tx.userPermission.findMany({

@@ -8,6 +8,7 @@ import {
   dedupeAssignments,
   serializeUser,
   validateAssignmentTargets,
+  resolveFileAssignments,
 } from "@/lib/users/validation";
 
 export const runtime = "nodejs";
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
   const assignments = dedupeAssignments(parsed.data.permissions);
   const targetError = await validateAssignmentTargets(assignments);
   if (targetError) return NextResponse.json({ error: targetError }, { status: 422 });
+  const fileAssignments = await resolveFileAssignments(assignments);
   try {
     const user = await prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
           displayName: parsed.data.displayName?.trim() ? parsed.data.displayName.trim() : null,
           isActive: parsed.data.isActive,
           permissions: {
-            create: assignments.map((row) => ({
+            create: fileAssignments.map((row) => ({
               permission: row.permission,
               groupId: row.groupId ?? null,
               fileId: row.fileId ?? null,

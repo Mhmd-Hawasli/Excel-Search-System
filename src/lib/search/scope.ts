@@ -10,7 +10,7 @@ import type { DataScope } from "@/lib/auth/session-user";
 export function applySearchScope(
   requested: { groupIds: string[]; fileIds: string[] },
   scope: DataScope,
-): { groupIds: string[]; fileIds: string[] } | null {
+): { groupIds: string[]; fileIds: string[]; allowedFileIds?: string[] } | null {
   if (scope.groupIds === null) return { groupIds: requested.groupIds, fileIds: requested.fileIds };
   const allowedGroups = new Set(scope.groupIds);
   const allowedFiles = new Set(scope.fileIds ?? []);
@@ -25,5 +25,6 @@ export function applySearchScope(
       ? []
       : [...allowedFiles];
   if (groupIds.length === 0 && fileIds.length === 0) return null;
-  return { groupIds, fileIds };
+  // Parent groups are visible for navigation, not grants to every sibling file.
+  return { groupIds, fileIds, allowedFileIds: [...allowedFiles] };
 }
