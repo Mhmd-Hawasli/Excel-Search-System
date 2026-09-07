@@ -12,3 +12,7 @@ coverage/
 tmp/
 generated/
 .pglite-data/
+
+# .NET
+bin/
+obj/

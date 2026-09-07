@@ -1,5 +1,11 @@
 # نظام أرشفة والبحث في ملفات الإكسل
 
+> **Migration in progress.** The legacy Next.js monolith (still in this
+> repository as the implementation reference) is being split into
+> `backend/` (ASP.NET 10 Web API + EF Core) and `frontend/` (Next.js 16,
+> UI-only). See `docs/migration/MIGRATION_PLAN.md` for the target structure,
+> endpoint map, and current progress.
+
 تطبيق داخلي عربي لأرشفة ملفات Excel المتغيرة الأعمدة داخل PostgreSQL، ثم البحث عن الأشخاص عبر جميع الملفات بالاسم أو الرقم الوطني أو الهاتف أو أي حقل قياسي. يحتفظ النظام بالقيم الأصلية كما وردت، ويستخدم قيم ظل مطبّعة للبحث العربي السريع وربط سجلات الشخص نفسه بين الملفات.
 
 ## المتطلبات
