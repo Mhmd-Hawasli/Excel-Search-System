@@ -310,6 +310,7 @@ export function MergeInterface() {
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<MergeClientResult | null>(null);
   const [step, setStep] = useState(0);
+  const [ignoreConfirmation, setIgnoreConfirmation] = useState(false);
 
   const ready = Boolean(
     left.inspection && right.inspection && !left.uploading && !right.uploading && !running,
@@ -333,6 +334,7 @@ export function MergeInterface() {
             sheetName: right.sheetName,
             mapping: right.mapping,
           },
+          ignoreConfirmation,
         },
         (percent, detail) => {
           setRunProgress(percent);
@@ -384,12 +386,12 @@ export function MergeInterface() {
           <section className="space-y-4" aria-label="تحديد أعمدة الربط">
             <h2 className="text-lg font-black">تحديد الأعمدة</h2>
             <p className="text-sm text-muted-foreground">
-              تُقترح الأعمدة تلقائياً من عناوين Excel ويمكن تعديلها. حدد أي عمود يمثل كل حقل،
-              وإذا لم يتوفر الحقل في الملف اتركه «غير مربوط» — وستُطبق القواعد المتاحة فقط. أدخل
-              إما الاسم الثلاثي أو (الاسم واسم الأب والنسبة)، ولا يمكن الجمع بينهما. الربط مؤكد
-              فقط: لا يُربط أي صف إلا بتطابق التأكد (الكلمة الأولى من اسم الأم لقاعدتي الاسم،
-              والكلمة الأولى من الاسم الثلاثي — أو الاسم عند غيابه — لبقية القواعد)، والصفوف بلا
-              تأكد تبقى بلا مفتاح ولا تُصدَّر كغير مؤكد.
+              تُقترح الأعمدة تلقائياً من عناوين Excel ويمكن تعديلها. حدد أي عمود يمثل كل حقل، وإذا
+              لم يتوفر الحقل في الملف اتركه «غير مربوط» — وستُطبق القواعد المتاحة فقط. أدخل إما
+              الاسم الثلاثي أو (الاسم واسم الأب والنسبة)، ولا يمكن الجمع بينهما. الربط مؤكد فقط: لا
+              يُربط أي صف إلا بتطابق التأكد (الكلمة الأولى من اسم الأم لقاعدتي الاسم، والكلمة الأولى
+              من الاسم الثلاثي — أو الاسم عند غيابه — لبقية القواعد)، والصفوف بلا تأكد تبقى بلا
+              مفتاح وتظهر «غير مؤكد» في ملف الكل فقط.
             </p>
             <div className="grid gap-5 xl:grid-cols-2">
               <MappingForm
@@ -449,6 +451,25 @@ export function MergeInterface() {
                 })}
               </ul>
               {runError ? <p className="text-sm text-destructive">{runError}</p> : null}
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition hover:border-primary/50">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 shrink-0 accent-primary"
+                  checked={ignoreConfirmation}
+                  disabled={running}
+                  onChange={(event) => setIgnoreConfirmation(event.target.checked)}
+                  aria-label="ربط موسع بدون شرط التأكيد"
+                />
+                <span>
+                  <span className="block text-sm font-bold">ربط موسع بدون شرط التأكيد</span>
+                  <span className="mt-1 block text-xs leading-6 text-muted-foreground">
+                    تُربط الصفوف بمجرد تطابق قيمة الربط (الاسم أو الرقم) دون اشتراط تطابق التأكد —
+                    بشرط عدم تكرار القيمة داخل الملف وعدم تعدد المرشحين. الأزواج التي يطابق تأكدها
+                    تظهر «مؤكد» والتي لا تطابق تظهر «غير مؤكد» في النتائج وملف الكل، بينما يحوي ملف
+                    المؤكد المؤكدة فقط. راجع غير المؤكدة يدويًا قبل الاعتماد.
+                  </span>
+                </span>
+              </label>
               {running ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">

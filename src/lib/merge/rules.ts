@@ -36,12 +36,17 @@ import {
  *  - Confirmed-only linking: a pair is linked ONLY on an exact confirmation
  *    match. Rows without a usable confirmation stay unlinked, so results and
  *    exports never contain unconfirmed pairs.
++ *    match — unless the caller passes `{ requireConfirmation: false }`
++ *    (relaxed mode): then any single link-value candidate is linked and the
++ *    confirmation is kept only as an informational مؤكد/غير مؤكد flag.
  *  - Every rule requires its link value to appear exactly once inside each
  *    file (Excel COUNTIF(column, current cell) = 1): a value repeated
  *    anywhere in the file can never identify a single row, so every row
- *    carrying it is skipped, whatever the confirmation is.
- *  - When a confirmation column/cell is missing the rows stay unlinked
- *    (no key is assigned at all).
+ *    carrying it is skipped, whatever the confirmation is. This uniqueness
+ *    rule also applies in relaxed mode.
++ *  - Relaxed mode still links at most one right row per left row: several
++ *    candidates for the same link value stay unlinked instead of pairing
++ *    arbitrarily.
  */
 
 type PreparedRow = {
@@ -165,11 +170,33 @@ export function applyRules(
   rightMapping: MergeMapping,
   startKey: number,
   onRuleDone?: (rule: MergeRuleKey, index: number, total: number) => void,
+  options?: { requireConfirmation?: boolean },
 ): { pairs: MatchPair[]; nextKey: number } {
+  const requireConfirmation = options?.requireConfirmation ?? true;
   let counter = startKey;
   const pairs: MatchPair[] = [];
   const preparedLeft = left.map((row) => preparedRow(row, leftMapping));
   const preparedRight = right.map((row) => preparedRow(row, rightMapping));
+
+  function linkPair(rule: RuleDefinition, a: PreparedRow, chosen: PreparedRow, confirmed: boolean) {
+    const key = String(counter).padStart(4, "0");
+    counter += 1;
+    a.row.key = key;
+    a.row.rule = rule.key;
+    a.row.confirmed = confirmed;
+    chosen.row.key = key;
+    chosen.row.rule = rule.key;
+    chosen.row.confirmed = confirmed;
+    pairs.push({
+      key,
+      rule: rule.key,
+      leftRowNumber: a.row.rowNumber,
+      rightRowNumber: chosen.row.rowNumber,
+      confirmed,
+      leftValue: linkFor(rule, a).display,
+      rightValue: linkFor(rule, chosen).display,
+    });
+  }
 
   MERGE_RULES.forEach((rule, ruleIndex) => {
     const ambiguousLeft = ambiguousLinks(preparedLeft, rule);
@@ -197,41 +224,32 @@ export function applyRules(
 
       // Confirmation: the left value must match exactly one candidate with
       // the same confirmation; anything else stays unlinked (confirmed-only).
+      // Relaxed mode links the single candidate whatever the confirmation is.
       const aConfirm = confirmFor(rule, a);
       let chosen: PreparedRow | null = null;
-      if (aConfirm) {
-        const exact = candidates.filter((b) => confirmFor(rule, b) === aConfirm);
-        if (exact.length === 1) chosen = exact[0];
-        else if (exact.length === 0) {
-          const loose = candidates.filter((b) => !confirmFor(rule, b));
-          if (loose.length === 1) chosen = loose[0];
+      let confirmed = false;
+      if (requireConfirmation) {
+        if (aConfirm) {
+          const exact = candidates.filter((b) => confirmFor(rule, b) === aConfirm);
+          if (exact.length === 1) chosen = exact[0];
+          else if (exact.length === 0) {
+            const loose = candidates.filter((b) => !confirmFor(rule, b));
+            if (loose.length === 1) chosen = loose[0];
+          }
+        } else if (candidates.length === 1) {
+          chosen = candidates[0];
         }
-      } else if (candidates.length === 1) {
+        if (!chosen) continue;
+        confirmed = aConfirm !== "" && confirmFor(rule, chosen) === aConfirm;
+        // Confirmed-only linking: unverifiable pairs stay unlinked so neither
+        // the results nor the export ever contain "غير مؤكد" values.
+        if (!confirmed) continue;
+      } else {
+        if (candidates.length !== 1) continue;
         chosen = candidates[0];
+        confirmed = aConfirm !== "" && confirmFor(rule, chosen) === aConfirm;
       }
-      if (!chosen) continue;
-
-      const confirmed = aConfirm !== "" && confirmFor(rule, chosen) === aConfirm;
-      // Confirmed-only linking: unverifiable pairs stay unlinked so neither
-      // the results nor the export ever contain "غير مؤكد" values.
-      if (!confirmed) continue;
-      const key = String(counter).padStart(4, "0");
-      counter += 1;
-      a.row.key = key;
-      a.row.rule = rule.key;
-      a.row.confirmed = confirmed;
-      chosen.row.key = key;
-      chosen.row.rule = rule.key;
-      chosen.row.confirmed = confirmed;
-      pairs.push({
-        key,
-        rule: rule.key,
-        leftRowNumber: a.row.rowNumber,
-        rightRowNumber: chosen.row.rowNumber,
-        confirmed,
-        leftValue: aLink.display,
-        rightValue: linkFor(rule, chosen).display,
-      });
+      linkPair(rule, a, chosen, confirmed);
     }
     onRuleDone?.(rule.key, ruleIndex, MERGE_RULES.length);
   });
@@ -330,6 +348,7 @@ export function runMerge(
   right: MergeTableInput,
   startKey = 1,
   onRuleDone?: (rule: MergeRuleKey, index: number, total: number) => void,
+  options?: { requireConfirmation?: boolean },
 ): MergeResult {
   const leftRows: MergeRow[] = left.rows.map((row) => ({
     rowNumber: row.rowNumber,
@@ -347,7 +366,15 @@ export function runMerge(
     rule: null,
     confirmed: false,
   }));
-  const { pairs } = applyRules(leftRows, rightRows, left.mapping, right.mapping, startKey, onRuleDone);
+  const { pairs } = applyRules(
+    leftRows,
+    rightRows,
+    left.mapping,
+    right.mapping,
+    startKey,
+    onRuleDone,
+    options,
+  );
   return {
     left: leftRows,
     right: rightRows,
@@ -427,8 +454,9 @@ export function relinkUnmatched(
   leftMapping: MergeMapping,
   rightMapping: MergeMapping,
   startKey: number,
+  options?: { requireConfirmation?: boolean },
 ): MergeResult {
-  applyRules(left, right, leftMapping, rightMapping, startKey);
+  applyRules(left, right, leftMapping, rightMapping, startKey, undefined, options);
   return summarizeResult(left, right, leftMapping, rightMapping);
 }
 

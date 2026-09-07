@@ -1,23 +1,37 @@
 import ExcelJS from "exceljs";
-import { applyRowFormats, THIN_CELL_BORDER, type RowFormats } from "@/lib/excel/cell-style";
+import { THIN_CELL_BORDER } from "@/lib/excel/cell-style";
 import { uniqueTableColumnNames } from "@/lib/excel/table-columns";
 import { parseStoredDate } from "@/lib/format/date";
-import { MERGE_KEY_HEADER, MERGE_SHEET_NAMES, type MergeRow } from "@/lib/merge/types";
+import {
+  MERGE_CONFIRM_HEADER,
+  MERGE_CONFIRMED_TEXT,
+  MERGE_KEY_HEADER,
+  MERGE_SHEET_NAMES,
+  MERGE_UNCONFIRMED_TEXT,
+  type MergeRow,
+} from "@/lib/merge/types";
 
 /**
  * Exports the merge result as one workbook with three sheets:
  *
  * 1. "الدمج الكامل" — one row per linked pair (left cells + right cells side
  *    by side), followed by the unlinked rows of each table with a blank
- *    counterpart. Columns: link key, then every column of table A renamed as
- *    `A_<header>` and every column of table B renamed as `B_<header>`.
- * 2. "الجدول A" — all rows of the first table with the link key first.
- * 3. "الجدول B" — all rows of the second table with the link key first.
+ *    counterpart (all-cases scope only).
+ * 2. "الجدول A" — rows of the first table with the link key first.
+ * 3. "الجدول B" — rows of the second table with the link key first.
+ *
+ * Two scopes:
+ * - "confirmed" — linked (confirmed) rows only, link key first.
+ * - "all" — every row, with the confirmation ("التأكد": مؤكد/غير مؤكد) as the
+ *   SECOND column right after the link key.
+ *
+ * Source cell colors are deliberately ignored (fills/fonts from the uploaded
+ * workbooks are never read): they dominate export time on large tables while
+ * adding no information to a merge result. Only the workbook's own structural
+ * styling (table theme, header, borders, widths, row heights) is applied.
  *
  * Every sheet is sorted by the link key (unlinked rows last, keeping their
- * original order). Visual formatting matches the rest of the system: blue
- * Table Style Light 9, right-to-left views, fit-content column widths and
- * 30pt rows.
+ * original order).
  */
 
 const TABLE_THEME = "TableStyleLight9";
@@ -93,7 +107,7 @@ function writeTable(
   workbook: ExcelJS.Workbook,
   sheetName: string,
   headers: string[],
-  rows: Array<{ cells: string[]; formats: RowFormats | null }>,
+  rows: Array<{ cells: string[] }>,
 ) {
   const sheet = workbook.addWorksheet(sheetName, { views: [{ rightToLeft: true }] });
   const exportHeaders = uniqueTableColumnNames(headers);
@@ -129,19 +143,14 @@ function writeTable(
   for (const { row, col } of dateCells) {
     sheet.getRow(row + 2).getCell(col + 1).numFmt = DATE_NUMBER_FORMAT;
   }
-  // Source colors: row fill covers the whole exported row, font colors land
-  // on their original columns (already expressed in export coordinates).
-  rows.forEach(({ formats }, rowIndex) => {
-    if (formats) applyRowFormats(sheet, rowIndex + 2, formats, exportHeaders.length);
-  });
   applyColumnWidths(sheet, exportHeaders, exportRows);
   styleTableRange(sheet, exportRows.length, exportHeaders.length);
 }
 
 /** Prefixes every source header (`A_<header>`) so the two sides never collide. */
 function prefixedHeaders(prefix: string, headers: string[]): string[] {
-  return headers.map((header, index) =>
-    `${prefix}_${header.trim() === "" ? `عمود ${index + 1}` : header}`,
+  return headers.map(
+    (header, index) => `${prefix}_${header.trim() === "" ? `عمود ${index + 1}` : header}`,
   );
 }
 
@@ -150,100 +159,102 @@ function prefixedHeaders(prefix: string, headers: string[]): string[] {
  * linked rows first in key order, unlinked rows last keeping their relative
  * order.
  */
-function sortByLinkKey(rows: Array<{ cells: string[]; formats: RowFormats | null }>) {
+function sortByLinkKey(rows: Array<{ cells: string[] }>) {
   const linked = rows.filter((row) => row.cells[0] !== "");
   const unlinked = rows.filter((row) => row.cells[0] === "");
   linked.sort((a, b) => a.cells[0].localeCompare(b.cells[0], "en", { numeric: true }));
   return [...linked, ...unlinked];
 }
 
-/** Shifts a per-column map from source-column to export-column coordinates. */
-function shiftedMap(
-  values: Record<string, string> | undefined,
-  offset: number,
-): Record<string, string> {
-  const shifted: Record<string, string> = {};
-  if (!values) return shifted;
-  for (const [key, argb] of Object.entries(values)) {
-    const index = Number(key);
-    if (Number.isInteger(index) && index >= 0) shifted[String(index + offset)] = argb;
-  }
-  return shifted;
+export type MergeExportScope = "confirmed" | "all";
+
+function confirmText(row: MergeRow): string {
+  return row.key && row.confirmed ? MERGE_CONFIRMED_TEXT : MERGE_UNCONFIRMED_TEXT;
 }
 
-function combinedFormats(
-  left: RowFormats | null | undefined,
-  right: RowFormats | null | undefined,
-  leftWidth: number,
-): RowFormats | null {
-  if (!left && !right) return null;
-  return {
-    fills: { ...shiftedMap(left?.fills, 1), ...shiftedMap(right?.fills, 1 + leftWidth) },
-    fonts: { ...shiftedMap(left?.fonts, 1), ...shiftedMap(right?.fonts, 1 + leftWidth) },
-  };
+/** Linked AND confirmed (relaxed sessions may carry linked-but-unconfirmed rows). */
+function isConfirmedLink(row: MergeRow): boolean {
+  return row.key !== null && row.confirmed;
 }
 
 /**
  * Builds the "full merge" grid: linked pairs first (one row per key, left
- * cells followed by right cells), then the leftover rows of each side with a
- * blank counterpart. Formats travel per half: the link-key column stays
- * unformatted, the A half keeps the left row colors, the B half the right
- * row colors.
+ * cells followed by right cells), then — in the "all" scope only — the
+ * leftover rows of each side with a blank counterpart. In the "all" scope the
+ * confirmation column sits second, right after the link key.
  */
 function fullMergeGrid(
   left: { headers: string[]; rows: MergeRow[] },
   right: { headers: string[]; rows: MergeRow[] },
-): { headers: string[]; rows: Array<{ cells: string[]; formats: RowFormats | null }> } {
-  const headers = [
-    MERGE_KEY_HEADER,
-    ...prefixedHeaders("A", left.headers),
-    ...prefixedHeaders("B", right.headers),
-  ];
+  scope: MergeExportScope,
+): { headers: string[]; rows: Array<{ cells: string[] }> } {
+  const headers =
+    scope === "all"
+      ? [
+          MERGE_KEY_HEADER,
+          MERGE_CONFIRM_HEADER,
+          ...prefixedHeaders("A", left.headers),
+          ...prefixedHeaders("B", right.headers),
+        ]
+      : [
+          MERGE_KEY_HEADER,
+          ...prefixedHeaders("A", left.headers),
+          ...prefixedHeaders("B", right.headers),
+        ];
   const blankLeft = new Array<string>(left.headers.length).fill("");
   const blankRight = new Array<string>(right.headers.length).fill("");
+  const prefix = (row: MergeRow) =>
+    scope === "all" ? [row.key ?? "", confirmText(row)] : [row.key ?? ""];
 
+  // Confirmed scope pairs confirmed links only; the all scope pairs every
+  // keyed row (confirmed or not) and appends the keyless leftovers.
+  const pairEligible = (row: MergeRow) =>
+    scope === "all" ? row.key !== null : isConfirmedLink(row);
   const rightByKey = new Map<string, MergeRow>();
-  for (const row of right.rows) if (row.key && !rightByKey.has(row.key)) rightByKey.set(row.key, row);
+  for (const row of right.rows)
+    if (pairEligible(row) && !rightByKey.has(row.key!)) rightByKey.set(row.key!, row);
   const consumedKeys = new Set<string>();
-  const gridRows: Array<{ cells: string[]; formats: RowFormats | null }> = [];
+  const gridRows: Array<{ cells: string[] }> = [];
 
   const linkedLeft = left.rows
-    .filter((row) => row.key)
+    .filter((row) => pairEligible(row))
     .sort((a, b) => a.key!.localeCompare(b.key!, "en", { numeric: true }));
   for (const row of linkedLeft) {
     const partner = rightByKey.get(row.key!);
     if (partner) consumedKeys.add(row.key!);
     gridRows.push({
-      cells: [row.key ?? "", ...row.cells, ...(partner ? partner.cells : blankRight)],
-      formats: combinedFormats(row.formats, partner?.formats, left.headers.length),
+      cells: [...prefix(row), ...row.cells, ...(partner ? partner.cells : blankRight)],
     });
   }
-  for (const row of left.rows.filter((row) => !row.key))
-    gridRows.push({
-      cells: ["", ...row.cells, ...blankRight],
-      formats: combinedFormats(row.formats, undefined, left.headers.length),
-    });
-  for (const row of right.rows.filter((row) => !row.key || !consumedKeys.has(row.key)))
-    gridRows.push({
-      cells: ["", ...blankLeft, ...row.cells],
-      formats: combinedFormats(undefined, row.formats, left.headers.length),
-    });
+  if (scope === "all") {
+    for (const row of left.rows.filter((row) => !row.key))
+      gridRows.push({ cells: [...prefix(row), ...row.cells, ...blankRight] });
+    for (const row of right.rows.filter((row) => !row.key || !consumedKeys.has(row.key)))
+      gridRows.push({ cells: [...prefix(row), ...blankLeft, ...row.cells] });
+  }
 
   return { headers, rows: sortByLinkKey(gridRows) };
 }
 
-function singleTableGrid(table: { headers: string[]; rows: MergeRow[] }): {
+function singleTableGrid(
+  table: { headers: string[]; rows: MergeRow[] },
+  scope: MergeExportScope,
+): {
   headers: string[];
-  rows: Array<{ cells: string[]; formats: RowFormats | null }>;
+  rows: Array<{ cells: string[] }>;
 } {
+  const rows = scope === "all" ? table.rows : table.rows.filter((row) => isConfirmedLink(row));
   return {
-    headers: [MERGE_KEY_HEADER, ...table.headers],
+    headers:
+      scope === "all"
+        ? [MERGE_KEY_HEADER, MERGE_CONFIRM_HEADER, ...table.headers]
+        : [MERGE_KEY_HEADER, ...table.headers],
     rows: sortByLinkKey(
-      table.rows.map((row) => ({
-        cells: [row.key ?? "", ...row.cells],
-        formats: row.formats
-          ? { fills: shiftedMap(row.formats.fills, 1), fonts: shiftedMap(row.formats.fonts, 1) }
-          : null,
+      rows.map((row) => ({
+        cells:
+          scope === "all"
+            ? [row.key ?? "", confirmText(row), ...row.cells]
+            : [row.key ?? "", ...row.cells],
       })),
     ),
   };
@@ -252,15 +263,16 @@ function singleTableGrid(table: { headers: string[]; rows: MergeRow[] }): {
 export async function exportMergeWorkbook(
   left: { headers: string[]; rows: MergeRow[] },
   right: { headers: string[]; rows: MergeRow[] },
+  scope: MergeExportScope = "confirmed",
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "نظام أرشفة ملفات الإكسل";
   workbook.created = new Date();
-  const full = fullMergeGrid(left, right);
+  const full = fullMergeGrid(left, right, scope);
   writeTable(workbook, MERGE_SHEET_NAMES[0], full.headers, full.rows);
-  const tableA = singleTableGrid(left);
+  const tableA = singleTableGrid(left, scope);
   writeTable(workbook, MERGE_SHEET_NAMES[1], tableA.headers, tableA.rows);
-  const tableB = singleTableGrid(right);
+  const tableB = singleTableGrid(right, scope);
   writeTable(workbook, MERGE_SHEET_NAMES[2], tableB.headers, tableB.rows);
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

@@ -11,6 +11,8 @@ export type MergeSession = {
   id: string;
   createdAt: number;
   updatedAt: number;
+  /** True when this session was linked without confirmation conditions. */
+  ignoreConfirmation: boolean;
   left: { filename: string; sheetName: string; headers: string[]; rows: MergeRow[] };
   right: { filename: string; sheetName: string; headers: string[]; rows: MergeRow[] };
   mappings: { left: MergeMapping; right: MergeMapping };
@@ -43,6 +45,7 @@ export async function createMergeSession(
   onProgress?.(20, "reading", "قراءة الجدول الثاني…");
   const rightSheet = await readMergeSheet(input.right.token, input.right.sheetName);
   onProgress?.(30, "rules", null);
+  const options = { requireConfirmation: !(input.ignoreConfirmation ?? false) };
   const result = runMerge(
     { headers: leftSheet.headers, rows: leftSheet.rows, mapping: input.left.mapping },
     { headers: rightSheet.headers, rows: rightSheet.rows, mapping: input.right.mapping },
@@ -53,12 +56,14 @@ export async function createMergeSession(
         "rules",
         `تطبيق القاعدة ${index + 1} من ${total}…`,
       ),
+    options,
   );
   onProgress?.(95, "done", "تجهيز النتائج…");
   const session: MergeSession = {
     id: randomUUID(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    ignoreConfirmation: input.ignoreConfirmation ?? false,
     left: {
       filename: "الجدول الأول",
       sheetName: leftSheet.sheetName,
@@ -118,6 +123,7 @@ export function deletePairKeyAndRelink(
     session.mappings.left,
     session.mappings.right,
     startKey,
+    { requireConfirmation: !session.ignoreConfirmation },
   );
   session.updatedAt = Date.now();
   session.left.rows = result.left;

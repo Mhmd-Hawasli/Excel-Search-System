@@ -449,7 +449,8 @@ describe("delete key and re-link", () => {
 });
 
 describe("applyRules", () => {
-  it("skips rows that already carry a key", () => {    const leftRow: MergeRow = {
+  it("skips rows that already carry a key", () => {
+    const leftRow: MergeRow = {
       rowNumber: 2,
       cells: values({ fullName: "محمد" }),
       key: "0001",
@@ -487,6 +488,93 @@ describe("applyRules", () => {
     const result = runMerge(table(leftCells), table(rightCells), 1, (rule) => seen.push(rule));
     expect(result.pairs).toHaveLength(size);
     expect(result.pairs.every((pair) => pair.confirmed)).toBe(true);
-    expect(seen).toEqual(["full_name", "composed_name", "national_id", "personal_no", "sham_cash", "phone"]);
+    expect(seen).toEqual([
+      "full_name",
+      "composed_name",
+      "national_id",
+      "personal_no",
+      "sham_cash",
+      "phone",
+    ]);
+  });
+});
+
+describe("relaxed mode: ignoreConfirmation", () => {
+  const relaxed = { requireConfirmation: false };
+
+  it("links on the national ID alone and flags the pair unconfirmed", () => {
+    const strict = runMerge(
+      table([row(2, { fullName: "محمد علي", motherName: "فاطمة", nationalId: "10" })]),
+      table([row(2, { fullName: "سامي نور", motherName: "سلمى", nationalId: "10" })]),
+    );
+    expect(strict.pairs).toHaveLength(0);
+    const loose = runMerge(
+      table([row(2, { fullName: "محمد علي", motherName: "فاطمة", nationalId: "10" })]),
+      table([row(2, { fullName: "سامي نور", motherName: "سلمى", nationalId: "10" })]),
+      1,
+      undefined,
+      relaxed,
+    );
+    expect(loose.pairs).toHaveLength(1);
+    expect(loose.pairs[0]).toMatchObject({
+      rule: "national_id",
+      leftRowNumber: 2,
+      rightRowNumber: 2,
+      confirmed: false,
+    });
+    expect(loose.left[0].key).toBe("0001");
+    expect(loose.left[0].confirmed).toBe(false);
+  });
+
+  it("still marks confirmation when it happens to match", () => {
+    const loose = runMerge(
+      table([row(2, { fullName: "محمد علي", motherName: "فاطمة", nationalId: "10" })]),
+      table([row(2, { fullName: "محمد علي", motherName: "فاطمة", nationalId: "10" })]),
+      1,
+      undefined,
+      relaxed,
+    );
+    expect(loose.pairs).toHaveLength(1);
+    expect(loose.pairs[0].confirmed).toBe(true);
+  });
+
+  it("links names without mother confirmation", () => {
+    const loose = runMerge(
+      table([row(2, { fullName: "محمد أحمد علي", motherName: "فاطمة" })]),
+      table([row(2, { fullName: "محمد احمد علي", motherName: "سليمة" })]),
+      1,
+      undefined,
+      relaxed,
+    );
+    expect(loose.pairs).toHaveLength(1);
+    expect(loose.pairs[0]).toMatchObject({ rule: "full_name", confirmed: false });
+  });
+
+  it("keeps the uniqueness rule: repeated values never link, even relaxed", () => {
+    const loose = runMerge(
+      table([
+        row(2, { fullName: "أ", motherName: "م", nationalId: "10" }),
+        row(3, { fullName: "ب", motherName: "م", nationalId: "10" }),
+      ]),
+      table([row(2, { fullName: "ج", motherName: "م", nationalId: "10" })]),
+      1,
+      undefined,
+      relaxed,
+    );
+    expect(loose.pairs).toHaveLength(0);
+  });
+
+  it("skips several candidates for one link instead of pairing arbitrarily", () => {
+    const loose = runMerge(
+      table([row(2, { fullName: "أ", motherName: "م", nationalId: "10" })]),
+      table([
+        row(2, { fullName: "ب", motherName: "م", nationalId: "10" }),
+        row(3, { fullName: "ج", motherName: "م", nationalId: "10" }),
+      ]),
+      1,
+      undefined,
+      relaxed,
+    );
+    expect(loose.pairs).toHaveLength(0);
   });
 });

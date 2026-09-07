@@ -4,7 +4,14 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CircleCheck, CircleX, Download, LoaderCircle, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  CircleCheck,
+  CircleX,
+  Download,
+  LoaderCircle,
+  RotateCcw,
+  TriangleAlert,
+} from "lucide-react";
 import {
   type MergeRow,
   type MergeRuleKey,
@@ -16,6 +23,7 @@ export type MergeClientResult = {
   sessionId: string;
   leftHeaders: string[];
   rightHeaders: string[];
+  ignoreConfirmation: boolean;
   left: MergeRow[];
   right: MergeRow[];
   pairs: Array<{
@@ -162,14 +170,17 @@ export function ResultsView({
   result: MergeClientResult;
   onReset: () => void;
 }) {
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<null | "confirmed" | "all">(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  async function downloadExport() {
-    setExporting(true);
+  async function downloadExport(scope: "confirmed" | "all") {
+    if (exporting) return;
+    setExporting(scope);
     setExportError(null);
     try {
-      const response = await fetch(`/api/merge/export?sessionId=${result.sessionId}`);
+      const response = await fetch(
+        `/api/merge/export?sessionId=${result.sessionId}&scope=${scope}`,
+      );
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error ?? "تعذر تصدير الملف.");
@@ -178,7 +189,10 @@ export function ResultsView({
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `دمج-الملفات-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      anchor.download =
+        scope === "all"
+          ? `دمج-الملفات-كامل-${new Date().toISOString().slice(0, 10)}.xlsx`
+          : `دمج-الملفات-مؤكد-${new Date().toISOString().slice(0, 10)}.xlsx`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -186,22 +200,52 @@ export function ResultsView({
     } catch (error) {
       setExportError(error instanceof Error ? error.message : "تعذر تصدير الملف.");
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   }
 
   return (
     <div className="space-y-7">
+      {result.ignoreConfirmation ? (
+        <div
+          className="flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+          role="status"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <p>
+            وضع موسع بدون شرط التأكيد: رُبطت الصفوف بتطابق قيمة الربط فقط. الأزواج «غير المؤكدة»
+            تحتاج مراجعة يدوية قبل الاعتماد — ملف المؤكد يستبعدها تلقائيًا.
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusBanner status={result.status} />
         <div className="flex flex-wrap gap-2">
-          <Button variant="default" onClick={() => void downloadExport()} disabled={exporting}>
-            {exporting ? (
+          <Button
+            variant="default"
+            onClick={() => void downloadExport("confirmed")}
+            disabled={exporting !== null}
+            title="ملف Excel بالحالات المرتبطة المؤكدة فقط"
+          >
+            {exporting === "confirmed" ? (
               <LoaderCircle className="size-4 animate-spin" />
             ) : (
               <Download className="size-4" />
             )}
-            {exporting ? `جارٍ تصدير الملف…` : "تصدير ملف Excel"}
+            {exporting === "confirmed" ? `جارٍ تصدير المؤكد…` : "تصدير المؤكد Excel"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void downloadExport("all")}
+            disabled={exporting !== null}
+            title="ملف Excel بجميع الحالات مع عمود التأكد (مؤكد/غير مؤكد) ثانيًا"
+          >
+            {exporting === "all" ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {exporting === "all" ? `جارٍ تصدير الكل…` : "تصدير الكل مع التأكد"}
           </Button>
           <Button variant="outline" onClick={onReset}>
             <RotateCcw className="size-4" />
@@ -258,8 +302,9 @@ export function ResultsView({
       <div className="flex items-start gap-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
         <CircleX className="mt-0.5 size-4 shrink-0" />
         <p>
-          نتائج الدمج مؤقتة وتختفي عند إغلاق الصفحة أو إعادة تشغيل الخادم. صدّر ملف Excel
-          للاحتفاظ بالنتيجة الكاملة.
+          نتائج الدمج مؤقتة وتختفي عند إغلاق الصفحة أو إعادة تشغيل الخادم. صدّر ملف المؤكد للحالات
+          المرتبطة فقط، أو ملف الكل لجميع الحالات مع عمود التأكد (مؤكد/غير مؤكد) ثانيًا — دون ألوان
+          المصدر لتسريع التصدير.
         </p>
       </div>
     </div>

@@ -24,6 +24,7 @@ const tableSchema = z.object({
 const bodySchema = z.object({
   left: tableSchema,
   right: tableSchema,
+  ignoreConfirmation: z.boolean().optional(),
 });
 
 function hasCommonRule(left: z.infer<typeof mappingSchema>, right: z.infer<typeof mappingSchema>) {
@@ -71,8 +72,9 @@ export async function POST(request: Request) {
       const send = (message: unknown) =>
         controller.enqueue(encoder.encode(`${JSON.stringify(message)}\n`));
       try {
-        const { session, result } = await createMergeSession(parsed.data, (percent, _stage, detail) =>
-          send({ type: "progress", percent, detail }),
+        const { session, result } = await createMergeSession(
+          parsed.data,
+          (percent, _stage, detail) => send({ type: "progress", percent, detail }),
         );
         send({
           type: "result",
@@ -80,11 +82,15 @@ export async function POST(request: Request) {
             sessionId: session.id,
             leftHeaders: session.left.headers,
             rightHeaders: session.right.headers,
+            ignoreConfirmation: session.ignoreConfirmation,
             ...result,
           },
         });
       } catch (error) {
-        send({ type: "error", error: error instanceof Error ? error.message : "تعذر تنفيذ الدمج." });
+        send({
+          type: "error",
+          error: error instanceof Error ? error.message : "تعذر تنفيذ الدمج.",
+        });
       } finally {
         controller.close();
       }

@@ -197,6 +197,12 @@ export type MergeInspection = {
 export type MergeRunInput = {
   left: { token: string; sheetName: string; mapping: MergeMapping };
   right: { token: string; sheetName: string; mapping: MergeMapping };
+  /**
+   * Relaxed linking: match on link values alone without the per-rule
+   * confirmation condition (uniqueness + single-candidate still apply).
+   * Confirmation stays informational (مؤكد/غير مؤكد per pair).
+   */
+  ignoreConfirmation?: boolean;
 };
 
 export const MERGE_KEY_HEADER = "مفتاح الربط";
