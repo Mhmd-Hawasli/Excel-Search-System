@@ -15,7 +15,7 @@ import { useParamNavigation } from "@/hooks/use-param-navigation";
  * Idle delay before a settled query is pushed to the URL: typing never
  * searches, only a pause does — and only the results table below re-renders.
  */
-const QUERY_IDLE_MS = 800;
+const QUERY_IDLE_MS = 2000;
 
 /**
  * Client filter panel for the search page. Owns only the text-input draft;

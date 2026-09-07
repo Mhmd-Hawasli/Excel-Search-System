@@ -145,6 +145,8 @@ export type SaveEditInput = {
   fileColumnId?: string;
   headerRaw?: string;
   newValue: string;
+  /** When set, the activity entry is marked as an undo of this edit. */
+  revertOfEditId?: string;
 };
 
 export async function saveRecordEdit(input: SaveEditInput) {
@@ -169,9 +171,7 @@ export async function saveRecordEdit(input: SaveEditInput) {
 
   const mappedColumns: MappedColumn[] = columns.map((c) => ({
     headerRaw: c.headerRaw,
-    standardField: c.standardField
-      ? (c.standardField.toLowerCase() as StandardFieldKey)
-      : null,
+    standardField: c.standardField ? (c.standardField.toLowerCase() as StandardFieldKey) : null,
   }));
   const nextData = { ...data, [target.headerRaw]: newValue };
   const fieldUpdates = buildRecordFieldUpdates(nextData, mappedColumns);
@@ -309,6 +309,7 @@ export async function saveRecordEdit(input: SaveEditInput) {
           headerRaw: target.headerRaw,
           oldValue,
           newValue,
+          ...(input.revertOfEditId ? { reverted: true, revertedEditId: input.revertOfEditId } : {}),
         },
       },
     });
@@ -319,6 +320,40 @@ export async function saveRecordEdit(input: SaveEditInput) {
 
 function currentNationalRaw(data: Record<string, string>, columns: MappedColumn[]) {
   return mappedValues(data, columns).national_id ?? "";
+}
+
+/**
+ * Undo the latest manual edit of one field: writes the pre-edit value back
+ * as a brand-new edit, so the full history (including the undo itself) is
+ * preserved and search indexes stay consistent.
+ */
+export async function revertRecordEdit(input: {
+  recordId: string;
+  fileColumnId?: string;
+  headerRaw?: string;
+}) {
+  const probe = await prisma.record.findUnique({
+    where: { id: input.recordId },
+    include: { file: { include: { columns: true } } },
+  });
+  if (!probe) throw new Error("السجل غير موجود.");
+  const columns = probe.file.columns;
+  const target = input.fileColumnId
+    ? columns.find((c) => c.id === input.fileColumnId)
+    : columns.find((c) => c.headerRaw === input.headerRaw);
+  if (!target) throw new Error("العمود غير موجود في هذا الملف.");
+  const latest = await prisma.recordEdit.findFirst({
+    where: { recordId: input.recordId, headerRaw: target.headerRaw },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!latest) throw new Error("لا يوجد تعديل للتراجع عنه في هذا الحقل.");
+  return saveRecordEdit({
+    recordId: input.recordId,
+    fileColumnId: latest.fileColumnId ?? target.id,
+    headerRaw: target.headerRaw,
+    newValue: latest.oldValue,
+    revertOfEditId: latest.id,
+  });
 }
 
 function validNationalNum(raw: string): bigint | null {
@@ -345,13 +380,19 @@ export type RecordEditInfo = {
 /** All edits for one record, newest first, plus per-column edit summary. */
 export async function getRecordEdits(recordId: string): Promise<{
   edits: RecordEditInfo[];
-  editedHeaders: Record<string, { count: number; originalValue: string; lastValue: string; lastAt: Date }>;
+  editedHeaders: Record<
+    string,
+    { count: number; originalValue: string; lastValue: string; lastAt: Date }
+  >;
 }> {
   const edits = await prisma.recordEdit.findMany({
     where: { recordId },
     orderBy: { createdAt: "desc" },
   });
-  const editedHeaders: Record<string, { count: number; originalValue: string; lastValue: string; lastAt: Date }> = {};
+  const editedHeaders: Record<
+    string,
+    { count: number; originalValue: string; lastValue: string; lastAt: Date }
+  > = {};
   // Oldest-first pass: first oldValue is the true Excel original, last write wins.
   for (const edit of [...edits].reverse()) {
     const existing = editedHeaders[edit.headerRaw];
@@ -444,7 +485,9 @@ export async function listEdits(input: {
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
-        file: { select: { id: true, name: true, groupId: true, group: { select: { name: true } } } },
+        file: {
+          select: { id: true, name: true, groupId: true, group: { select: { name: true } } },
+        },
         record: {
           select: {
             id: true,

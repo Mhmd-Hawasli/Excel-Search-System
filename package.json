@@ -18,6 +18,7 @@
     "test:fuzzy-search": "tsx --env-file=.env scripts/verify-fuzzy-search.ts",
     "test:cell-formats": "tsx --env-file=.env scripts/verify-cell-formats.ts",
     "test:table-import": "tsx --env-file=.env scripts/verify-table-import.ts",
+    "test:record-revert": "tsx --env-file=.env scripts/verify-record-revert.ts",
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push && prisma db execute --schema prisma/schema.prisma --file prisma/search-indexes.sql",

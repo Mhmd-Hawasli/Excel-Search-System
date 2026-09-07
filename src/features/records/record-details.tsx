@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Eye, EyeOff, Pencil, Search, X } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Pencil, Search, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ export function RecordDetails({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
   const groups = useMemo(() => {
     const byKey = new Map<
       string,
@@ -157,6 +158,53 @@ export function RecordDetails({
     }
   }
 
+  async function revertEdit(column: DetailColumn) {
+    if (revertingId || saving || !canEdit) return;
+    const editInfo = editedHeaders[column.headerRaw];
+    if (!editInfo) return;
+    const confirmed = window.confirm(
+      `تراجع عن آخر تعديل للحقل «${column.headerRaw}»؟\nستعود القيمة إلى: ${editInfo.originalValue || "—"}`,
+    );
+    if (!confirmed) return;
+    setRevertingId(column.id);
+    try {
+      const response = await fetch(`/api/records/${recordId}/edits`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fileColumnId: column.id, revert: true }),
+      });
+      const result = (await response.json()) as {
+        ok?: boolean;
+        changed?: boolean;
+        error?: string;
+        message?: string;
+        oldValue?: string;
+        newValue?: string;
+        edits?: Record<string, EditedHeaderInfo>;
+      };
+      if (!response.ok || !result.ok) {
+        toast.error(result.error ?? "تعذر التراجع عن التعديل.");
+        return;
+      }
+      if (!result.changed) {
+        toast.info(result.message ?? "لا يوجد تغيير للتراجع عنه.");
+        return;
+      }
+      setColumns((current) =>
+        current.map((item) =>
+          item.id === column.id ? { ...item, value: result.newValue ?? "" } : item,
+        ),
+      );
+      if (result.edits) setEditedHeaders(result.edits);
+      toast.success("تم التراجع عن آخر تعديل.");
+      router.refresh();
+    } catch {
+      toast.error("تعذر الاتصال بالخادم. حاول مجددًا.");
+    } finally {
+      setRevertingId(null);
+    }
+  }
+
   if (!groups.length)
     return (
       <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
@@ -165,7 +213,7 @@ export function RecordDetails({
     );
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
           <Search
             className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -289,19 +337,33 @@ export function RecordDetails({
                                   </span>
                                 ) : null}
                               </span>
-                              <span className="flex shrink-0 gap-1">
+                              <span className="no-print flex shrink-0 gap-1">
                                 {canEdit ? (
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="size-8 opacity-60 group-hover:opacity-100"
-                                  onClick={() => startEdit(column)}
-                                  aria-label={`تعديل ${column.headerRaw}`}
-                                  title="تعديل القيمة"
-                                >
-                                  <Pencil className="size-4" />
-                                </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="size-8 opacity-60 group-hover:opacity-100"
+                                    onClick={() => startEdit(column)}
+                                    aria-label={`تعديل ${column.headerRaw}`}
+                                    title="تعديل القيمة"
+                                  >
+                                    <Pencil className="size-4" />
+                                  </Button>
+                                ) : null}
+                                {canEdit && editInfo ? (
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="size-8 opacity-60 group-hover:opacity-100"
+                                    onClick={() => void revertEdit(column)}
+                                    disabled={revertingId === column.id}
+                                    aria-label={`تراجع عن آخر تعديل لـ ${column.headerRaw}`}
+                                    title="تراجع عن آخر تعديل (يعيد القيمة السابقة ويُسجَّل في السجل)"
+                                  >
+                                    <Undo2 className="size-4" />
+                                  </Button>
                                 ) : null}
                                 <Button
                                   type="button"

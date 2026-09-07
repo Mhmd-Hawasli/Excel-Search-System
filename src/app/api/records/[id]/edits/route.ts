@@ -1,26 +1,22 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  apiNotFound,
-  isFileVisible,
-  requireApiPermission,
-} from "@/lib/auth/session-user";
+import { apiNotFound, isFileVisible, requireApiPermission } from "@/lib/auth/session-user";
 import { prisma } from "@/lib/db/prisma";
-import { getRecordEdits, saveRecordEdit } from "@/lib/edits/service";
+import { getRecordEdits, revertRecordEdit, saveRecordEdit } from "@/lib/edits/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const bodySchema = z.object({
-  fileColumnId: z.string().uuid().optional(),
-  headerRaw: z.string().min(1).max(500).optional(),
-  newValue: z.string().max(5000),
-}).refine((v) => v.fileColumnId || v.headerRaw, { message: "حدد العمود المراد تعديله." });
+const bodySchema = z
+  .object({
+    fileColumnId: z.string().uuid().optional(),
+    headerRaw: z.string().min(1).max(500).optional(),
+    newValue: z.string().max(5000).optional(),
+    revert: z.boolean().optional(),
+  })
+  .refine((v) => v.fileColumnId || v.headerRaw, { message: "حدد العمود المراد تعديله." });
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await requireApiPermission("edits.view");
   if (auth instanceof NextResponse) return auth;
@@ -40,10 +36,7 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const auth = await requireApiPermission("edits.update");
   if (auth instanceof NextResponse) return auth;
@@ -67,13 +60,22 @@ export async function POST(
       { status: 400 },
     );
   }
+  if (!parsed.data.revert && parsed.data.newValue === undefined) {
+    return NextResponse.json({ error: "حدد القيمة الجديدة." }, { status: 400 });
+  }
   try {
-    const result = await saveRecordEdit({
-      recordId: id,
-      fileColumnId: parsed.data.fileColumnId,
-      headerRaw: parsed.data.headerRaw,
-      newValue: parsed.data.newValue,
-    });
+    const result = parsed.data.revert
+      ? await revertRecordEdit({
+          recordId: id,
+          fileColumnId: parsed.data.fileColumnId,
+          headerRaw: parsed.data.headerRaw,
+        })
+      : await saveRecordEdit({
+          recordId: id,
+          fileColumnId: parsed.data.fileColumnId,
+          headerRaw: parsed.data.headerRaw,
+          newValue: parsed.data.newValue ?? "",
+        });
     if (!result.changed) {
       return NextResponse.json({ ok: true, changed: false, message: "لا يوجد تغيير للحفظ." });
     }
@@ -82,7 +84,11 @@ export async function POST(
   } catch (error) {
     const message = error instanceof Error ? error.message : "تعذر حفظ التعديل.";
     const status =
-      message.includes("غير موجود") || message.includes("طويلة") ? 400 : 500;
+      message.includes("غير موجود") ||
+      message.includes("طويلة") ||
+      message.includes("لا يوجد تعديل")
+        ? 400
+        : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

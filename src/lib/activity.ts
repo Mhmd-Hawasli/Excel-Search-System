@@ -1,15 +1,54 @@
 import { ActivityAction } from "@/generated/prisma/client";
 
 export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
-  FILE_UPLOADED: "رفع ملف", FILE_UPDATED: "تحديث ملف", FILE_REPLACED: "استبدال إصدار ملف", FILE_DELETED: "حذف ملف",
-  GROUP_CREATED: "إنشاء مجموعة", GROUP_UPDATED: "تحديث مجموعة", GROUP_REORDERED: "ترتيب مجموعة", GROUP_DELETED: "حذف مجموعة",
-  CATEGORY_CREATED: "إنشاء فئة", CATEGORY_UPDATED: "تحديث فئة", CATEGORY_REORDERED: "ترتيب فئة", CATEGORY_DELETED: "حذف فئة",
-  COLUMN_REORDERED: "ترتيب عمود", COLUMN_RECATEGORIZED: "نقل عمود بين الفئات",
-  TEMPLATE_CREATED: "حفظ قالب ربط", BACKUP_RESTORED: "استعادة نسخة احتياطية",
+  FILE_UPLOADED: "رفع ملف",
+  FILE_UPDATED: "تحديث ملف",
+  FILE_REPLACED: "استبدال إصدار ملف",
+  FILE_DELETED: "حذف ملف",
+  GROUP_CREATED: "إنشاء مجموعة",
+  GROUP_UPDATED: "تحديث مجموعة",
+  GROUP_REORDERED: "ترتيب مجموعة",
+  GROUP_DELETED: "حذف مجموعة",
+  CATEGORY_CREATED: "إنشاء فئة",
+  CATEGORY_UPDATED: "تحديث فئة",
+  CATEGORY_REORDERED: "ترتيب فئة",
+  CATEGORY_DELETED: "حذف فئة",
+  COLUMN_REORDERED: "ترتيب عمود",
+  COLUMN_RECATEGORIZED: "نقل عمود بين الفئات",
+  TEMPLATE_CREATED: "حفظ قالب ربط",
+  BACKUP_RESTORED: "استعادة نسخة احتياطية",
   RECORD_EDITED: "تعديل سجل",
-  USER_CREATED: "إنشاء مستخدم", USER_UPDATED: "تحديث مستخدم", USER_DELETED: "حذف مستخدم",
+  RECORD_VISITED: "زيارة صفحة سجل",
+  USER_CREATED: "إنشاء مستخدم",
+  USER_UPDATED: "تحديث مستخدم",
+  USER_DELETED: "حذف مستخدم",
   USER_PERMISSIONS_UPDATED: "تحديث صلاحيات مستخدم",
 };
+
+export type VisitDetails = {
+  recordId?: string;
+  fileName?: string;
+  personName?: string;
+  visitorUsername?: string;
+  visitorDisplayName?: string;
+};
+
+/** Typed reader for RECORD_VISITED activity details; null when absent. */
+export function parseVisitDetails(value: unknown): VisitDetails | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const details = value as Record<string, unknown>;
+  if (typeof details.visitorUsername !== "string") return null;
+  return {
+    recordId: typeof details.recordId === "string" ? details.recordId : undefined,
+    fileName: typeof details.fileName === "string" ? details.fileName : undefined,
+    personName: typeof details.personName === "string" ? details.personName : undefined,
+    visitorUsername: details.visitorUsername,
+    visitorDisplayName:
+      typeof details.visitorDisplayName === "string"
+        ? details.visitorDisplayName
+        : details.visitorUsername,
+  };
+}
 
 export function relativeArabic(date: Date) {
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);

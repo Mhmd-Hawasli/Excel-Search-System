@@ -69,6 +69,7 @@ enum ActivityAction {
   TEMPLATE_CREATED         @map("template_created")
   BACKUP_RESTORED          @map("backup_restored")
   RECORD_EDITED            @map("record_edited")
+  RECORD_VISITED           @map("record_visited")
   USER_CREATED             @map("user_created")
   USER_UPDATED             @map("user_updated")
   USER_DELETED             @map("user_deleted")
