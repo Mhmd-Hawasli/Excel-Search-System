@@ -5,6 +5,7 @@
  * archive database. Uploaded workbooks live in `tmp/merge` and merge sessions
  * live only in server memory.
  */
+import type { RowFormats } from "@/lib/excel/cell-style";
 
 /** Column semantics the user must map for each of the two tables. */
 export const MERGE_FIELD_KEYS = [
@@ -120,6 +121,8 @@ export type MergeRow = {
   rowNumber: number;
   /** Original cell values in original header order. */
   cells: string[];
+  /** Source colors: row fill + font color per 0-based column index. */
+  formats?: RowFormats;
   /** Shared link key, identical in both tables; null when not linked. */
   key: string | null;
   /** The rule that produced the key, null when not linked. */
@@ -164,7 +167,7 @@ export type MergeStatus = {
 
 export type MergeTableInput = {
   headers: string[];
-  rows: Array<{ rowNumber: number; cells: string[] }>;
+  rows: Array<{ rowNumber: number; cells: string[]; formats?: RowFormats }>;
   mapping: MergeMapping;
 };
 

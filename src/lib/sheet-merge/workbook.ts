@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import { cellValueText } from "@/lib/excel/cell-value";
+import { extractRowFormats } from "@/lib/excel/cell-style";
+import { tableRangeForSheet, type SheetTableRange } from "@/lib/excel/table-range";
 import { normalizeStored } from "@/lib/normalization/arabic";
 import { suggestNationalIdColumn } from "@/lib/sheet-merge/suggest";
 import {
@@ -64,31 +66,46 @@ export function clearWorkbookFilters(workbook: ExcelJS.Workbook) {
  * renames duplicates the same way Excel does when building a table.
  * Formulas without a saved result read as empty (see cellValueText).
  */
-export function sheetHeaders(worksheet: ExcelJS.Worksheet): string[] {
-  const row = worksheet.getRow(1);
-  const columnCount = Math.max(worksheet.actualColumnCount, row.cellCount);
+export function sheetHeaders(
+  worksheet: ExcelJS.Worksheet,
+  table: SheetTableRange | null = null,
+): string[] {
+  const headerRow = table ? table.headerRow : 1;
+  const firstCol = table ? table.firstCol : 1;
+  const row = worksheet.getRow(headerRow);
+  const columnCount = table
+    ? table.lastCol - table.firstCol + 1
+    : Math.max(worksheet.actualColumnCount, row.cellCount);
   return Array.from(
     { length: columnCount },
-    (_, index) => cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }).trim() || `عمود ${index + 1}`,
+    (_, index) => cellValueText(row.getCell(firstCol + index), { onUncachedFormula: "empty" }).trim() || `عمود ${index + 1}`,
   );
 }
 
 export function sheetDataRows(
   worksheet: ExcelJS.Worksheet,
   headers: string[],
+  table: SheetTableRange | null = null,
 ): UploadedSheet["rows"] {
   const rows: UploadedSheet["rows"] = [];
+  const firstCol = table ? table.firstCol : 1;
+  const firstDataRow = table ? table.firstRow : 2;
+  const lastDataRow = table ? table.lastRow : worksheet.rowCount;
   // `rowCount` is the highest row index; `actualRowCount` only counts rows
   // that hold values, so it would drop every row after a blank one.
-  for (let rowIndex = 2; rowIndex <= worksheet.rowCount; rowIndex += 1) {
+  for (let rowIndex = firstDataRow; rowIndex <= lastDataRow; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
     // A formula without a saved result counts as empty, so rows left fully
     // empty (including formula-only rows) are skipped and never merged.
     const cells = headers.map((_, index) =>
-      cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }),
+      cellValueText(row.getCell(firstCol + index), { onUncachedFormula: "empty" }),
     );
     if (cells.every((value) => normalizeStored(value) === "")) continue;
-    rows.push({ rowNumber: rowIndex, cells });
+    rows.push({
+      rowNumber: rowIndex,
+      cells,
+      formats: extractRowFormats(row, headers.length, firstCol),
+    });
   }
   return rows;
 }
@@ -113,7 +130,9 @@ export async function parseUploadedWorkbook(
     );
 
   await tick();
-  onProgress?.(35, "إلغاء عامل التصفية من الأعمدة والصفوف…");
+  onProgress?.(35, "التحقق من الصفوف والأعمدة المخفية وإظهارها…");
+  // Capture table bounds before normalization converts tables to ranges.
+  const tables = new Map(workbook.worksheets.map((sheet) => [sheet.name, tableRangeForSheet(sheet)]));
   const filtersRemoved = clearWorkbookFilters(workbook);
   await tick();
 
@@ -123,12 +142,14 @@ export async function parseUploadedWorkbook(
       40 + Math.round(((index + 1) / workbook.worksheets.length) * 55),
       `قراءة الصفحة «${worksheet.name}» (${index + 1} من ${workbook.worksheets.length})…`,
     );
-    const headers = sheetHeaders(worksheet);
+    const table = tables.get(worksheet.name) ?? null;
+    const headers = sheetHeaders(worksheet, table);
     sheets.push({
       name: worksheet.name,
       hidden: worksheet.state !== "visible",
       headers,
-      rows: sheetDataRows(worksheet, headers),
+      rows: sheetDataRows(worksheet, headers, table),
+      table,
       filtersRemoved: filtersRemoved.get(worksheet.name) ?? false,
     });
     await tick();

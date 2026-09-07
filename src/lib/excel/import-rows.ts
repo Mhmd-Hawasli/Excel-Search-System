@@ -1,7 +1,7 @@
 import { linkedMappingError, type UploadConfig } from "@/lib/excel/config";
 import { loadLinkedSheets, type ImportRow } from "@/lib/excel/linked-sheets";
 import { createStreamingWorkbookReader, isSelectedWorksheet } from "@/lib/excel/streaming";
-import { workbookPath } from "@/lib/excel/workbook";
+import { readFormatSidecar, sidecarTableRange, workbookPath } from "@/lib/excel/workbook";
 import { cellValueText } from "@/lib/excel/cell-value";
 
 export async function* importRows(config: UploadConfig): AsyncGenerator<ImportRow> {
@@ -24,14 +24,25 @@ export async function* importRows(config: UploadConfig): AsyncGenerator<ImportRo
     return;
   }
   const reader = createStreamingWorkbookReader(workbookPath(config.token));
-  const width = Math.max(...config.columns.map((column) => column.columnIndex));
+  // Table bounds come from the inspection sidecar (the streamer cannot see
+  // tables); without a table the whole sheet imports as before.
+  const table = sidecarTableRange(
+    await readFormatSidecar(config.token),
+    config.sheetName,
+    config.sheetIndex,
+  );
+  const width = table
+    ? table.lastCol - table.firstCol + 1
+    : Math.max(...config.columns.map((column) => column.columnIndex));
+  const firstCol = table ? table.firstCol : 1;
   for await (const sheet of reader) {
     if (!isSelectedWorksheet(sheet, config.sheetName, config.sheetIndex)) continue;
     for await (const row of sheet) {
-      if (row.number === 1) continue;
+      if (table ? row.number <= table.headerRow || row.number > table.lastRow : row.number === 1)
+        continue;
       yield {
         rowIndex: row.number,
-        values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(index + 1))),
+        values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(firstCol + index))),
       };
     }
     return;

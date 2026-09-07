@@ -1,4 +1,4 @@
-import { loadWorkbook } from "@/lib/excel/workbook";
+import { loadWorkbook, readFormatSidecar, sidecarTableRange } from "@/lib/excel/workbook";
 import { cellValueText } from "@/lib/excel/cell-value";
 import type { UploadConfig } from "@/lib/excel/config";
 import type { ImportRow } from "@/lib/excel/linked-sheets";
@@ -19,14 +19,25 @@ export async function* documentRows(config: UploadConfig): AsyncGenerator<Import
       : undefined;
   const worksheet = byName ?? byIndex;
   if (!worksheet) throw new Error("الورقة المحددة غير موجودة عند بدء الاستيراد.");
-  const width = Math.max(...config.columns.map((column) => column.columnIndex));
+  // Bounds always resolve from the inspection sidecar: the saved file may
+  // already be normalized (tables converted to ranges), so live detection
+  // would silently fall back to the whole sheet here.
+  const table = sidecarTableRange(
+    await readFormatSidecar(config.token),
+    config.sheetName,
+    config.sheetIndex,
+  );
+  const width = table
+    ? table.lastCol - table.firstCol + 1
+    : Math.max(...config.columns.map((column) => column.columnIndex));
+  const firstCol = table ? table.firstCol : 1;
   // eachRow cannot yield lazily, so collect rows first (fallback path only).
   const pending: ImportRow[] = [];
   worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (table ? rowNumber <= table.headerRow || rowNumber > table.lastRow : rowNumber === 1) return;
     pending.push({
       rowIndex: rowNumber,
-      values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(index + 1))),
+      values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(firstCol + index))),
     });
   });
   yield* pending;

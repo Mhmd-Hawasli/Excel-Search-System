@@ -9,6 +9,9 @@
  * helpers are reused.
  */
 
+import type { RowFormats } from "@/lib/excel/cell-style";
+import type { SheetTableRange } from "@/lib/excel/table-range";
+
 /** قاعدة الرفع: يجب أن يحتوي المصنف على أكثر من صفحة واحدة. */
 export const SHEET_MERGE_MIN_SHEETS = 2;
 
@@ -30,6 +33,8 @@ export type UploadedSheetRow = {
   /** 1-based Excel row number. */
   rowNumber: number;
   cells: string[];
+  /** Source colors: row fill + font color per 0-based column index. */
+  formats?: RowFormats;
 };
 
 /** Every sheet of the uploaded workbook, held in memory. */
@@ -39,6 +44,8 @@ export type UploadedSheet = {
   hidden: boolean;
   headers: string[];
   rows: UploadedSheetRow[];
+  /** Active Excel Table bounds captured before filter normalization (absent = plain sheet). */
+  table?: SheetTableRange | null;
   /** True when an auto-filter/table or hidden rows or columns were removed. */
   filtersRemoved: boolean;
 };
@@ -102,6 +109,8 @@ export type UnlinkedRow = {
   reason: string;
   /** Full row values in the sheet's own header order. */
   cells: string[];
+  /** Source colors of the row, when captured. */
+  formats?: RowFormats;
 };
 
 export type SheetMergeSheetStat = {

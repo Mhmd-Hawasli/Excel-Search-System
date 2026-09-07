@@ -141,6 +141,8 @@ export type RecordCountAggregateOutputType = {
   dNationalId: number
   dPersonalNo: number
   dPhone: number
+  fmtFills: number
+  fmtFontColors: number
   nationalIdNum: number
   createdAt: number
   _all: number
@@ -262,6 +264,8 @@ export type RecordCountAggregateInputType = {
   dNationalId?: true
   dPersonalNo?: true
   dPhone?: true
+  fmtFills?: true
+  fmtFontColors?: true
   nationalIdNum?: true
   createdAt?: true
   _all?: true
@@ -384,6 +388,8 @@ export type RecordGroupByOutputType = {
   dNationalId: string | null
   dPersonalNo: string | null
   dPhone: string | null
+  fmtFills: runtime.JsonValue | null
+  fmtFontColors: runtime.JsonValue | null
   nationalIdNum: bigint | null
   createdAt: Date
   _count: RecordCountAggregateOutputType | null
@@ -442,10 +448,13 @@ export type RecordWhereInput = {
   dNationalId?: Prisma.StringNullableFilter<"Record"> | string | null
   dPersonalNo?: Prisma.StringNullableFilter<"Record"> | string | null
   dPhone?: Prisma.StringNullableFilter<"Record"> | string | null
+  fmtFills?: Prisma.JsonNullableFilter<"Record">
+  fmtFontColors?: Prisma.JsonNullableFilter<"Record">
   nationalIdNum?: Prisma.BigIntNullableFilter<"Record"> | bigint | number | null
   createdAt?: Prisma.DateTimeFilter<"Record"> | Date | string
   file?: Prisma.XOR<Prisma.FileScalarRelationFilter, Prisma.FileWhereInput>
   edits?: Prisma.RecordEditListRelationFilter
+  ignores?: Prisma.IgnoredConflictListRelationFilter
 }
 
 export type RecordOrderByWithRelationInput = {
@@ -479,10 +488,13 @@ export type RecordOrderByWithRelationInput = {
   dNationalId?: Prisma.SortOrderInput | Prisma.SortOrder
   dPersonalNo?: Prisma.SortOrderInput | Prisma.SortOrder
   dPhone?: Prisma.SortOrderInput | Prisma.SortOrder
+  fmtFills?: Prisma.SortOrderInput | Prisma.SortOrder
+  fmtFontColors?: Prisma.SortOrderInput | Prisma.SortOrder
   nationalIdNum?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   file?: Prisma.FileOrderByWithRelationInput
   edits?: Prisma.RecordEditOrderByRelationAggregateInput
+  ignores?: Prisma.IgnoredConflictOrderByRelationAggregateInput
 }
 
 export type RecordWhereUniqueInput = Prisma.AtLeast<{
@@ -520,10 +532,13 @@ export type RecordWhereUniqueInput = Prisma.AtLeast<{
   dNationalId?: Prisma.StringNullableFilter<"Record"> | string | null
   dPersonalNo?: Prisma.StringNullableFilter<"Record"> | string | null
   dPhone?: Prisma.StringNullableFilter<"Record"> | string | null
+  fmtFills?: Prisma.JsonNullableFilter<"Record">
+  fmtFontColors?: Prisma.JsonNullableFilter<"Record">
   nationalIdNum?: Prisma.BigIntNullableFilter<"Record"> | bigint | number | null
   createdAt?: Prisma.DateTimeFilter<"Record"> | Date | string
   file?: Prisma.XOR<Prisma.FileScalarRelationFilter, Prisma.FileWhereInput>
   edits?: Prisma.RecordEditListRelationFilter
+  ignores?: Prisma.IgnoredConflictListRelationFilter
 }, "id" | "fileId_rowIndex">
 
 export type RecordOrderByWithAggregationInput = {
@@ -557,6 +572,8 @@ export type RecordOrderByWithAggregationInput = {
   dNationalId?: Prisma.SortOrderInput | Prisma.SortOrder
   dPersonalNo?: Prisma.SortOrderInput | Prisma.SortOrder
   dPhone?: Prisma.SortOrderInput | Prisma.SortOrder
+  fmtFills?: Prisma.SortOrderInput | Prisma.SortOrder
+  fmtFontColors?: Prisma.SortOrderInput | Prisma.SortOrder
   nationalIdNum?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   _count?: Prisma.RecordCountOrderByAggregateInput
@@ -600,6 +617,8 @@ export type RecordScalarWhereWithAggregatesInput = {
   dNationalId?: Prisma.StringNullableWithAggregatesFilter<"Record"> | string | null
   dPersonalNo?: Prisma.StringNullableWithAggregatesFilter<"Record"> | string | null
   dPhone?: Prisma.StringNullableWithAggregatesFilter<"Record"> | string | null
+  fmtFills?: Prisma.JsonNullableWithAggregatesFilter<"Record">
+  fmtFontColors?: Prisma.JsonNullableWithAggregatesFilter<"Record">
   nationalIdNum?: Prisma.BigIntNullableWithAggregatesFilter<"Record"> | bigint | number | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"Record"> | Date | string
 }
@@ -634,10 +653,13 @@ export type RecordCreateInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
   file: Prisma.FileCreateNestedOneWithoutRecordsInput
   edits?: Prisma.RecordEditCreateNestedManyWithoutRecordInput
+  ignores?: Prisma.IgnoredConflictCreateNestedManyWithoutRecordInput
 }
 
 export type RecordUncheckedCreateInput = {
@@ -671,9 +693,12 @@ export type RecordUncheckedCreateInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
   edits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutRecordInput
+  ignores?: Prisma.IgnoredConflictUncheckedCreateNestedManyWithoutRecordInput
 }
 
 export type RecordUpdateInput = {
@@ -706,10 +731,13 @@ export type RecordUpdateInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   file?: Prisma.FileUpdateOneRequiredWithoutRecordsNestedInput
   edits?: Prisma.RecordEditUpdateManyWithoutRecordNestedInput
+  ignores?: Prisma.IgnoredConflictUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordUncheckedUpdateInput = {
@@ -743,9 +771,12 @@ export type RecordUncheckedUpdateInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   edits?: Prisma.RecordEditUncheckedUpdateManyWithoutRecordNestedInput
+  ignores?: Prisma.IgnoredConflictUncheckedUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordCreateManyInput = {
@@ -779,6 +810,8 @@ export type RecordCreateManyInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
 }
@@ -813,6 +846,8 @@ export type RecordUpdateManyMutationInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -848,6 +883,8 @@ export type RecordUncheckedUpdateManyInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -898,6 +935,8 @@ export type RecordCountOrderByAggregateInput = {
   dNationalId?: Prisma.SortOrder
   dPersonalNo?: Prisma.SortOrder
   dPhone?: Prisma.SortOrder
+  fmtFills?: Prisma.SortOrder
+  fmtFontColors?: Prisma.SortOrder
   nationalIdNum?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
 }
@@ -1063,6 +1102,20 @@ export type RecordUpdateOneRequiredWithoutEditsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.RecordUpdateToOneWithWhereWithoutEditsInput, Prisma.RecordUpdateWithoutEditsInput>, Prisma.RecordUncheckedUpdateWithoutEditsInput>
 }
 
+export type RecordCreateNestedOneWithoutIgnoresInput = {
+  create?: Prisma.XOR<Prisma.RecordCreateWithoutIgnoresInput, Prisma.RecordUncheckedCreateWithoutIgnoresInput>
+  connectOrCreate?: Prisma.RecordCreateOrConnectWithoutIgnoresInput
+  connect?: Prisma.RecordWhereUniqueInput
+}
+
+export type RecordUpdateOneRequiredWithoutIgnoresNestedInput = {
+  create?: Prisma.XOR<Prisma.RecordCreateWithoutIgnoresInput, Prisma.RecordUncheckedCreateWithoutIgnoresInput>
+  connectOrCreate?: Prisma.RecordCreateOrConnectWithoutIgnoresInput
+  upsert?: Prisma.RecordUpsertWithoutIgnoresInput
+  connect?: Prisma.RecordWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.RecordUpdateToOneWithWhereWithoutIgnoresInput, Prisma.RecordUpdateWithoutIgnoresInput>, Prisma.RecordUncheckedUpdateWithoutIgnoresInput>
+}
+
 export type RecordCreateWithoutFileInput = {
   id?: string
   rowIndex: number
@@ -1093,9 +1146,12 @@ export type RecordCreateWithoutFileInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
   edits?: Prisma.RecordEditCreateNestedManyWithoutRecordInput
+  ignores?: Prisma.IgnoredConflictCreateNestedManyWithoutRecordInput
 }
 
 export type RecordUncheckedCreateWithoutFileInput = {
@@ -1128,9 +1184,12 @@ export type RecordUncheckedCreateWithoutFileInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
   edits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutRecordInput
+  ignores?: Prisma.IgnoredConflictUncheckedCreateNestedManyWithoutRecordInput
 }
 
 export type RecordCreateOrConnectWithoutFileInput = {
@@ -1193,6 +1252,8 @@ export type RecordScalarWhereInput = {
   dNationalId?: Prisma.StringNullableFilter<"Record"> | string | null
   dPersonalNo?: Prisma.StringNullableFilter<"Record"> | string | null
   dPhone?: Prisma.StringNullableFilter<"Record"> | string | null
+  fmtFills?: Prisma.JsonNullableFilter<"Record">
+  fmtFontColors?: Prisma.JsonNullableFilter<"Record">
   nationalIdNum?: Prisma.BigIntNullableFilter<"Record"> | bigint | number | null
   createdAt?: Prisma.DateTimeFilter<"Record"> | Date | string
 }
@@ -1227,9 +1288,12 @@ export type RecordCreateWithoutEditsInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
   file: Prisma.FileCreateNestedOneWithoutRecordsInput
+  ignores?: Prisma.IgnoredConflictCreateNestedManyWithoutRecordInput
 }
 
 export type RecordUncheckedCreateWithoutEditsInput = {
@@ -1263,8 +1327,11 @@ export type RecordUncheckedCreateWithoutEditsInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
+  ignores?: Prisma.IgnoredConflictUncheckedCreateNestedManyWithoutRecordInput
 }
 
 export type RecordCreateOrConnectWithoutEditsInput = {
@@ -1313,9 +1380,12 @@ export type RecordUpdateWithoutEditsInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   file?: Prisma.FileUpdateOneRequiredWithoutRecordsNestedInput
+  ignores?: Prisma.IgnoredConflictUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordUncheckedUpdateWithoutEditsInput = {
@@ -1349,8 +1419,179 @@ export type RecordUncheckedUpdateWithoutEditsInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ignores?: Prisma.IgnoredConflictUncheckedUpdateManyWithoutRecordNestedInput
+}
+
+export type RecordCreateWithoutIgnoresInput = {
+  id?: string
+  rowIndex: number
+  data: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  sfFirstName?: string | null
+  sfFatherName?: string | null
+  sfLastName?: string | null
+  sfFullName?: string | null
+  sfNationalId?: bigint | number | null
+  sfShamCash?: bigint | number | null
+  sfPersonalNo?: string | null
+  sfMotherName?: string | null
+  sfPhone?: string | null
+  sfContractCode?: string | null
+  sfSecondaryContractCode?: string | null
+  sfJobTitle?: string | null
+  sfFunctionalCategory?: number | null
+  sfOrganizationalLevel?: string | null
+  nFirstName?: string | null
+  nFatherName?: string | null
+  nLastName?: string | null
+  nFullName?: string | null
+  nMotherName?: string | null
+  nContractCode?: string | null
+  nSecondaryContractCode?: string | null
+  nJobTitle?: string | null
+  nOrganizationalLevel?: string | null
+  dNationalId?: string | null
+  dPersonalNo?: string | null
+  dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  nationalIdNum?: bigint | number | null
+  createdAt?: Date | string
+  file: Prisma.FileCreateNestedOneWithoutRecordsInput
+  edits?: Prisma.RecordEditCreateNestedManyWithoutRecordInput
+}
+
+export type RecordUncheckedCreateWithoutIgnoresInput = {
+  id?: string
+  fileId: string
+  rowIndex: number
+  data: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  sfFirstName?: string | null
+  sfFatherName?: string | null
+  sfLastName?: string | null
+  sfFullName?: string | null
+  sfNationalId?: bigint | number | null
+  sfShamCash?: bigint | number | null
+  sfPersonalNo?: string | null
+  sfMotherName?: string | null
+  sfPhone?: string | null
+  sfContractCode?: string | null
+  sfSecondaryContractCode?: string | null
+  sfJobTitle?: string | null
+  sfFunctionalCategory?: number | null
+  sfOrganizationalLevel?: string | null
+  nFirstName?: string | null
+  nFatherName?: string | null
+  nLastName?: string | null
+  nFullName?: string | null
+  nMotherName?: string | null
+  nContractCode?: string | null
+  nSecondaryContractCode?: string | null
+  nJobTitle?: string | null
+  nOrganizationalLevel?: string | null
+  dNationalId?: string | null
+  dPersonalNo?: string | null
+  dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  nationalIdNum?: bigint | number | null
+  createdAt?: Date | string
+  edits?: Prisma.RecordEditUncheckedCreateNestedManyWithoutRecordInput
+}
+
+export type RecordCreateOrConnectWithoutIgnoresInput = {
+  where: Prisma.RecordWhereUniqueInput
+  create: Prisma.XOR<Prisma.RecordCreateWithoutIgnoresInput, Prisma.RecordUncheckedCreateWithoutIgnoresInput>
+}
+
+export type RecordUpsertWithoutIgnoresInput = {
+  update: Prisma.XOR<Prisma.RecordUpdateWithoutIgnoresInput, Prisma.RecordUncheckedUpdateWithoutIgnoresInput>
+  create: Prisma.XOR<Prisma.RecordCreateWithoutIgnoresInput, Prisma.RecordUncheckedCreateWithoutIgnoresInput>
+  where?: Prisma.RecordWhereInput
+}
+
+export type RecordUpdateToOneWithWhereWithoutIgnoresInput = {
+  where?: Prisma.RecordWhereInput
+  data: Prisma.XOR<Prisma.RecordUpdateWithoutIgnoresInput, Prisma.RecordUncheckedUpdateWithoutIgnoresInput>
+}
+
+export type RecordUpdateWithoutIgnoresInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  rowIndex?: Prisma.IntFieldUpdateOperationsInput | number
+  data?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  sfFirstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFatherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfLastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfNationalId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  sfShamCash?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  sfPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfMotherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfSecondaryContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfJobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFunctionalCategory?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sfOrganizationalLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFirstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFatherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nLastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nMotherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nSecondaryContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nJobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nOrganizationalLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  file?: Prisma.FileUpdateOneRequiredWithoutRecordsNestedInput
+  edits?: Prisma.RecordEditUpdateManyWithoutRecordNestedInput
+}
+
+export type RecordUncheckedUpdateWithoutIgnoresInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  fileId?: Prisma.StringFieldUpdateOperationsInput | string
+  rowIndex?: Prisma.IntFieldUpdateOperationsInput | number
+  data?: Prisma.JsonNullValueInput | runtime.InputJsonValue
+  sfFirstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFatherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfLastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfNationalId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  sfShamCash?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  sfPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfMotherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfSecondaryContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfJobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  sfFunctionalCategory?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
+  sfOrganizationalLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFirstName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFatherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nLastName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nFullName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nMotherName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nSecondaryContractCode?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nJobTitle?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  nOrganizationalLevel?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  edits?: Prisma.RecordEditUncheckedUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordCreateManyFileInput = {
@@ -1383,6 +1624,8 @@ export type RecordCreateManyFileInput = {
   dNationalId?: string | null
   dPersonalNo?: string | null
   dPhone?: string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: bigint | number | null
   createdAt?: Date | string
 }
@@ -1417,9 +1660,12 @@ export type RecordUpdateWithoutFileInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   edits?: Prisma.RecordEditUpdateManyWithoutRecordNestedInput
+  ignores?: Prisma.IgnoredConflictUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordUncheckedUpdateWithoutFileInput = {
@@ -1452,9 +1698,12 @@ export type RecordUncheckedUpdateWithoutFileInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   edits?: Prisma.RecordEditUncheckedUpdateManyWithoutRecordNestedInput
+  ignores?: Prisma.IgnoredConflictUncheckedUpdateManyWithoutRecordNestedInput
 }
 
 export type RecordUncheckedUpdateManyWithoutFileInput = {
@@ -1487,6 +1736,8 @@ export type RecordUncheckedUpdateManyWithoutFileInput = {
   dNationalId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPersonalNo?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   dPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  fmtFills?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
+  fmtFontColors?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   nationalIdNum?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
 }
@@ -1498,10 +1749,12 @@ export type RecordUncheckedUpdateManyWithoutFileInput = {
 
 export type RecordCountOutputType = {
   edits: number
+  ignores: number
 }
 
 export type RecordCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   edits?: boolean | RecordCountOutputTypeCountEditsArgs
+  ignores?: boolean | RecordCountOutputTypeCountIgnoresArgs
 }
 
 /**
@@ -1519,6 +1772,13 @@ export type RecordCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Exten
  */
 export type RecordCountOutputTypeCountEditsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   where?: Prisma.RecordEditWhereInput
+}
+
+/**
+ * RecordCountOutputType without action
+ */
+export type RecordCountOutputTypeCountIgnoresArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.IgnoredConflictWhereInput
 }
 
 
@@ -1553,10 +1813,13 @@ export type RecordSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   dNationalId?: boolean
   dPersonalNo?: boolean
   dPhone?: boolean
+  fmtFills?: boolean
+  fmtFontColors?: boolean
   nationalIdNum?: boolean
   createdAt?: boolean
   file?: boolean | Prisma.FileDefaultArgs<ExtArgs>
   edits?: boolean | Prisma.Record$editsArgs<ExtArgs>
+  ignores?: boolean | Prisma.Record$ignoresArgs<ExtArgs>
   _count?: boolean | Prisma.RecordCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["record"]>
 
@@ -1591,6 +1854,8 @@ export type RecordSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extens
   dNationalId?: boolean
   dPersonalNo?: boolean
   dPhone?: boolean
+  fmtFills?: boolean
+  fmtFontColors?: boolean
   nationalIdNum?: boolean
   createdAt?: boolean
   file?: boolean | Prisma.FileDefaultArgs<ExtArgs>
@@ -1627,6 +1892,8 @@ export type RecordSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extens
   dNationalId?: boolean
   dPersonalNo?: boolean
   dPhone?: boolean
+  fmtFills?: boolean
+  fmtFontColors?: boolean
   nationalIdNum?: boolean
   createdAt?: boolean
   file?: boolean | Prisma.FileDefaultArgs<ExtArgs>
@@ -1663,14 +1930,17 @@ export type RecordSelectScalar = {
   dNationalId?: boolean
   dPersonalNo?: boolean
   dPhone?: boolean
+  fmtFills?: boolean
+  fmtFontColors?: boolean
   nationalIdNum?: boolean
   createdAt?: boolean
 }
 
-export type RecordOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "fileId" | "rowIndex" | "data" | "sfFirstName" | "sfFatherName" | "sfLastName" | "sfFullName" | "sfNationalId" | "sfShamCash" | "sfPersonalNo" | "sfMotherName" | "sfPhone" | "sfContractCode" | "sfSecondaryContractCode" | "sfJobTitle" | "sfFunctionalCategory" | "sfOrganizationalLevel" | "nFirstName" | "nFatherName" | "nLastName" | "nFullName" | "nMotherName" | "nContractCode" | "nSecondaryContractCode" | "nJobTitle" | "nOrganizationalLevel" | "dNationalId" | "dPersonalNo" | "dPhone" | "nationalIdNum" | "createdAt", ExtArgs["result"]["record"]>
+export type RecordOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "fileId" | "rowIndex" | "data" | "sfFirstName" | "sfFatherName" | "sfLastName" | "sfFullName" | "sfNationalId" | "sfShamCash" | "sfPersonalNo" | "sfMotherName" | "sfPhone" | "sfContractCode" | "sfSecondaryContractCode" | "sfJobTitle" | "sfFunctionalCategory" | "sfOrganizationalLevel" | "nFirstName" | "nFatherName" | "nLastName" | "nFullName" | "nMotherName" | "nContractCode" | "nSecondaryContractCode" | "nJobTitle" | "nOrganizationalLevel" | "dNationalId" | "dPersonalNo" | "dPhone" | "fmtFills" | "fmtFontColors" | "nationalIdNum" | "createdAt", ExtArgs["result"]["record"]>
 export type RecordInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   file?: boolean | Prisma.FileDefaultArgs<ExtArgs>
   edits?: boolean | Prisma.Record$editsArgs<ExtArgs>
+  ignores?: boolean | Prisma.Record$ignoresArgs<ExtArgs>
   _count?: boolean | Prisma.RecordCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type RecordIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1685,6 +1955,7 @@ export type $RecordPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs
   objects: {
     file: Prisma.$FilePayload<ExtArgs>
     edits: Prisma.$RecordEditPayload<ExtArgs>[]
+    ignores: Prisma.$IgnoredConflictPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1717,6 +1988,8 @@ export type $RecordPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs
     dNationalId: string | null
     dPersonalNo: string | null
     dPhone: string | null
+    fmtFills: runtime.JsonValue | null
+    fmtFontColors: runtime.JsonValue | null
     nationalIdNum: bigint | null
     createdAt: Date
   }, ExtArgs["result"]["record"]>
@@ -2115,6 +2388,7 @@ export interface Prisma__RecordClient<T, Null = never, ExtArgs extends runtime.T
   readonly [Symbol.toStringTag]: "PrismaPromise"
   file<T extends Prisma.FileDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.FileDefaultArgs<ExtArgs>>): Prisma.Prisma__FileClient<runtime.Types.Result.GetResult<Prisma.$FilePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
   edits<T extends Prisma.Record$editsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Record$editsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$RecordEditPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  ignores<T extends Prisma.Record$ignoresArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Record$ignoresArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$IgnoredConflictPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2174,6 +2448,8 @@ export interface RecordFieldRefs {
   readonly dNationalId: Prisma.FieldRef<"Record", 'String'>
   readonly dPersonalNo: Prisma.FieldRef<"Record", 'String'>
   readonly dPhone: Prisma.FieldRef<"Record", 'String'>
+  readonly fmtFills: Prisma.FieldRef<"Record", 'Json'>
+  readonly fmtFontColors: Prisma.FieldRef<"Record", 'Json'>
   readonly nationalIdNum: Prisma.FieldRef<"Record", 'BigInt'>
   readonly createdAt: Prisma.FieldRef<"Record", 'DateTime'>
 }
@@ -2598,6 +2874,30 @@ export type Record$editsArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
   take?: number
   skip?: number
   distinct?: Prisma.RecordEditScalarFieldEnum | Prisma.RecordEditScalarFieldEnum[]
+}
+
+/**
+ * Record.ignores
+ */
+export type Record$ignoresArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the IgnoredConflict
+   */
+  select?: Prisma.IgnoredConflictSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the IgnoredConflict
+   */
+  omit?: Prisma.IgnoredConflictOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.IgnoredConflictInclude<ExtArgs> | null
+  where?: Prisma.IgnoredConflictWhereInput
+  orderBy?: Prisma.IgnoredConflictOrderByWithRelationInput | Prisma.IgnoredConflictOrderByWithRelationInput[]
+  cursor?: Prisma.IgnoredConflictWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.IgnoredConflictScalarFieldEnum | Prisma.IgnoredConflictScalarFieldEnum[]
 }
 
 /**

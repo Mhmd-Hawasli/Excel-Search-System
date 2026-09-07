@@ -24,8 +24,30 @@ export const CONFLICT_FIELDS = {
   job_title: "المسمى الوظيفي",
   functional_category: "الفئة الوظيفية",
   organizational_level: "السوية التنظيمية الأساسية",
+  phone: "رقم الهاتف",
+  contract_pair: "رمز العقد (أساسي + ثانوي)",
 } as const;
 export type ConflictField = keyof typeof CONFLICT_FIELDS;
+
+/** Sides of a directed n*m pair rule (from → more than one to). */
+export const CONFLICT_PAIR_SIDES = [
+  "national_id",
+  "person",
+  "personal_no",
+  "sham_cash",
+  "contract_pair",
+  "phone",
+] as const;
+export type ConflictPairSide = (typeof CONFLICT_PAIR_SIDES)[number];
+
+export const CONFLICT_PAIR_LABELS: Record<ConflictPairSide, string> = {
+  national_id: "الرقم الوطني",
+  person: "الشخص",
+  personal_no: "الرقم الذاتي",
+  sham_cash: "الشام كاش",
+  contract_pair: "رمز العقد",
+  phone: "رقم الهاتف",
+};
 
 export const CONFLICT_RULES = [
   {
@@ -97,11 +119,18 @@ export const CONFLICT_RULES = [
     label: "اسم الأب المربوط فارغ",
   },
   { key: "missing_last", category: "missing", field: "last_name", label: "النسبة المربوطة فارغة" },
+  { key: "missing_job", category: "missing", field: "job_title", label: "المسمى الوظيفي المربوط فارغ" },
   {
     key: "similar_names",
     category: "similar",
     field: "full_name",
     label: "اسم ثلاثي واحد وأسماء أمهات مختلفة",
+  },
+  {
+    key: "similar_national",
+    category: "similar",
+    field: "full_name",
+    label: "اسم ثلاثي واحد وأرقام وطنية مختلفة",
   },
   {
     key: "duplicate_national",
@@ -187,11 +216,166 @@ export const CONFLICT_RULES = [
     field: "organizational_level",
     label: "الشخص مرتبط بأكثر من سوية تنظيمية أساسية",
   },
+  {
+    key: "pair_national_personal",
+    category: "conflicting",
+    field: "personal_no",
+    label: "الرقم الوطني مرتبط بأكثر من رقم ذاتي",
+    pair: { from: "national_id", to: "personal_no" },
+  },
+  {
+    key: "pair_national_sham",
+    category: "conflicting",
+    field: "sham_cash",
+    label: "الرقم الوطني مرتبط بأكثر من شام كاش",
+    pair: { from: "national_id", to: "sham_cash" },
+  },
+  {
+    key: "pair_national_contract",
+    category: "conflicting",
+    field: "contract_pair",
+    label: "الرقم الوطني مرتبط بأكثر من رمز عقد",
+    pair: { from: "national_id", to: "contract_pair" },
+  },
+  {
+    key: "pair_national_phone",
+    category: "conflicting",
+    field: "phone",
+    label: "الرقم الوطني مرتبط بأكثر من رقم هاتف",
+    pair: { from: "national_id", to: "phone" },
+  },
+  {
+    key: "pair_personal_national",
+    category: "conflicting",
+    field: "national_id",
+    label: "الرقم الذاتي مرتبط بأكثر من رقم وطني",
+    pair: { from: "personal_no", to: "national_id" },
+  },
+  {
+    key: "pair_personal_sham",
+    category: "conflicting",
+    field: "sham_cash",
+    label: "الرقم الذاتي مرتبط بأكثر من شام كاش",
+    pair: { from: "personal_no", to: "sham_cash" },
+  },
+  {
+    key: "pair_personal_contract",
+    category: "conflicting",
+    field: "contract_pair",
+    label: "الرقم الذاتي مرتبط بأكثر من رمز عقد",
+    pair: { from: "personal_no", to: "contract_pair" },
+  },
+  {
+    key: "pair_personal_phone",
+    category: "conflicting",
+    field: "phone",
+    label: "الرقم الذاتي مرتبط بأكثر من رقم هاتف",
+    pair: { from: "personal_no", to: "phone" },
+  },
+  {
+    key: "pair_sham_national",
+    category: "conflicting",
+    field: "national_id",
+    label: "الشام كاش مرتبط بأكثر من رقم وطني",
+    pair: { from: "sham_cash", to: "national_id" },
+  },
+  {
+    key: "pair_sham_personal",
+    category: "conflicting",
+    field: "personal_no",
+    label: "الشام كاش مرتبط بأكثر من رقم ذاتي",
+    pair: { from: "sham_cash", to: "personal_no" },
+  },
+  {
+    key: "pair_sham_contract",
+    category: "conflicting",
+    field: "contract_pair",
+    label: "الشام كاش مرتبط بأكثر من رمز عقد",
+    pair: { from: "sham_cash", to: "contract_pair" },
+  },
+  {
+    key: "pair_sham_phone",
+    category: "conflicting",
+    field: "phone",
+    label: "الشام كاش مرتبط بأكثر من رقم هاتف",
+    pair: { from: "sham_cash", to: "phone" },
+  },
+  {
+    key: "pair_contract_national",
+    category: "conflicting",
+    field: "national_id",
+    label: "رمز العقد مرتبط بأكثر من رقم وطني",
+    pair: { from: "contract_pair", to: "national_id" },
+  },
+  {
+    key: "pair_contract_personal",
+    category: "conflicting",
+    field: "personal_no",
+    label: "رمز العقد مرتبط بأكثر من رقم ذاتي",
+    pair: { from: "contract_pair", to: "personal_no" },
+  },
+  {
+    key: "pair_contract_sham",
+    category: "conflicting",
+    field: "sham_cash",
+    label: "رمز العقد مرتبط بأكثر من شام كاش",
+    pair: { from: "contract_pair", to: "sham_cash" },
+  },
+  {
+    key: "pair_contract_phone",
+    category: "conflicting",
+    field: "phone",
+    label: "رمز العقد مرتبط بأكثر من رقم هاتف",
+    pair: { from: "contract_pair", to: "phone" },
+  },
+  {
+    key: "pair_phone_national",
+    category: "conflicting",
+    field: "national_id",
+    label: "رقم الهاتف مرتبط بأكثر من رقم وطني",
+    pair: { from: "phone", to: "national_id" },
+  },
+  {
+    key: "pair_phone_personal",
+    category: "conflicting",
+    field: "personal_no",
+    label: "رقم الهاتف مرتبط بأكثر من رقم ذاتي",
+    pair: { from: "phone", to: "personal_no" },
+  },
+  {
+    key: "pair_phone_sham",
+    category: "conflicting",
+    field: "sham_cash",
+    label: "رقم الهاتف مرتبط بأكثر من شام كاش",
+    pair: { from: "phone", to: "sham_cash" },
+  },
+  {
+    key: "pair_phone_contract",
+    category: "conflicting",
+    field: "contract_pair",
+    label: "رقم الهاتف مرتبط بأكثر من رمز عقد",
+    pair: { from: "phone", to: "contract_pair" },
+  },
+  {
+    key: "pair_person_contract",
+    category: "conflicting",
+    field: "contract_pair",
+    label: "الشخص مرتبط بأكثر من رمز عقد (أساسي + ثانوي)",
+    pair: { from: "person", to: "contract_pair" },
+  },
+  {
+    key: "pair_person_phone",
+    category: "conflicting",
+    field: "phone",
+    label: "الشخص مرتبط بأكثر من رقم هاتف",
+    pair: { from: "person", to: "phone" },
+  },
 ] as const satisfies readonly {
   key: string;
   category: ConflictCategory;
   field: ConflictField;
   label: string;
+  pair?: { from: ConflictPairSide; to: ConflictPairSide };
 }[];
 
 export type ConflictRuleKey = (typeof CONFLICT_RULES)[number]["key"];
@@ -208,7 +392,9 @@ export type ConflictRow = {
   nationalId: string;
   shamCash: string;
   personalNo: string;
-  functionalCategory: string | null;
+  phone: string;
+  // Stored numeric category (1-5, 0 unknown, null empty); formatted for display.
+  functionalCategory: number | string | null;
   issueNumber: number;
   groupKey: string | null;
   issues: ConflictIssue[];

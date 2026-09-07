@@ -3,7 +3,9 @@ import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import ExcelJS from "exceljs";
 import { cellValueText } from "@/lib/excel/cell-value";
-import { headersForSheet, removeWorkbookFilters } from "@/lib/excel/workbook";
+import { extractRowFormats, type RowFormats } from "@/lib/excel/cell-style";
+import { tableRangeForSheet } from "@/lib/excel/table-range";
+import { headersForSheet } from "@/lib/excel/workbook";
 import { normalizeStored } from "@/lib/normalization/arabic";
 import type { MergeInspection } from "@/lib/merge/types";
 
@@ -21,28 +23,30 @@ export function mergeFilePath(token: string) {
   return path.join(MERGE_DIRECTORY, `${token}.xlsx`);
 }
 
-function rowCount(worksheet: ExcelJS.Worksheet) {
-  return Math.max(0, worksheet.actualRowCount - 1);
-}
-
 function inspectWorksheet(
   worksheet: ExcelJS.Worksheet,
   sheetName: string,
 ): MergeInspection["selected"] {
-  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty" });
+  // Live table bounds: merge uploads are never normalized (no filter/table
+  // removal), so tables always survive until the run reads them.
+  const table = tableRangeForSheet(worksheet);
+  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty", ...(table ? { table } : {}) });
   const preview: string[][] = [];
-  const finalRow = Math.min(worksheet.actualRowCount, 7);
-  for (let rowIndex = 2; rowIndex <= finalRow; rowIndex += 1) {
+  const firstDataRow = table ? table.firstRow : 2;
+  const lastDataRow = table ? table.lastRow : worksheet.actualRowCount;
+  const firstCol = table ? table.firstCol : 1;
+  const finalRow = Math.min(lastDataRow, firstDataRow + 5);
+  for (let rowIndex = firstDataRow; rowIndex <= finalRow; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
     preview.push(
-      headers.map((_, index) => cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" })),
+      headers.map((_, index) => cellValueText(row.getCell(firstCol + index), { onUncachedFormula: "empty" })),
     );
   }
   return {
     sheetName,
     headers,
     preview,
-    rowCount: rowCount(worksheet),
+    rowCount: Math.max(0, lastDataRow - firstDataRow + 1),
     columnCount: headers.length,
   };
 }
@@ -86,15 +90,19 @@ export async function saveAndInspectMergeFile(
     );
   }
   if (!workbook.worksheets.length) throw new Error("لا يحتوي المصنف على أي أوراق قابلة للقراءة.");
-  if (removeWorkbookFilters(workbook)) await workbook.xlsx.writeFile(mergeFilePath(token));
   const first = workbook.worksheets[0];
   return {
     token,
     originalFilename,
-    sheets: workbook.worksheets.map((sheet) => ({
-      name: sheet.name,
-      rowCount: rowCount(sheet),
-    })),
+    sheets: workbook.worksheets.map((sheet) => {
+      const table = tableRangeForSheet(sheet);
+      return {
+        name: sheet.name,
+        rowCount: table
+          ? Math.max(0, table.lastRow - table.firstRow + 1)
+          : Math.max(0, sheet.actualRowCount - 1),
+      };
+    }),
     selected: inspectWorksheet(first, first.name),
   };
 }
@@ -121,15 +129,23 @@ export async function readMergeSheet(token: string, sheetName: string) {
   }
   const worksheet = workbook.worksheets.find((sheet) => sheet.name === sheetName);
   if (!worksheet) throw new Error("الورقة المحددة غير موجودة في المصنف.");
-  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty" });
-  const rows: Array<{ rowNumber: number; cells: string[] }> = [];
-  for (let rowIndex = 2; rowIndex <= worksheet.actualRowCount; rowIndex += 1) {
+  const table = tableRangeForSheet(worksheet);
+  const headers = headersForSheet(worksheet, { onUncachedFormula: "empty", ...(table ? { table } : {}) });
+  const firstCol = table ? table.firstCol : 1;
+  const firstDataRow = table ? table.firstRow : 2;
+  const lastDataRow = table ? table.lastRow : worksheet.actualRowCount;
+  const rows: Array<{ rowNumber: number; cells: string[]; formats?: RowFormats }> = [];
+  for (let rowIndex = firstDataRow; rowIndex <= lastDataRow; rowIndex += 1) {
     const row = worksheet.getRow(rowIndex);
     const cells = headers.map((_, index) =>
-      cellValueText(row.getCell(index + 1), { onUncachedFormula: "empty" }),
+      cellValueText(row.getCell(firstCol + index), { onUncachedFormula: "empty" }),
     );
     if (cells.every((value) => normalizeStored(value) === "")) continue;
-    rows.push({ rowNumber: rowIndex, cells });
+    rows.push({
+      rowNumber: rowIndex,
+      cells,
+      formats: extractRowFormats(row, headers.length, firstCol),
+    });
   }
   return { sheetName, headers, rows };
 }

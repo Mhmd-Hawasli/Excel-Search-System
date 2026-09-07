@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { CONFLICT_RULES, type ConflictRuleKey } from "@/lib/conflicts/catalog";
-import { normalizeTextSql, queryConflicts } from "@/lib/conflicts/query";
+import { normalizeTextSql, queryConflicts, queryConflictStats, queryConflictDashboard, conflictScopeFilter } from "@/lib/conflicts/query";
+import type { ConflictRequest } from "@/lib/conflicts/request";
 import { normalizeStored } from "@/lib/normalization/arabic";
 import { recordInput } from "@/lib/excel/import-worker";
 import { STANDARD_FIELD_KEYS } from "@/lib/excel/types";
@@ -14,7 +15,7 @@ async function main() {
     async (tx) => {
       // These connection-local tables shadow the archive only for raw SQL in this transaction.
       // No permanent file, record, mapping or job is inserted, updated or deleted.
-      for (const table of ["files", "file_columns", "records", "upload_jobs"]) {
+      for (const table of ["files", "file_columns", "records", "upload_jobs", "ignored_conflicts"]) {
         await tx.$executeRawUnsafe(
           `CREATE TEMP TABLE ${table} (LIKE public.${table} INCLUDING DEFAULTS) ON COMMIT DROP`,
         );
@@ -33,7 +34,7 @@ async function main() {
               categoryId: null,
             }))
           : [];
-        for (const header of ["تاريخ الميلاد", "تاريخ المباشرة", "المسمى الوظيفي", "ملاحظة"]) {
+        for (const header of ["تاريخ الميلاد", "تاريخ المباشرة", "تاريخ نهاية العقد", "المسمى الوظيفي", "ملاحظة"]) {
           columns.push({
             headerRaw: header,
             headerNormalized: normalizeStored(header),
@@ -67,6 +68,7 @@ async function main() {
       const unmappedFile = await file(false);
       const activeFile = await file(true, true);
       let index = 1;
+      const mappedRowIds: string[] = [];
       async function row(values: Record<string, string> = {}, target = firstFile) {
         index++;
         const data = {
@@ -98,6 +100,9 @@ async function main() {
         await tx.$executeRaw(
           Prisma.sql`INSERT INTO records (${Prisma.join(columns)}) VALUES (${Prisma.join(sqlValues)})`,
         );
+        // Files without standard mappings never raise missing-data issues, and
+        // files with an in-progress import are excluded from the engine.
+        if (target !== unmappedFile && target !== activeFile) mappedRowIds.push(id);
         return id;
       }
       const expected = new Map<ConflictRuleKey, string[]>();
@@ -160,16 +165,19 @@ async function main() {
       const missingAll = await row(
         Object.fromEntries(STANDARD_FIELD_KEYS.map((key) => [key, " \t "])),
       );
+      // A future contract end date is legitimate and skipped by date_future.
+      await row({ "تاريخ نهاية العقد": "2999-06-06" });
       const missingMappedFull = await row({ full_name: "" });
       const shamWhitespaceOnly = await row({ sham_cash: " \t\n\u00a0\u202f\ufeff" });
-      const unmapped = await row({}, unmappedFile);
+      // Row in a file without standard mappings: missing rules must stay silent.
+      await row({}, unmappedFile);
       for (const key of [
         "missing_national",
         "missing_sham",
         "missing_personal",
         "missing_mother",
       ] as const)
-        expectRows(key, [missingAll, unmapped]);
+        expectRows(key, [missingAll]);
       expected.get("missing_sham")!.push(shamWhitespaceOnly);
       expectRows("missing_full", [missingAll, missingMappedFull]);
       for (const key of ["missing_first", "missing_father", "missing_last"] as const)
@@ -274,6 +282,33 @@ async function main() {
       });
       expected.get("missing_mother")!.push(noMother);
       expectRows("similar_names", [similarA, similarB]);
+      expectRows("similar_national", [similarA, similarB, sameA, sameB, noMother]);
+      expectRows("missing_job", mappedRowIds);
+      expectRows("pair_person_contract", [sameA, sameB]);
+      expectRows("pair_national_contract", [peopleA, peopleB]);
+      expectRows("pair_personal_contract", [peopleA, peopleB]);
+      expectRows("pair_sham_contract", [peopleA, peopleB]);
+      for (const key of [
+        "pair_national_personal",
+        "pair_national_sham",
+        "pair_national_phone",
+        "pair_personal_national",
+        "pair_personal_sham",
+        "pair_personal_phone",
+        "pair_sham_national",
+        "pair_sham_personal",
+        "pair_sham_phone",
+        "pair_contract_national",
+        "pair_contract_personal",
+        "pair_contract_sham",
+        "pair_contract_phone",
+        "pair_phone_national",
+        "pair_phone_personal",
+        "pair_phone_sham",
+        "pair_phone_contract",
+        "pair_person_phone",
+      ] as const)
+        expectRows(key, []);
       await row({ national_id: "2", sham_cash: "bad", "تاريخ الميلاد": "bad" }, activeFile);
 
       for (const rule of CONFLICT_RULES) {
@@ -326,7 +361,7 @@ async function main() {
         { category: "conflicting", field: "all", rule: "all", page: 1, pageSize: 100 , sortBy: "issueNumber", sortDir: "asc" },
         tx,
       );
-      assert.equal(allConflicts.rows.find((entry) => entry.id === sameA)?.issues.length, 7);
+      assert.equal(allConflicts.rows.find((entry) => entry.id === sameA)?.issues.length, 8);
       const names = allConflicts.rows.map((entry) => normalizeStored(entry.fullName));
       for (const name of new Set(names)) {
         const positions = names.flatMap((value, position) => (value === name ? [position] : []));
@@ -354,6 +389,50 @@ async function main() {
           "SQL normalization matches stored normalization",
         );
       }
+      // Ignored problems disappear from the report and statistics.
+      // (Raw SQL so the insert lands in the shadowed temp table; the Prisma
+      // client schema-qualifies table names and would bypass the shadow.)
+      await tx.$executeRaw`INSERT INTO ignored_conflicts (id, rule, record_id)
+        VALUES (${randomUUID()}::uuid, 'person_sham', ${sameA}::uuid)`;
+      const withoutIgnored = await queryConflicts(
+        { category: "conflicting", field: "sham_cash", rule: "person_sham", page: 1, pageSize: 25, sortBy: "issueNumber", sortDir: "asc" },
+        tx,
+      );
+      assert.deepEqual(
+        withoutIgnored.rows.map((entry) => entry.id).sort(),
+        [sameB].sort(),
+        "ignored (rule, record) pairs are excluded",
+      );
+      const stats = await queryConflictStats({ groupIds: null, fileIds: null }, tx);
+      assert.equal(stats.ignored, 1);
+      assert(!stats.rules.some((entry) => entry.rule === "person_sham" && entry.records === 2));
+      const personShamStat = stats.rules.find((entry) => entry.rule === "person_sham");
+      assert.equal(personShamStat?.records, 1);
+      assert(stats.filesScanned > 0 && stats.recordsScanned > 0);
+      assert(stats.rules.length > 0 && stats.files.length > 0);
+      const reportRequests: ConflictRequest[] = [
+        ...(["invalid", "missing", "similar", "conflicting"] as const).map((category) => ({
+          category, field: "all", rule: "all", page: 1, pageSize: 25, sortBy: "issueNumber" as const, sortDir: "asc" as const,
+        })),
+        { category: "conflicting", field: "sham_cash", rule: "person_sham", page: 1, pageSize: 25, sortBy: "fullName", sortDir: "desc" },
+        { category: "invalid", field: "all", rule: "all", page: 2, pageSize: 10, sortBy: "fileName", sortDir: "asc" },
+        { category: "invalid", field: "all", rule: "all", page: 999, pageSize: 25, sortBy: "issueNumber", sortDir: "asc" },
+      ];
+      for (const input of reportRequests) {
+        const combined = await queryConflictDashboard(input, { groupIds: null, fileIds: null }, tx);
+        assert.deepEqual(combined.results, await queryConflicts(input, tx), "combined results preserve filtering, explanations, grouping and pagination");
+        assert.deepEqual(combined.stats, stats, "dashboard counts do not depend on table filters");
+      }
+      // A visible parent group must not grant report access to sibling files.
+      const restricted = { groupIds: [groupId], fileIds: [firstFile.id] };
+      const scopedDashboard = await queryConflictDashboard(reportRequests[0], restricted, tx);
+      assert.deepEqual(scopedDashboard.results, await queryConflicts(reportRequests[0], tx, conflictScopeFilter(restricted)));
+      assert(scopedDashboard.results.rows.every((entry) => entry.fileId === firstFile.id));
+      assert.equal(scopedDashboard.stats.filesScanned, 1);
+      const inaccessible = await queryConflictDashboard(reportRequests[0], { groupIds: [groupId], fileIds: [] }, tx);
+      assert.equal(inaccessible.stats.instances, 0);
+      assert.equal(inaccessible.stats.recordsScanned, 0);
+      assert.equal(inaccessible.results.total, 0);
       await tx.$executeRaw`DELETE FROM records`;
       const sameShamValues = { ...person, sham_cash: "9999999999999999" };
       const sameShamA = await row(sameShamValues);
@@ -389,6 +468,9 @@ async function main() {
         assert.equal(result.total, 0);
         assert.deepEqual(result.rows, []);
       }
+      const emptyDashboard = await queryConflictDashboard(reportRequests[0], { groupIds: null, fileIds: null }, tx);
+      assert.equal(emptyDashboard.stats.instances, 0, "report refresh sees deletions without cached stale results");
+      assert.equal(emptyDashboard.results.total, 0);
       const nationalA = await row({ ...person, national_id: "123456789" });
       const nationalB = await row({ ...person, national_id: "٠٠١٢٣\u00a0٤٥٦\t٧٨٩" }, secondFile);
       const equivalentNational = await queryConflicts(

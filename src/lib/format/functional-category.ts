@@ -2,11 +2,11 @@ import { normalizeStored, toLatinDigits } from "@/lib/normalization/arabic";
 
 export const FUNCTIONAL_CATEGORY_ERROR = 0;
 export const FUNCTIONAL_CATEGORY_LABELS = [
-  "الفئة الأولى",
-  "الفئة الثانية",
-  "الفئة الثالثة",
-  "الفئة الرابعة",
-  "الفئة الخامسة",
+  "فئة الأولى",
+  "فئة الثانية",
+  "فئة الثالثة",
+  "فئة الرابعة",
+  "فئة الخامسة",
 ] as const;
 
 export type FunctionalCategory = 1 | 2 | 3 | 4 | 5;
@@ -52,7 +52,7 @@ export function parseFunctionalCategory(value: unknown): FunctionalCategory | 0 
   return FUNCTIONAL_CATEGORY_ERROR;
 }
 
-/** Display form of a stored category: «الفئة الأولى» … «الفئة الخامسة». */
+/** Display form of a stored category: «فئة الأولى» … «فئة الخامسة». */
 export function formatFunctionalCategory(value: unknown): string {
   if (value === null || value === undefined || String(value).trim() === "") return "";
   const category = parseFunctionalCategory(value);

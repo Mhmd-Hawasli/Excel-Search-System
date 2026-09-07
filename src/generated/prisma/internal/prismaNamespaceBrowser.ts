@@ -61,6 +61,9 @@ export const ModelName = {
   ActivityLog: 'ActivityLog',
   RecordEdit: 'RecordEdit',
   MappingTemplate: 'MappingTemplate',
+  IgnoredConflict: 'IgnoredConflict',
+  ConflictCacheState: 'ConflictCacheState',
+  ConflictQueryCache: 'ConflictQueryCache',
   User: 'User',
   UserPermission: 'UserPermission'
 } as const
@@ -166,6 +169,8 @@ export const RecordScalarFieldEnum = {
   dNationalId: 'dNationalId',
   dPersonalNo: 'dPersonalNo',
   dPhone: 'dPhone',
+  fmtFills: 'fmtFills',
+  fmtFontColors: 'fmtFontColors',
   nationalIdNum: 'nationalIdNum',
   createdAt: 'createdAt'
 } as const
@@ -239,6 +244,35 @@ export const MappingTemplateScalarFieldEnum = {
 export type MappingTemplateScalarFieldEnum = (typeof MappingTemplateScalarFieldEnum)[keyof typeof MappingTemplateScalarFieldEnum]
 
 
+export const IgnoredConflictScalarFieldEnum = {
+  id: 'id',
+  rule: 'rule',
+  recordId: 'recordId',
+  createdAt: 'createdAt'
+} as const
+
+export type IgnoredConflictScalarFieldEnum = (typeof IgnoredConflictScalarFieldEnum)[keyof typeof IgnoredConflictScalarFieldEnum]
+
+
+export const ConflictCacheStateScalarFieldEnum = {
+  id: 'id',
+  revision: 'revision'
+} as const
+
+export type ConflictCacheStateScalarFieldEnum = (typeof ConflictCacheStateScalarFieldEnum)[keyof typeof ConflictCacheStateScalarFieldEnum]
+
+
+export const ConflictQueryCacheScalarFieldEnum = {
+  key: 'key',
+  sourceRevision: 'sourceRevision',
+  checkedDate: 'checkedDate',
+  payload: 'payload',
+  rebuiltAt: 'rebuiltAt'
+} as const
+
+export type ConflictQueryCacheScalarFieldEnum = (typeof ConflictQueryCacheScalarFieldEnum)[keyof typeof ConflictQueryCacheScalarFieldEnum]
+
+
 export const UserScalarFieldEnum = {
   id: 'id',
   username: 'username',
@@ -277,6 +311,14 @@ export const JsonNullValueInput = {
 } as const
 
 export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {

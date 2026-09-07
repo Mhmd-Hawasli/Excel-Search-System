@@ -24,6 +24,7 @@ export function ConflictFilters({
   field,
   rule,
   pageSize,
+  counts,
 }: {
   pathname: string;
   params: URLSearchParams;
@@ -31,6 +32,7 @@ export function ConflictFilters({
   field: string;
   rule: string;
   pageSize: number;
+  counts?: Record<ConflictCategory, number>;
 }) {
   const { setParams } = useParamNavigation(pathname, params);
   const [refreshing, startRefresh] = useTransition();
@@ -61,7 +63,14 @@ export function ConflictFilters({
                 <Icon className="size-5" aria-hidden="true" />
               </span>
               <span>
-                <span className="block font-bold">{item.label}</span>
+                <span className="flex items-center gap-2 font-bold">
+                  {item.label}
+                  {counts ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                      {(counts[item.key] ?? 0).toLocaleString("en-US")}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="mt-1 block text-xs leading-6 text-muted-foreground">{item.description}</span>
               </span>
             </button>
@@ -127,7 +136,7 @@ export function ConflictFilters({
             value={pageSize}
             onChange={(event) => setParams({ pageSize: Number(event.target.value) })}
           >
-            {[25, 50, 100].map((size) => (
+            {[10, 25, 50, 100].map((size) => (
               <option key={size} value={size}>
                 {size}
               </option>

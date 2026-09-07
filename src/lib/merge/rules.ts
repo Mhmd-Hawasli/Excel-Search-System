@@ -334,6 +334,7 @@ export function runMerge(
   const leftRows: MergeRow[] = left.rows.map((row) => ({
     rowNumber: row.rowNumber,
     cells: row.cells,
+    formats: row.formats,
     key: null,
     rule: null,
     confirmed: false,
@@ -341,6 +342,7 @@ export function runMerge(
   const rightRows: MergeRow[] = right.rows.map((row) => ({
     rowNumber: row.rowNumber,
     cells: row.cells,
+    formats: row.formats,
     key: null,
     rule: null,
     confirmed: false,

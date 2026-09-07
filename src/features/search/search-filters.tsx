@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Search } from "lucide-react";
 import type { StandardFieldKey } from "@/lib/excel/types";
 import { SEARCH_FIELDS } from "@/lib/search/fields";
 import type { SearchMode } from "@/lib/search/plan";
@@ -12,9 +12,21 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useParamNavigation } from "@/hooks/use-param-navigation";
 
 /**
+ * Idle delay before a settled query is pushed to the URL: typing never
+ * searches, only a pause does — and only the results table below re-renders.
+ */
+const QUERY_IDLE_MS = 800;
+
+/**
  * Client filter panel for the search page. Owns only the text-input draft;
  * every other control writes straight to the URL and the server re-renders
  * the results — no client-side fetching, aborting, or loading state.
+ *
+ * The draft is intentionally decoupled from the server `query` prop: while
+ * the user is typing, late navigation responses must never overwrite the
+ * input (that is what used to eat the last typed character). Our own
+ * navigation echo is ignored; only an external URL change (back/forward,
+ * other controls) is adopted into the box.
  */
 export function SearchFilters({
   pathname,
@@ -35,22 +47,49 @@ export function SearchFilters({
   groupIds: string[];
   fileIds: string[];
 }) {
-  const { setParams } = useParamNavigation(pathname, params);
+  const { setParams, isPending } = useParamNavigation(pathname, params);
   const [draft, setDraft] = useState(query);
-  const debouncedDraft = useDebouncedValue(draft.trim(), 350);
+  const debouncedDraft = useDebouncedValue(draft.trim(), QUERY_IDLE_MS);
+  // Every `q` value this input pushed to the URL (or adopted from it).
+  // Lets the sync below tell our own navigation echo apart from an external
+  // URL change (back/forward): an echo carries no new information and must
+  // never rewrite the input, while an external change is adopted so the box
+  // always shows the results. State (not a ref) so the render-phase sync
+  // below stays within the rules of hooks.
+  const [lastPushed, setLastPushed] = useState(query);
+  // Latest committed query for the push effect below. Read via ref so the
+  // effect only ever reacts to a *settled draft* — never to an incoming
+  // `query` change (e.g. right after adopting an external navigation, the
+  // debounce value still lags one step behind and must not be pushed back).
+  const queryRef = useRef(query);
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
 
   // Back/forward navigation: re-sync the draft when the URL query changes
   // from somewhere other than this input (previous-render comparison).
+  // While the user is typing ahead of the last server response, the incoming
+  // value is a stale echo of an earlier keystroke — adopting it is exactly
+  // what used to delete freshly typed characters.
   const [previousQuery, setPreviousQuery] = useState(query);
   if (query !== previousQuery) {
     setPreviousQuery(query);
-    if (query !== draft.trim()) setDraft(query);
+    if (query !== lastPushed) {
+      setLastPushed(query);
+      setDraft(query);
+    }
   }
 
-  // Push the settled draft to the URL once it diverges from the URL.
+  // Push the settled draft to the URL once it diverges from the URL. Keyed
+  // on the debounced value alone (current URL read via ref): adopting an
+  // external navigation must never echo the still-lagging debounce back.
+  // setParams is stable (memoized on pathname + stable router instance).
   useEffect(() => {
-    if (debouncedDraft !== query) setParams({ q: debouncedDraft });
-  }, [debouncedDraft, query, setParams]);
+    if (debouncedDraft !== queryRef.current) {
+      setLastPushed(debouncedDraft);
+      setParams({ q: debouncedDraft });
+    }
+  }, [debouncedDraft, setParams]);
 
   return (
     <div className="rounded-xl border bg-card shadow-sm">
@@ -75,7 +114,17 @@ export function SearchFilters({
         </div>
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
           <div className="relative">
-            <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
+            {isPending ? (
+              <Loader2
+                className="absolute left-3 top-3.5 size-4 animate-spin text-primary"
+                aria-hidden="true"
+              />
+            ) : (
+              <Search
+                className="absolute left-3 top-3.5 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+            )}
             <Label htmlFor="search-query" className="sr-only">
               عبارة البحث
             </Label>

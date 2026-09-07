@@ -5,9 +5,10 @@ import { uploadConfigSchema, type UploadConfig } from "@/lib/excel/config";
 import { PRISMA_STANDARD_FIELDS } from "@/lib/excel/standard-fields";
 import { documentRows } from "@/lib/excel/document-rows";
 import { importRows } from "@/lib/excel/import-rows";
+import type { RowFormats } from "@/lib/excel/cell-style";
 import { UnresolvableCellError } from "@/lib/excel/cell-value";
 import type { StandardFieldKey } from "@/lib/excel/types";
-import { columnSignature, workbookPath } from "@/lib/excel/workbook";
+import { columnSignature, readFormatSidecar, removeFormatSidecar, sidecarRowFormats, workbookPath } from "@/lib/excel/workbook";
 import { digitsOnly, normalizeStored } from "@/lib/normalization/arabic";
 import { nationalIdColumns } from "@/lib/format/national-id";
 import { nationalIdQualityIssue } from "@/lib/excel/national-id-quality";
@@ -38,10 +39,22 @@ export function recordInput(
   rowIndex: number,
   data: RowData,
   config: UploadConfig,
+  formats?: RowFormats,
 ): Prisma.RecordCreateManyInput {
   const fields = mappedValues(data, config);
   const national = fields.national_id ?? "";
   const shamCash = fields.sham_cash ?? "";
+  const fills: Record<string, string> = {};
+  const fontColors: Record<string, string> = {};
+  if (formats) {
+    for (const column of config.columns) {
+      const key = String(column.columnIndex - 1);
+      const fill = formats.fills[key];
+      if (fill) fills[column.headerRaw] = fill;
+      const argb = formats.fonts[key];
+      if (argb) fontColors[column.headerRaw] = argb;
+    }
+  }
   return {
     fileId,
     rowIndex,
@@ -75,6 +88,8 @@ export function recordInput(
       : null,
     dPersonalNo: fields.personal_no ? digitsOnly(fields.personal_no) : null,
     dPhone: fields.phone ? digitsOnly(fields.phone) : null,
+    fmtFills: Object.keys(fills).length > 0 ? fills : Prisma.DbNull,
+    fmtFontColors: Object.keys(fontColors).length > 0 ? fontColors : Prisma.DbNull,
   };
 }
 
@@ -173,6 +188,7 @@ export async function runImportJob(jobId: string) {
     }
   } finally {
     await unlink(workbookPath(config.token)).catch(() => undefined);
+    await removeFormatSidecar(config.token);
   }
 }
 
@@ -232,6 +248,7 @@ async function executeImport(
     let recordBatch: Prisma.RecordCreateManyInput[] = [];
     let issueBatch: Prisma.DataQualityIssueCreateManyInput[] = [];
     const seenNationalIds = new Set<string>();
+    const sidecar = await readFormatSidecar(config.token);
     const rows = source === "stream" ? importRows(config) : documentRows(config);
     for await (const row of rows) {
       processedRows += 1;
@@ -247,7 +264,8 @@ async function executeImport(
           rawValue: null,
         });
       } else {
-        recordBatch.push(recordInput(fileId, row.rowIndex, data, config));
+        const formats = sidecarRowFormats(sidecar, config.sheetName, config.sheetIndex, row.rowIndex);
+        recordBatch.push(recordInput(fileId, row.rowIndex, data, config, formats ?? undefined));
         issueBatch.push(...qualityIssues(fileId, row.rowIndex, data, config, seenNationalIds));
         importedRows += 1;
       }

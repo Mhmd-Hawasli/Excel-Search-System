@@ -1,4 +1,6 @@
 import ExcelJS from "exceljs";
+import { applyRowFormats, THIN_CELL_BORDER, type RowFormats } from "@/lib/excel/cell-style";
+import { uniqueTableColumnNames } from "@/lib/excel/table-columns";
 import { parseStoredDate } from "@/lib/format/date";
 import type { BuiltSheetMerge } from "@/lib/sheet-merge/merge";
 import { MERGED_SHEET_NAME, UNLINKED_SHEET_PREFIX } from "@/lib/sheet-merge/types";
@@ -54,10 +56,17 @@ function applyColumnWidths(
 }
 
 function styleTableRange(sheet: ExcelJS.Worksheet, rowCount: number, columnCount: number) {
-  // Alignment is applied once per column instead of once per cell: identical
-  // rendering at a fraction of the cost on large tables.
-  for (let rowIndex = 1; rowIndex <= rowCount + 1; rowIndex++)
-    sheet.getRow(rowIndex).height = ROW_HEIGHT_POINTS;
+  // Row heights stay per-row, but alignment is applied once per column
+  // instead of once per cell: identical rendering at a fraction of the cost
+  // on large tables. Borders must touch every cell ("all borders"), so they
+  // are painted per cell in the row loop.
+  for (let rowIndex = 1; rowIndex <= rowCount + 1; rowIndex++) {
+    const row = sheet.getRow(rowIndex);
+    row.height = ROW_HEIGHT_POINTS;
+    for (let columnIndex = 1; columnIndex <= columnCount; columnIndex++) {
+      row.getCell(columnIndex).border = THIN_CELL_BORDER;
+    }
+  }
   for (let columnIndex = 1; columnIndex <= columnCount; columnIndex++)
     sheet.getColumn(columnIndex).alignment = {
       vertical: "middle",
@@ -71,17 +80,9 @@ function styleTableRange(sheet: ExcelJS.Worksheet, rowCount: number, columnCount
  * names, so every name is flattened to one line, made non-blank and unique —
  * the way Excel itself renames them. Source sheets merged side by side often
  * repeat a title ("الاسم الثلاثي" in three sheets), which is handled here.
+ *
+ * Shared implementation: `uniqueTableColumnNames` in `lib/excel/table-columns`.
  */
-function uniqueTableColumnNames(headers: string[]): string[] {
-  const used = new Map<string, number>();
-  return headers.map((header, index) => {
-    const flattened = header.replace(/[\r\n\t]+/g, " ");
-    const base = flattened.trim() === "" ? `عمود ${index + 1}` : flattened;
-    const count = used.get(base.toLowerCase()) ?? 0;
-    used.set(base.toLowerCase(), count + 1);
-    return count === 0 ? base : `${base} (${count + 1})`;
-  });
-}
 
 /** Excel forbids `[ ] : * ? / \` and names longer than 31 characters. */
 function safeSheetName(name: string, taken: Set<string>) {
@@ -104,6 +105,7 @@ function writeTable(
   tableIndex: number,
   headers: string[],
   stringRows: string[][],
+  rowFormats?: (RowFormats | null)[],
 ) {
   const sheet = workbook.addWorksheet(sheetName, { views: [{ rightToLeft: true }] });
   const exportHeaders = uniqueTableColumnNames(headers);
@@ -134,6 +136,12 @@ function writeTable(
   headerRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
   for (const { row, col } of dateCells)
     sheet.getRow(row + 2).getCell(col + 1).numFmt = DATE_NUMBER_FORMAT;
+  // Source colors travel with the rows (already in export coordinates).
+  if (rowFormats) {
+    rowFormats.forEach((formats, rowIndex) => {
+      if (formats) applyRowFormats(sheet, rowIndex + 2, formats, exportHeaders.length);
+    });
+  }
   applyColumnWidths(sheet, exportHeaders, exportRows);
   styleTableRange(sheet, exportRows.length, exportHeaders.length);
 }
@@ -157,6 +165,7 @@ export async function exportSheetMergeWorkbook(
     1,
     merge.grid.headers,
     merge.grid.rows,
+    merge.formats,
   );
 
   const unlinkedTotal = merge.unlinkedSheets.length;
@@ -165,12 +174,25 @@ export async function exportSheetMergeWorkbook(
       30 + Math.round(((index + 1) / unlinkedTotal) * 55),
       `كتابة الصفوف غير المرتبطة في «${sheet.sheetName}»…`,
     );
+    // Source fills and fonts shift right by 3, behind the sheet/row/reason
+    // prefix columns (which stay unformatted).
+    const rowFormats = sheet.rows.map((row) => {
+      if (!row.formats) return null;
+      const shift = (values: Record<string, string>) =>
+        Object.fromEntries(
+          Object.entries(values)
+            .map(([key, argb]) => [String(Number(key) + 3), argb] as const)
+            .filter(([key]) => Number.isInteger(Number(key))),
+        );
+      return { fills: shift(row.formats.fills), fonts: shift(row.formats.fonts) };
+    });
     writeTable(
       workbook,
       safeSheetName(`${UNLINKED_SHEET_PREFIX} - ${sheet.sheetName}`, taken),
       index + 2,
       [SHEET_NAME_HEADER, ROW_NUMBER_HEADER, REASON_HEADER, ...sheet.headers],
       sheet.rows.map((row) => [sheet.sheetName, String(row.rowNumber), row.reason, ...row.cells]),
+      rowFormats,
     );
   }
 

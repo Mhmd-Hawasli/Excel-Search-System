@@ -1,8 +1,8 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-  runtime  = "nodejs"
-  moduleFormat = "esm"
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
   generatedFileExtension = "ts"
 }
 
@@ -11,20 +11,20 @@ datasource db {
 }
 
 enum StandardField {
-  FIRST_NAME             @map("first_name")
-  FATHER_NAME            @map("father_name")
-  LAST_NAME              @map("last_name")
-  FULL_NAME              @map("full_name")
-  NATIONAL_ID            @map("national_id")
-  SHAM_CASH              @map("sham_cash")
-  PERSONAL_NO            @map("personal_no")
-  MOTHER_NAME            @map("mother_name")
-  PHONE                  @map("phone")
-  CONTRACT_CODE          @map("contract_code")
+  FIRST_NAME              @map("first_name")
+  FATHER_NAME             @map("father_name")
+  LAST_NAME               @map("last_name")
+  FULL_NAME               @map("full_name")
+  NATIONAL_ID             @map("national_id")
+  SHAM_CASH               @map("sham_cash")
+  PERSONAL_NO             @map("personal_no")
+  MOTHER_NAME             @map("mother_name")
+  PHONE                   @map("phone")
+  CONTRACT_CODE           @map("contract_code")
   SECONDARY_CONTRACT_CODE @map("secondary_contract_code")
-  JOB_TITLE              @map("job_title")
-  FUNCTIONAL_CATEGORY    @map("functional_category")
-  ORGANIZATIONAL_LEVEL   @map("organizational_level")
+  JOB_TITLE               @map("job_title")
+  FUNCTIONAL_CATEGORY     @map("functional_category")
+  ORGANIZATIONAL_LEVEL    @map("organizational_level")
 
   @@map("standard_field")
 }
@@ -40,52 +40,52 @@ enum UploadJobStatus {
 }
 
 enum DataQualityIssueType {
-  MISSING_NATIONAL_ID          @map("missing_national_id")
-  INVALID_NATIONAL_ID          @map("invalid_national_id")
-  DUPLICATE_NATIONAL_ID        @map("duplicate_national_id")
-  INVALID_PHONE                @map("invalid_phone")
-  INVALID_SHAM_CASH            @map("invalid_sham_cash")
-  INVALID_FUNCTIONAL_CATEGORY  @map("invalid_functional_category")
-  EMPTY_ROW                    @map("empty_row")
+  MISSING_NATIONAL_ID         @map("missing_national_id")
+  INVALID_NATIONAL_ID         @map("invalid_national_id")
+  DUPLICATE_NATIONAL_ID       @map("duplicate_national_id")
+  INVALID_PHONE               @map("invalid_phone")
+  INVALID_SHAM_CASH           @map("invalid_sham_cash")
+  INVALID_FUNCTIONAL_CATEGORY @map("invalid_functional_category")
+  EMPTY_ROW                   @map("empty_row")
 
   @@map("data_quality_issue_type")
 }
 
 enum ActivityAction {
-  FILE_UPLOADED      @map("file_uploaded")
-  FILE_UPDATED       @map("file_updated")
-  FILE_REPLACED      @map("file_replaced")
-  FILE_DELETED       @map("file_deleted")
-  GROUP_CREATED      @map("group_created")
-  GROUP_UPDATED      @map("group_updated")
-  GROUP_REORDERED    @map("group_reordered")
-  GROUP_DELETED      @map("group_deleted")
-  CATEGORY_CREATED   @map("category_created")
-  CATEGORY_UPDATED   @map("category_updated")
-  CATEGORY_REORDERED @map("category_reordered")
-  CATEGORY_DELETED   @map("category_deleted")
-  COLUMN_REORDERED   @map("column_reordered")
-  COLUMN_RECATEGORIZED @map("column_recategorized")
-  TEMPLATE_CREATED   @map("template_created")
-  BACKUP_RESTORED    @map("backup_restored")
-  RECORD_EDITED      @map("record_edited")
-  USER_CREATED       @map("user_created")
-  USER_UPDATED       @map("user_updated")
-  USER_DELETED       @map("user_deleted")
+  FILE_UPLOADED            @map("file_uploaded")
+  FILE_UPDATED             @map("file_updated")
+  FILE_REPLACED            @map("file_replaced")
+  FILE_DELETED             @map("file_deleted")
+  GROUP_CREATED            @map("group_created")
+  GROUP_UPDATED            @map("group_updated")
+  GROUP_REORDERED          @map("group_reordered")
+  GROUP_DELETED            @map("group_deleted")
+  CATEGORY_CREATED         @map("category_created")
+  CATEGORY_UPDATED         @map("category_updated")
+  CATEGORY_REORDERED       @map("category_reordered")
+  CATEGORY_DELETED         @map("category_deleted")
+  COLUMN_REORDERED         @map("column_reordered")
+  COLUMN_RECATEGORIZED     @map("column_recategorized")
+  TEMPLATE_CREATED         @map("template_created")
+  BACKUP_RESTORED          @map("backup_restored")
+  RECORD_EDITED            @map("record_edited")
+  USER_CREATED             @map("user_created")
+  USER_UPDATED             @map("user_updated")
+  USER_DELETED             @map("user_deleted")
   USER_PERMISSIONS_UPDATED @map("user_permissions_updated")
 
   @@map("activity_action")
 }
 
 model Group {
-  id          String            @id @default(uuid()) @db.Uuid
-  name        String            @unique
-  description String            @default("")
-  sortOrder   Int               @default(0) @map("sort_order")
-  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  files       File[]
-  templates   MappingTemplate[]
+  id                String            @id @default(uuid()) @db.Uuid
+  name              String            @unique
+  description       String            @default("")
+  sortOrder         Int               @default(0) @map("sort_order")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  files             File[]
+  templates         MappingTemplate[]
   scopedPermissions UserPermission[]
 
   @@map("groups")
@@ -147,40 +147,43 @@ model FileColumn {
 }
 
 model Record {
-  id                      String   @id @default(uuid()) @db.Uuid
-  fileId                  String   @map("file_id") @db.Uuid
-  rowIndex                Int      @map("row_index")
-  data                    Json     @db.JsonB
-  sfFirstName             String?  @map("sf_first_name")
-  sfFatherName            String?  @map("sf_father_name")
-  sfLastName              String?  @map("sf_last_name")
-  sfFullName              String?  @map("sf_full_name")
-  sfNationalId            BigInt?  @map("sf_national_id")
-  sfShamCash              BigInt?  @map("sf_sham_cash")
-  sfPersonalNo            String?  @map("sf_personal_no")
-  sfMotherName            String?  @map("sf_mother_name")
-  sfPhone                 String?  @map("sf_phone")
-  sfContractCode          String?  @map("sf_contract_code")
-  sfSecondaryContractCode String?  @map("sf_secondary_contract_code")
-  sfJobTitle              String?  @map("sf_job_title")
-  sfFunctionalCategory    Int?     @map("sf_functional_category")
-  sfOrganizationalLevel   String?  @map("sf_organizational_level")
-  nFirstName              String?  @map("n_first_name")
-  nFatherName             String?  @map("n_father_name")
-  nLastName               String?  @map("n_last_name")
-  nFullName               String?  @map("n_full_name")
-  nMotherName             String?  @map("n_mother_name")
-  nContractCode           String?  @map("n_contract_code")
-  nSecondaryContractCode  String?  @map("n_secondary_contract_code")
-  nJobTitle               String?  @map("n_job_title")
-  nOrganizationalLevel    String?  @map("n_organizational_level")
-  dNationalId             String?  @map("d_national_id")
-  dPersonalNo             String?  @map("d_personal_no")
-  dPhone                  String?  @map("d_phone")
-  nationalIdNum           BigInt?  @map("national_id_num")
-  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  file                    File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  id                      String            @id @default(uuid()) @db.Uuid
+  fileId                  String            @map("file_id") @db.Uuid
+  rowIndex                Int               @map("row_index")
+  data                    Json              @db.JsonB
+  sfFirstName             String?           @map("sf_first_name")
+  sfFatherName            String?           @map("sf_father_name")
+  sfLastName              String?           @map("sf_last_name")
+  sfFullName              String?           @map("sf_full_name")
+  sfNationalId            BigInt?           @map("sf_national_id")
+  sfShamCash              BigInt?           @map("sf_sham_cash")
+  sfPersonalNo            String?           @map("sf_personal_no")
+  sfMotherName            String?           @map("sf_mother_name")
+  sfPhone                 String?           @map("sf_phone")
+  sfContractCode          String?           @map("sf_contract_code")
+  sfSecondaryContractCode String?           @map("sf_secondary_contract_code")
+  sfJobTitle              String?           @map("sf_job_title")
+  sfFunctionalCategory    Int?              @map("sf_functional_category")
+  sfOrganizationalLevel   String?           @map("sf_organizational_level")
+  nFirstName              String?           @map("n_first_name")
+  nFatherName             String?           @map("n_father_name")
+  nLastName               String?           @map("n_last_name")
+  nFullName               String?           @map("n_full_name")
+  nMotherName             String?           @map("n_mother_name")
+  nContractCode           String?           @map("n_contract_code")
+  nSecondaryContractCode  String?           @map("n_secondary_contract_code")
+  nJobTitle               String?           @map("n_job_title")
+  nOrganizationalLevel    String?           @map("n_organizational_level")
+  dNationalId             String?           @map("d_national_id")
+  dPersonalNo             String?           @map("d_personal_no")
+  dPhone                  String?           @map("d_phone")
+  fmtFills                Json?             @map("fmt_fills")
+  fmtFontColors           Json?             @map("fmt_font_colors")
+  nationalIdNum           BigInt?           @map("national_id_num")
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  file                    File              @relation(fields: [fileId], references: [id], onDelete: Cascade)
   edits                   RecordEdit[]
+  ignores                 IgnoredConflict[]
 
   @@unique([fileId, rowIndex])
   @@index([fileId])
@@ -266,14 +269,46 @@ model MappingTemplate {
   @@map("mapping_templates")
 }
 
+model IgnoredConflict {
+  id        String   @id @default(uuid()) @db.Uuid
+  rule      String
+  recordId  String   @map("record_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  record    Record   @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@unique([rule, recordId])
+  @@index([recordId])
+  @@index([rule])
+  @@map("ignored_conflicts")
+}
+
+// Derived data only; SQL migration installs source-table invalidation triggers.
+model ConflictCacheState {
+  id       Int    @id
+  revision BigInt @default(0)
+
+  @@map("conflict_cache_state")
+}
+
+model ConflictQueryCache {
+  key            String   @id
+  sourceRevision BigInt   @map("source_revision")
+  checkedDate    DateTime @map("checked_date") @db.Date
+  payload        Json     @db.JsonB
+  rebuiltAt      DateTime @default(now()) @map("rebuilt_at") @db.Timestamptz(3)
+
+  @@index([rebuiltAt])
+  @@map("conflict_query_cache")
+}
+
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  username     String   @unique
-  passwordHash String   @map("password_hash")
-  displayName  String?  @map("display_name")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id           String           @id @default(uuid()) @db.Uuid
+  username     String           @unique
+  passwordHash String           @map("password_hash")
+  displayName  String?          @map("display_name")
+  isActive     Boolean          @default(true) @map("is_active")
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
   permissions  UserPermission[]
 
   @@map("users")

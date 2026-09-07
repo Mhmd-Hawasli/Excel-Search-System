@@ -1,4 +1,6 @@
 import ExcelJS from "exceljs";
+import { applyRowFormats, THIN_CELL_BORDER, type RowFormats } from "@/lib/excel/cell-style";
+import { uniqueTableColumnNames } from "@/lib/excel/table-columns";
 import { parseStoredDate } from "@/lib/format/date";
 import { MERGE_KEY_HEADER, MERGE_SHEET_NAMES, type MergeRow } from "@/lib/merge/types";
 
@@ -56,9 +58,14 @@ function applyColumnWidths(
 function styleTableRange(sheet: ExcelJS.Worksheet, rowCount: number, columnCount: number) {
   // Row heights stay per-row, but alignment is applied once per column
   // instead of once per cell: identical rendering at a fraction of the cost
-  // on large tables (millions of cell styles otherwise).
+  // on large tables (millions of cell styles otherwise). Borders must touch
+  // every cell ("all borders"), so they are painted per cell in the row loop.
   for (let rowIndex = 1; rowIndex <= rowCount + 1; rowIndex++) {
-    sheet.getRow(rowIndex).height = ROW_HEIGHT_POINTS;
+    const row = sheet.getRow(rowIndex);
+    row.height = ROW_HEIGHT_POINTS;
+    for (let columnIndex = 1; columnIndex <= columnCount; columnIndex++) {
+      row.getCell(columnIndex).border = THIN_CELL_BORDER;
+    }
   }
   for (let columnIndex = 1; columnIndex <= columnCount; columnIndex++) {
     sheet.getColumn(columnIndex).alignment = {
@@ -78,28 +85,20 @@ function styleTableRange(sheet: ExcelJS.Worksheet, rowCount: number, columnCount
  * name is flattened to a single line, made non-blank and unique
  * (case-insensitively) the way Excel itself renames them when converting such
  * a range into a table.
+ *
+ * Shared implementation: `uniqueTableColumnNames` in `lib/excel/table-columns`.
  */
-function uniqueTableColumnNames(headers: string[]): string[] {
-  const used = new Map<string, number>();
-  return headers.map((header, index) => {
-    const flattened = header.replace(/[\r\n\t]+/g, " ");
-    const base = flattened.trim() === "" ? `عمود ${index + 1}` : flattened;
-    const count = used.get(base.toLowerCase()) ?? 0;
-    used.set(base.toLowerCase(), count + 1);
-    return count === 0 ? base : `${base} (${count + 1})`;
-  });
-}
 
 function writeTable(
   workbook: ExcelJS.Workbook,
   sheetName: string,
   headers: string[],
-  stringRows: string[][],
+  rows: Array<{ cells: string[]; formats: RowFormats | null }>,
 ) {
   const sheet = workbook.addWorksheet(sheetName, { views: [{ rightToLeft: true }] });
   const exportHeaders = uniqueTableColumnNames(headers);
   const dateCells: Array<{ row: number; col: number }> = [];
-  const exportRows: Array<Array<string | number | Date>> = stringRows.map((cells, rowIndex) =>
+  const exportRows: Array<Array<string | number | Date>> = rows.map(({ cells }, rowIndex) =>
     cells.map((cell, colIndex) => {
       const parsed = cell ? parseStoredDate(cell) : null;
       if (parsed) {
@@ -130,6 +129,11 @@ function writeTable(
   for (const { row, col } of dateCells) {
     sheet.getRow(row + 2).getCell(col + 1).numFmt = DATE_NUMBER_FORMAT;
   }
+  // Source colors: row fill covers the whole exported row, font colors land
+  // on their original columns (already expressed in export coordinates).
+  rows.forEach(({ formats }, rowIndex) => {
+    if (formats) applyRowFormats(sheet, rowIndex + 2, formats, exportHeaders.length);
+  });
   applyColumnWidths(sheet, exportHeaders, exportRows);
   styleTableRange(sheet, exportRows.length, exportHeaders.length);
 }
@@ -146,22 +150,50 @@ function prefixedHeaders(prefix: string, headers: string[]): string[] {
  * linked rows first in key order, unlinked rows last keeping their relative
  * order.
  */
-function sortByLinkKey(stringRows: string[][]): string[][] {
-  const linked = stringRows.filter((cells) => cells[0] !== "");
-  const unlinked = stringRows.filter((cells) => cells[0] === "");
-  linked.sort((a, b) => a[0].localeCompare(b[0], "en", { numeric: true }));
+function sortByLinkKey(rows: Array<{ cells: string[]; formats: RowFormats | null }>) {
+  const linked = rows.filter((row) => row.cells[0] !== "");
+  const unlinked = rows.filter((row) => row.cells[0] === "");
+  linked.sort((a, b) => a.cells[0].localeCompare(b.cells[0], "en", { numeric: true }));
   return [...linked, ...unlinked];
+}
+
+/** Shifts a per-column map from source-column to export-column coordinates. */
+function shiftedMap(
+  values: Record<string, string> | undefined,
+  offset: number,
+): Record<string, string> {
+  const shifted: Record<string, string> = {};
+  if (!values) return shifted;
+  for (const [key, argb] of Object.entries(values)) {
+    const index = Number(key);
+    if (Number.isInteger(index) && index >= 0) shifted[String(index + offset)] = argb;
+  }
+  return shifted;
+}
+
+function combinedFormats(
+  left: RowFormats | null | undefined,
+  right: RowFormats | null | undefined,
+  leftWidth: number,
+): RowFormats | null {
+  if (!left && !right) return null;
+  return {
+    fills: { ...shiftedMap(left?.fills, 1), ...shiftedMap(right?.fills, 1 + leftWidth) },
+    fonts: { ...shiftedMap(left?.fonts, 1), ...shiftedMap(right?.fonts, 1 + leftWidth) },
+  };
 }
 
 /**
  * Builds the "full merge" grid: linked pairs first (one row per key, left
  * cells followed by right cells), then the leftover rows of each side with a
- * blank counterpart.
+ * blank counterpart. Formats travel per half: the link-key column stays
+ * unformatted, the A half keeps the left row colors, the B half the right
+ * row colors.
  */
 function fullMergeGrid(
   left: { headers: string[]; rows: MergeRow[] },
   right: { headers: string[]; rows: MergeRow[] },
-): { headers: string[]; stringRows: string[][] } {
+): { headers: string[]; rows: Array<{ cells: string[]; formats: RowFormats | null }> } {
   const headers = [
     MERGE_KEY_HEADER,
     ...prefixedHeaders("A", left.headers),
@@ -173,7 +205,7 @@ function fullMergeGrid(
   const rightByKey = new Map<string, MergeRow>();
   for (const row of right.rows) if (row.key && !rightByKey.has(row.key)) rightByKey.set(row.key, row);
   const consumedKeys = new Set<string>();
-  const stringRows: string[][] = [];
+  const gridRows: Array<{ cells: string[]; formats: RowFormats | null }> = [];
 
   const linkedLeft = left.rows
     .filter((row) => row.key)
@@ -181,23 +213,39 @@ function fullMergeGrid(
   for (const row of linkedLeft) {
     const partner = rightByKey.get(row.key!);
     if (partner) consumedKeys.add(row.key!);
-    stringRows.push([row.key ?? "", ...row.cells, ...(partner ? partner.cells : blankRight)]);
+    gridRows.push({
+      cells: [row.key ?? "", ...row.cells, ...(partner ? partner.cells : blankRight)],
+      formats: combinedFormats(row.formats, partner?.formats, left.headers.length),
+    });
   }
   for (const row of left.rows.filter((row) => !row.key))
-    stringRows.push(["", ...row.cells, ...blankRight]);
+    gridRows.push({
+      cells: ["", ...row.cells, ...blankRight],
+      formats: combinedFormats(row.formats, undefined, left.headers.length),
+    });
   for (const row of right.rows.filter((row) => !row.key || !consumedKeys.has(row.key)))
-    stringRows.push(["", ...blankLeft, ...row.cells]);
+    gridRows.push({
+      cells: ["", ...blankLeft, ...row.cells],
+      formats: combinedFormats(undefined, row.formats, left.headers.length),
+    });
 
-  return { headers, stringRows: sortByLinkKey(stringRows) };
+  return { headers, rows: sortByLinkKey(gridRows) };
 }
 
 function singleTableGrid(table: { headers: string[]; rows: MergeRow[] }): {
   headers: string[];
-  stringRows: string[][];
+  rows: Array<{ cells: string[]; formats: RowFormats | null }>;
 } {
   return {
     headers: [MERGE_KEY_HEADER, ...table.headers],
-    stringRows: sortByLinkKey(table.rows.map((row) => [row.key ?? "", ...row.cells])),
+    rows: sortByLinkKey(
+      table.rows.map((row) => ({
+        cells: [row.key ?? "", ...row.cells],
+        formats: row.formats
+          ? { fills: shiftedMap(row.formats.fills, 1), fonts: shiftedMap(row.formats.fonts, 1) }
+          : null,
+      })),
+    ),
   };
 }
 
@@ -209,10 +257,10 @@ export async function exportMergeWorkbook(
   workbook.creator = "نظام أرشفة ملفات الإكسل";
   workbook.created = new Date();
   const full = fullMergeGrid(left, right);
-  writeTable(workbook, MERGE_SHEET_NAMES[0], full.headers, full.stringRows);
+  writeTable(workbook, MERGE_SHEET_NAMES[0], full.headers, full.rows);
   const tableA = singleTableGrid(left);
-  writeTable(workbook, MERGE_SHEET_NAMES[1], tableA.headers, tableA.stringRows);
+  writeTable(workbook, MERGE_SHEET_NAMES[1], tableA.headers, tableA.rows);
   const tableB = singleTableGrid(right);
-  writeTable(workbook, MERGE_SHEET_NAMES[2], tableB.headers, tableB.stringRows);
+  writeTable(workbook, MERGE_SHEET_NAMES[2], tableB.headers, tableB.rows);
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

@@ -12,6 +12,7 @@ import {
   type UploadedSheetRow,
   type UploadedWorkbook,
 } from "@/lib/sheet-merge/types";
+import type { RowFormats } from "@/lib/excel/cell-style";
 
 /**
  * Pure merge engine of this section: plain arrays in, plain arrays out — no
@@ -39,6 +40,8 @@ export type UnlinkedSheetRows = {
 export type BuiltSheetMerge = {
   stats: Omit<SheetMergeResult, "sessionId">;
   grid: MergedGrid;
+  /** Source colors per grid row, aligned with `grid.rows`. */
+  formats: (RowFormats | null)[];
   /** Sheets that have rows which could not be linked (for the export). */
   unlinkedSheets: UnlinkedSheetRows[];
 };
@@ -52,7 +55,13 @@ class UnlinkedCollector {
   add(row: UploadedSheetRow, value: string, reason: string) {
     this.total += 1;
     if (this.rows.length < UNLINKED_PREVIEW_LIMIT)
-      this.rows.push({ rowNumber: row.rowNumber, value, reason, cells: row.cells });
+      this.rows.push({
+        rowNumber: row.rowNumber,
+        value,
+        reason,
+        cells: row.cells,
+        formats: row.formats,
+      });
   }
 
   get empty() {
@@ -107,6 +116,7 @@ export function buildSheetMerge(
   const headers = [...main.headers, ...linked.flatMap((sheet) => sheet.headers.slice(1))];
   const blankTail = new Array<string>(headers.length - main.headers.length).fill("");
   const gridRows = main.rows.map((row) => [...row.cells, ...blankTail]);
+  const gridFormats: (RowFormats | null)[] = main.rows.map((row) => row.formats ?? null);
   const gridRowByKey = new Map<string, number>();
   const mainUnlinked = new UnlinkedCollector();
   let mainInvalid = 0;
@@ -171,6 +181,20 @@ export function buildSheetMerge(
       row.cells
         .slice(1)
         .forEach((value, columnIndex) => (gridRows[target][linkedOffset + columnIndex] = value));
+      const incoming = row.formats;
+      if (incoming && (Object.keys(incoming.fills).length > 0 || Object.keys(incoming.fonts).length > 0)) {
+        const fills = { ...(gridFormats[target]?.fills ?? {}) };
+        const fonts = { ...(gridFormats[target]?.fonts ?? {}) };
+        for (const [key, argb] of Object.entries(incoming.fills)) {
+          const index = Number(key);
+          if (Number.isInteger(index) && index >= 1) fills[String(linkedOffset + index - 1)] = argb;
+        }
+        for (const [key, argb] of Object.entries(incoming.fonts)) {
+          const index = Number(key);
+          if (Number.isInteger(index) && index >= 1) fonts[String(linkedOffset + index - 1)] = argb;
+        }
+        gridFormats[target] = { fills, fonts };
+      }
       matchedMainRows.add(target);
       joined += 1;
     }
@@ -233,6 +257,7 @@ export function buildSheetMerge(
       sheets: [mainStat, ...stats],
     },
     grid: { headers, rows: gridRows },
+    formats: gridFormats,
     unlinkedSheets,
   };
 }

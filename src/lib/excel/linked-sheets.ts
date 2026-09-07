@@ -1,6 +1,7 @@
 import type ExcelJS from "exceljs";
 import type { LinkedSheetsConfig, SheetInspection } from "@/lib/excel/types";
-import { headersForSheet, loadWorkbook } from "@/lib/excel/workbook";
+import { headersForSheet, loadWorkbook, readFormatSidecar } from "@/lib/excel/workbook";
+import { tableRangeForSheet, type SheetTableRange } from "@/lib/excel/table-range";
 import { nationalIdIssue } from "@/lib/format/national-id";
 import { nationalIdDigits, normalizeStored } from "@/lib/normalization/arabic";
 import { suggestStandardField } from "@/lib/excel/standard-fields";
@@ -8,19 +9,28 @@ import { cellValueText } from "@/lib/excel/cell-value";
 
 export type ImportRow = { rowIndex: number; values: string[] };
 
-function dataRows(sheet: ExcelJS.Worksheet, width: number): ImportRow[] {
+function dataRows(
+  sheet: ExcelJS.Worksheet,
+  width: number,
+  table: SheetTableRange | null = null,
+): ImportRow[] {
   const rows: ImportRow[] = [];
+  const firstCol = table ? table.firstCol : 1;
   sheet.eachRow((row, rowIndex) => {
-    if (rowIndex === 1) return;
+    if (table ? rowIndex <= table.headerRow || rowIndex > table.lastRow : rowIndex === 1) return;
     rows.push({
       rowIndex,
-      values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(index + 1))),
+      values: Array.from({ length: width }, (_, index) => cellValueText(row.getCell(firstCol + index))),
     });
   });
   return rows;
 }
 
-export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedSheetsConfig) {
+export function mergeLinkedSheets(
+  workbook: ExcelJS.Workbook,
+  config: LinkedSheetsConfig,
+  tables?: Record<string, SheetTableRange | null>,
+) {
   const primary = workbook.worksheets[0];
   if (!primary) throw new Error("لا توجد ورقة أساسية في المصنف.");
   if (
@@ -29,7 +39,8 @@ export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedShee
     config.sheetNames.includes(primary.name)
   )
     throw new Error("اختر ورقة إضافية واحدة على الأقل، دون تكرار الورقة الأساسية.");
-  const primaryHeaders = headersForSheet(primary);
+  const primaryTable = tables?.[primary.name] ?? tableRangeForSheet(primary);
+  const primaryHeaders = headersForSheet(primary, primaryTable ? { table: primaryTable } : undefined);
   if (
     !Number.isInteger(config.nationalIdColumnIndex) ||
     config.nationalIdColumnIndex < 1 ||
@@ -43,7 +54,7 @@ export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedShee
       return sheet;
     })
     .sort((a, b) => workbook.worksheets.indexOf(a) - workbook.worksheets.indexOf(b));
-  const rows = dataRows(primary, primaryHeaders.length);
+  const rows = dataRows(primary, primaryHeaders.length, primaryTable);
   const byNationalId = new Map<string, ImportRow>();
   for (const row of rows) {
     const raw = row.values[config.nationalIdColumnIndex - 1];
@@ -72,7 +83,8 @@ export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedShee
   const usedHeaders = new Set(columns.map((column) => column.headerNormalized));
   const linkedSummary: NonNullable<SheetInspection["linkedSummary"]> = [];
   for (const sheet of additional) {
-    const headers = headersForSheet(sheet);
+    const sheetTable = tables?.[sheet.name] ?? tableRangeForSheet(sheet);
+    const headers = headersForSheet(sheet, sheetTable ? { table: sheetTable } : undefined);
     if (headers.length < 2)
       throw new Error(
         `الورقة «${sheet.name}»: يلزم الرقم الوطني في العمود الأول وعمود معلومات واحد على الأقل بعده.`,
@@ -97,10 +109,12 @@ export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedShee
     }
     for (const row of rows) row.values.push(...Array<string>(headers.length - 1).fill(""));
     const seen = new Map<string, number>();
-    for (const extraRow of dataRows(sheet, headers.length)) {
+    for (const extraRow of dataRows(sheet, headers.length, sheetTable)) {
       if (extraRow.values.every((value) => !value.trim())) continue;
       if (nationalIdIssue(extraRow.values[0]) !== null) {
-        const fromFormula = Boolean(sheet.getRow(extraRow.rowIndex).getCell(1).formula);
+        const fromFormula = Boolean(
+          sheet.getRow(extraRow.rowIndex).getCell(sheetTable ? sheetTable.firstCol : 1).formula,
+        );
         throw new Error(
           `الورقة «${sheet.name}»، الصف ${extraRow.rowIndex}: ${fromFormula ? "نتيجة المعادلة المحفوظة في العمود الأول" : "القيمة في العمود الأول"} هي «${extraRow.values[0] || "فارغة"}». يجب أن تكون رقماً وطنياً صالحاً من 9 إلى 11 رقماً قبل تعبئة الأصفار.${fromFormula ? " تأكد أن المعادلة ترجع الرقم الوطني وليس الرقم التسلسلي، ثم أعد حساب الملف واحفظه." : ""}`,
         );
@@ -146,5 +160,6 @@ export function mergeLinkedSheets(workbook: ExcelJS.Workbook, config: LinkedShee
 }
 
 export async function loadLinkedSheets(token: string, config: LinkedSheetsConfig) {
-  return mergeLinkedSheets(await loadWorkbook(token), config);
+  const [workbook, sidecar] = await Promise.all([loadWorkbook(token), readFormatSidecar(token)]);
+  return mergeLinkedSheets(workbook, config, sidecar?.tables ?? undefined);
 }

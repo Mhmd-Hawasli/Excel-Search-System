@@ -407,6 +407,9 @@ export const ModelName = {
   ActivityLog: 'ActivityLog',
   RecordEdit: 'RecordEdit',
   MappingTemplate: 'MappingTemplate',
+  IgnoredConflict: 'IgnoredConflict',
+  ConflictCacheState: 'ConflictCacheState',
+  ConflictQueryCache: 'ConflictQueryCache',
   User: 'User',
   UserPermission: 'UserPermission'
 } as const
@@ -424,7 +427,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "group" | "file" | "category" | "fileColumn" | "record" | "uploadJob" | "dataQualityIssue" | "activityLog" | "recordEdit" | "mappingTemplate" | "user" | "userPermission"
+    modelProps: "group" | "file" | "category" | "fileColumn" | "record" | "uploadJob" | "dataQualityIssue" | "activityLog" | "recordEdit" | "mappingTemplate" | "ignoredConflict" | "conflictCacheState" | "conflictQueryCache" | "user" | "userPermission"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1168,6 +1171,228 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    IgnoredConflict: {
+      payload: Prisma.$IgnoredConflictPayload<ExtArgs>
+      fields: Prisma.IgnoredConflictFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.IgnoredConflictFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.IgnoredConflictFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        findFirst: {
+          args: Prisma.IgnoredConflictFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.IgnoredConflictFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        findMany: {
+          args: Prisma.IgnoredConflictFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>[]
+        }
+        create: {
+          args: Prisma.IgnoredConflictCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        createMany: {
+          args: Prisma.IgnoredConflictCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.IgnoredConflictCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>[]
+        }
+        delete: {
+          args: Prisma.IgnoredConflictDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        update: {
+          args: Prisma.IgnoredConflictUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        deleteMany: {
+          args: Prisma.IgnoredConflictDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.IgnoredConflictUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.IgnoredConflictUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>[]
+        }
+        upsert: {
+          args: Prisma.IgnoredConflictUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$IgnoredConflictPayload>
+        }
+        aggregate: {
+          args: Prisma.IgnoredConflictAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateIgnoredConflict>
+        }
+        groupBy: {
+          args: Prisma.IgnoredConflictGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IgnoredConflictGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.IgnoredConflictCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.IgnoredConflictCountAggregateOutputType> | number
+        }
+      }
+    }
+    ConflictCacheState: {
+      payload: Prisma.$ConflictCacheStatePayload<ExtArgs>
+      fields: Prisma.ConflictCacheStateFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ConflictCacheStateFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ConflictCacheStateFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        findFirst: {
+          args: Prisma.ConflictCacheStateFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ConflictCacheStateFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        findMany: {
+          args: Prisma.ConflictCacheStateFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>[]
+        }
+        create: {
+          args: Prisma.ConflictCacheStateCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        createMany: {
+          args: Prisma.ConflictCacheStateCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ConflictCacheStateCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>[]
+        }
+        delete: {
+          args: Prisma.ConflictCacheStateDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        update: {
+          args: Prisma.ConflictCacheStateUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        deleteMany: {
+          args: Prisma.ConflictCacheStateDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ConflictCacheStateUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ConflictCacheStateUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>[]
+        }
+        upsert: {
+          args: Prisma.ConflictCacheStateUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictCacheStatePayload>
+        }
+        aggregate: {
+          args: Prisma.ConflictCacheStateAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateConflictCacheState>
+        }
+        groupBy: {
+          args: Prisma.ConflictCacheStateGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ConflictCacheStateGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ConflictCacheStateCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ConflictCacheStateCountAggregateOutputType> | number
+        }
+      }
+    }
+    ConflictQueryCache: {
+      payload: Prisma.$ConflictQueryCachePayload<ExtArgs>
+      fields: Prisma.ConflictQueryCacheFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ConflictQueryCacheFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ConflictQueryCacheFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        findFirst: {
+          args: Prisma.ConflictQueryCacheFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ConflictQueryCacheFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        findMany: {
+          args: Prisma.ConflictQueryCacheFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>[]
+        }
+        create: {
+          args: Prisma.ConflictQueryCacheCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        createMany: {
+          args: Prisma.ConflictQueryCacheCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ConflictQueryCacheCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>[]
+        }
+        delete: {
+          args: Prisma.ConflictQueryCacheDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        update: {
+          args: Prisma.ConflictQueryCacheUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        deleteMany: {
+          args: Prisma.ConflictQueryCacheDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ConflictQueryCacheUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ConflictQueryCacheUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>[]
+        }
+        upsert: {
+          args: Prisma.ConflictQueryCacheUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ConflictQueryCachePayload>
+        }
+        aggregate: {
+          args: Prisma.ConflictQueryCacheAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateConflictQueryCache>
+        }
+        groupBy: {
+          args: Prisma.ConflictQueryCacheGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ConflictQueryCacheGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ConflictQueryCacheCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ConflictQueryCacheCountAggregateOutputType> | number
+        }
+      }
+    }
     User: {
       payload: Prisma.$UserPayload<ExtArgs>
       fields: Prisma.UserFieldRefs
@@ -1440,6 +1665,8 @@ export const RecordScalarFieldEnum = {
   dNationalId: 'dNationalId',
   dPersonalNo: 'dPersonalNo',
   dPhone: 'dPhone',
+  fmtFills: 'fmtFills',
+  fmtFontColors: 'fmtFontColors',
   nationalIdNum: 'nationalIdNum',
   createdAt: 'createdAt'
 } as const
@@ -1513,6 +1740,35 @@ export const MappingTemplateScalarFieldEnum = {
 export type MappingTemplateScalarFieldEnum = (typeof MappingTemplateScalarFieldEnum)[keyof typeof MappingTemplateScalarFieldEnum]
 
 
+export const IgnoredConflictScalarFieldEnum = {
+  id: 'id',
+  rule: 'rule',
+  recordId: 'recordId',
+  createdAt: 'createdAt'
+} as const
+
+export type IgnoredConflictScalarFieldEnum = (typeof IgnoredConflictScalarFieldEnum)[keyof typeof IgnoredConflictScalarFieldEnum]
+
+
+export const ConflictCacheStateScalarFieldEnum = {
+  id: 'id',
+  revision: 'revision'
+} as const
+
+export type ConflictCacheStateScalarFieldEnum = (typeof ConflictCacheStateScalarFieldEnum)[keyof typeof ConflictCacheStateScalarFieldEnum]
+
+
+export const ConflictQueryCacheScalarFieldEnum = {
+  key: 'key',
+  sourceRevision: 'sourceRevision',
+  checkedDate: 'checkedDate',
+  payload: 'payload',
+  rebuiltAt: 'rebuiltAt'
+} as const
+
+export type ConflictQueryCacheScalarFieldEnum = (typeof ConflictQueryCacheScalarFieldEnum)[keyof typeof ConflictQueryCacheScalarFieldEnum]
+
+
 export const UserScalarFieldEnum = {
   id: 'id',
   username: 'username',
@@ -1551,6 +1807,14 @@ export const JsonNullValueInput = {
 } as const
 
 export type JsonNullValueInput = (typeof JsonNullValueInput)[keyof typeof JsonNullValueInput]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -1891,6 +2155,9 @@ export type GlobalOmitConfig = {
   activityLog?: Prisma.ActivityLogOmit
   recordEdit?: Prisma.RecordEditOmit
   mappingTemplate?: Prisma.MappingTemplateOmit
+  ignoredConflict?: Prisma.IgnoredConflictOmit
+  conflictCacheState?: Prisma.ConflictCacheStateOmit
+  conflictQueryCache?: Prisma.ConflictQueryCacheOmit
   user?: Prisma.UserOmit
   userPermission?: Prisma.UserPermissionOmit
 }

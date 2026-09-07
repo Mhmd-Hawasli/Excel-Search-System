@@ -7,7 +7,7 @@ import {
 
 describe("parseFunctionalCategory", () => {
   it("maps every given Arabic spelling of the first category to 1", () => {
-    for (const value of ["1", "١", "01", "1.0", "الفئة الأولى", "الفئة الاولى", "الأولى", "الاولى", "اولى", "أولى", "اول", "او", "أو"]) {
+    for (const value of ["1", "١", "01", "1.0", "الفئة الأولى", "الفئة الاولى", "فئة الأولى", "الأولى", "الاولى", "اولى", "أولى", "اول", "او", "أو"]) {
       expect(parseFunctionalCategory(value), value).toBe(1);
     }
   });
@@ -51,11 +51,11 @@ describe("parseFunctionalCategory", () => {
 
 describe("formatFunctionalCategory", () => {
   it("renders the Arabic ordinal form", () => {
-    expect(formatFunctionalCategory(1)).toBe("الفئة الأولى");
-    expect(formatFunctionalCategory("ثانية")).toBe("الفئة الثانية");
-    expect(formatFunctionalCategory(3)).toBe("الفئة الثالثة");
-    expect(formatFunctionalCategory(4)).toBe("الفئة الرابعة");
-    expect(formatFunctionalCategory(5)).toBe("الفئة الخامسة");
+    expect(formatFunctionalCategory(1)).toBe("فئة الأولى");
+    expect(formatFunctionalCategory("ثانية")).toBe("فئة الثانية");
+    expect(formatFunctionalCategory(3)).toBe("فئة الثالثة");
+    expect(formatFunctionalCategory(4)).toBe("فئة الرابعة");
+    expect(formatFunctionalCategory(5)).toBe("فئة الخامسة");
   });
 
   it("renders an unknown category and keeps empty values empty", () => {

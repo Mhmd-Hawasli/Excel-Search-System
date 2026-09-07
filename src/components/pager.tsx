@@ -13,18 +13,24 @@ export function Pager({
   current,
   page,
   pageCount,
+  prefetch = true,
 }: {
   pathname: string;
   current: URLSearchParams;
   page: number;
   pageCount: number;
+  prefetch?: boolean;
 }) {
   if (pageCount <= 0) return null;
   return (
     <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
       {page > 1 ? (
         <Button variant="outline" asChild>
-          <Link href={buildQueryPath(pathname, current, { page: page - 1 })} scroll={false} prefetch>
+          <Link
+            href={buildQueryPath(pathname, current, { page: page - 1 })}
+            scroll={false}
+            prefetch={prefetch}
+          >
             <ChevronRight className="size-4" aria-hidden="true" />
             السابق
           </Link>
@@ -40,7 +46,11 @@ export function Pager({
       </span>
       {page < pageCount ? (
         <Button variant="outline" asChild>
-          <Link href={buildQueryPath(pathname, current, { page: page + 1 })} scroll={false} prefetch>
+          <Link
+            href={buildQueryPath(pathname, current, { page: page + 1 })}
+            scroll={false}
+            prefetch={prefetch}
+          >
             التالي
             <ChevronLeft className="size-4" aria-hidden="true" />
           </Link>

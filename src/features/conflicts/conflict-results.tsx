@@ -2,8 +2,7 @@ import Link from "next/link";
 import { toLatinDigits } from "@/lib/normalization/arabic";
 import type { ConflictResponse, ConflictSortBy, ConflictSortDir } from "@/lib/conflicts/catalog";
 import type { ConflictRequest } from "@/lib/conflicts/request";
-import type { DataScope } from "@/lib/auth/session-user";
-import { conflictScopeFilter, queryConflicts } from "@/lib/conflicts/query";
+import { IgnoreButton } from "@/features/conflicts/ignore-button";
 import { formatFunctionalCategory } from "@/lib/format/functional-category";
 import { formatNationalId } from "@/lib/format/national-id";
 import { formatShamCash } from "@/lib/format/sham-cash";
@@ -14,8 +13,7 @@ import { buildQueryPath } from "@/utils/query-params";
 import { cn } from "@/lib/cn";
 
 /**
- * Server-rendered conflict results: runs the conflict rules over the whole
- * archive and streams the report table with prefetchable sort/pager links.
+ * Render the already-computed report without starting another archive scan.
  */
 
 const SORTABLE_COLUMNS: { key: ConflictSortBy; label: string }[] = [
@@ -34,18 +32,19 @@ function sortHref(pathname: string, params: URLSearchParams, key: ConflictSortBy
   return buildQueryPath(pathname, params, { sortBy: key, sortDir: nextDir });
 }
 
-export async function ConflictResults({
+export function ConflictResults({
   request,
   pathname,
   params,
-  scope,
+  data,
+  canIgnore,
 }: {
   request: ConflictRequest;
   pathname: string;
   params: URLSearchParams;
-  scope: DataScope;
+  data: ConflictResponse;
+  canIgnore: boolean;
 }) {
-  const data: ConflictResponse = await queryConflicts(request, undefined, conflictScopeFilter(scope));
   const isDefaultSort = request.sortBy === "issueNumber";
 
   if (data.rows.length === 0) {
@@ -89,7 +88,7 @@ export async function ConflictResults({
                     <Link
                       href={sortHref(pathname, params, column.key, request.sortBy, request.sortDir)}
                       scroll={false}
-                      prefetch
+                      prefetch={false}
                       className={cn(
                         "flex w-full items-center justify-between gap-1 p-4 text-right transition hover:bg-muted",
                         active && "bg-primary/5 text-primary",
@@ -102,6 +101,9 @@ export async function ConflictResults({
                   </th>
                 );
               })}
+              <th scope="col" className="p-4 text-right font-bold">
+                رقم الهاتف
+              </th>
               <th scope="col" className="p-4 text-right font-bold">
                 المشكلة وشرحها
               </th>
@@ -153,12 +155,20 @@ export async function ConflictResults({
                     <bdi className="break-all font-mono text-xs">{row.personalNo || "—"}</bdi>
                   </td>
                   <td className="min-w-36 p-4">{formatFunctionalCategory(row.functionalCategory) || "—"}</td>
+                  <td className="p-4">
+                    <bdi className="break-all font-mono text-xs ltr-numbers" dir="ltr">
+                      {row.phone || "—"}
+                    </bdi>
+                  </td>
                   <td className="min-w-80 max-w-xl p-4">
                     <ul className="space-y-3">
                       {row.issues.map((issue, index) => (
                         <li key={`${issue.rule}-${index}`}>
                           <p className="text-xs font-bold text-primary">{issue.label}</p>
                           <p className="mt-1 break-words text-sm leading-7 text-muted-foreground">{toLatinDigits(issue.explanation)}</p>
+                          {canIgnore ? (
+                            <IgnoreButton recordId={row.id} rule={issue.rule} />
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -169,7 +179,7 @@ export async function ConflictResults({
           </tbody>
         </table>
       </div>
-      <Pager pathname={pathname} current={params} page={data.page} pageCount={data.pageCount} />
+      <Pager pathname={pathname} current={params} page={data.page} pageCount={data.pageCount} prefetch={false} />
     </>
   );
 }

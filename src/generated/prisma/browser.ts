@@ -68,6 +68,21 @@ export type RecordEdit = Prisma.RecordEditModel
  */
 export type MappingTemplate = Prisma.MappingTemplateModel
 /**
+ * Model IgnoredConflict
+ * 
+ */
+export type IgnoredConflict = Prisma.IgnoredConflictModel
+/**
+ * Model ConflictCacheState
+ * 
+ */
+export type ConflictCacheState = Prisma.ConflictCacheStateModel
+/**
+ * Model ConflictQueryCache
+ * 
+ */
+export type ConflictQueryCache = Prisma.ConflictQueryCacheModel
+/**
  * Model User
  * 
  */
