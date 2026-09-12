@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.next-dev/
+.env
+.env.local
+.npm-cache/
+coverage/
+*.log
+*.tsbuildinfo
+*.xlsx
+*.xls
+tmp/
+generated/
+.pglite-data/

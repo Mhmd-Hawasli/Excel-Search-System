@@ -1,0 +1,78 @@
+"use client";
+
+import { useState } from "react";
+import { LoaderCircle, LogIn } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export function LoginForm({ nextPath }: { nextPath?: string }) {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  function safeNext(): string {
+    return nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    try {
+      const form = new FormData(event.currentTarget);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
+      });
+      if (!response.ok) {
+        let message = "تعذر تسجيل الدخول. حاول مرة أخرى.";
+        try {
+          const body = (await response.json()) as { error?: string; message?: string };
+          message = body.error ?? body.message ?? message;
+        } catch {
+          /* keep default when the body is not JSON */
+        }
+        setError(message);
+        return;
+      }
+      window.location.assign(safeNext());
+    } catch {
+      setError("تعذر تسجيل الدخول. تحقق من الاتصال وحاول مرة أخرى.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="username">اسم المستخدم</Label>
+        <Input id="username" name="username" autoComplete="username" required autoFocus />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">كلمة المرور</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </div>
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+      <Button className="h-11 w-full" type="submit" disabled={pending}>
+        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+        {pending ? "جارٍ التحقق…" : "تسجيل الدخول"}
+      </Button>
+    </form>
+  );
+}

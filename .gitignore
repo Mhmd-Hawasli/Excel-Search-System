@@ -1,14 +1,61 @@
-node_modules/
-.next/
-.next-dev/
-.env
-.env.local
-.npm-cache/
-coverage/
-*.log
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build and test output
+**/bin/
+**/obj/
+**/TestResults/
+**/*.trx
+artifacts/
+
+# Node.js / Next.js
+**/node_modules/
+**/.next/
+**/.next-dev/
+**/.turbo/
+**/out/
+**/dist/
+**/coverage/
 *.tsbuildinfo
-*.xlsx
-*.xls
-tmp/
-generated/
-.pglite-data/
+.npm-cache/
+.eslintcache
+
+# Local environment files (keep shareable templates)
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# Logs and diagnostic output
+*.log
+*.pid
+*.seed
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases and runtime data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+**/.pglite-data/
+**/tmp/
+**/uploads/
+**/generated/
+
+# Local package artifacts
+*.nupkg
+*.snupkg
+*.tgz

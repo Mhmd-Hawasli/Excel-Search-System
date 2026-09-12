@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+.git
+.gitignore
+Dockerfile
+.dockerignore
+*.log
+coverage
+test-artifacts
+tests
+.vscode

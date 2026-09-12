@@ -1,21 +1,53 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: excel-archive-postgres
+    container_name: excel-archive-2-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: excel_archive
       POSTGRES_PASSWORD: excel_archive
-      POSTGRES_DB: excel_archive
+      POSTGRES_DB: excel_archive_2
     ports:
       - "5432:5432"
     volumes:
-      - excel_archive_data:/var/lib/postgresql/data
+      - excel_archive_2_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U excel_archive -d excel_archive"]
+      test: ["CMD-SHELL", "pg_isready -U excel_archive -d excel_archive_2"]
       interval: 5s
       timeout: 5s
       retries: 10
 
+  backend:
+    build: ./backend
+    container_name: excel-archive-2-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-characters}
+      AllowedOrigins__0: http://localhost:3300
+      AllowedOrigins__1: http://localhost:3000
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:5000
+    container_name: excel-archive-2-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:5000
+    ports:
+      - "3300:3000"
+
 volumes:
-  excel_archive_data:
+  excel_archive_2_data:
