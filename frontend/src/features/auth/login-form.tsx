@@ -1,57 +1,78 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LoaderCircle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authService } from "@/services/auth.service";
 
-export function LoginForm() {
-  const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+export function LoginForm({ nextPath }: { nextPath?: string }) {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  async function submit(event: React.FormEvent) {
+  function safeNext(): string {
+    return nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
-    setError(null);
+    setError("");
+    setPending(true);
     try {
-      await authService.login(username, password);
-      router.push("/");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تسجيل الدخول.");
+      const form = new FormData(event.currentTarget);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
+      });
+      if (!response.ok) {
+        let message = "تعذر تسجيل الدخول. حاول مرة أخرى.";
+        try {
+          const body = (await response.json()) as { error?: string; message?: string };
+          message = body.error ?? body.message ?? message;
+        } catch {
+          /* keep default when the body is not JSON */
+        }
+        setError(message);
+        return;
+      }
+      window.location.assign(safeNext());
+    } catch {
+      setError("تعذر تسجيل الدخول. تحقق من الاتصال وحاول مرة أخرى.");
     } finally {
-      setLoading(false);
+      setPending(false);
     }
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="text-xl">تسجيل الدخول</CardTitle>
-        <CardDescription>أدخل بياناتك للوصول إلى الأرشيف.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={submit}>
-          <div className="space-y-2">
-            <Label htmlFor="username">اسم المستخدم</Label>
-            <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">كلمة المرور</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "جارٍ الدخول…" : "دخول"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <form onSubmit={submit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="username">اسم المستخدم</Label>
+        <Input id="username" name="username" autoComplete="username" required autoFocus />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">كلمة المرور</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </div>
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
+        >
+          {error}
+        </p>
+      ) : null}
+      <Button className="h-11 w-full" type="submit" disabled={pending}>
+        {pending ? <LoaderCircle className="size-4 animate-spin" /> : <LogIn className="size-4" />}
+        {pending ? "جارٍ التحقق…" : "تسجيل الدخول"}
+      </Button>
+    </form>
   );
 }

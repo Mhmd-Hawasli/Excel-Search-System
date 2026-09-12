@@ -16,4 +16,4 @@ export interface ErrorBody {
   error?: string;
 }
 
-export type QueryMap = Record<string, string | number | boolean | undefined | null>;
+export type QueryMap = Record<string, string | number | boolean | Array<string | number> | undefined | null>;

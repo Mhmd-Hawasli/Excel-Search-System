@@ -1,5 +1,7 @@
-import { SettingsPlaceholder } from "@/features/settings/settings-placeholder";
+import { CategoriesManager } from "@/features/categories/categories-manager";
+
+export const dynamic = "force-dynamic";
 
 export default function CategoriesPage() {
-  return <SettingsPlaceholder title="الفئات" description="إدارة فئات الأعمدة وترتيبها." />;
+  return <CategoriesManager />;
 }

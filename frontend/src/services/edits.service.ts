@@ -9,11 +9,34 @@ export interface EditedFileSummary {
   lastEditAt: string;
 }
 
+export interface EditHistoryItem {
+  id: string;
+  recordId: string;
+  fileId: string;
+  fileColumnId: string | null;
+  headerRaw: string;
+  oldValue: string;
+  newValue: string;
+  createdAt: string;
+  personName: string | null;
+  rowIndex: number | null;
+}
+
+export interface EditHistoryPage {
+  items: EditHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export const editsService = {
   summary(): Promise<{ files: EditedFileSummary[] }> {
     return apiGet<{ files: EditedFileSummary[] }>("/api/edits", { view: "summary" });
   },
-  list(fileId?: string, page = 1): Promise<{ items: unknown[]; total: number; page: number; pageSize: number }> {
-    return apiGet<{ items: unknown[]; total: number; page: number; pageSize: number }>("/api/edits", { view: "list", fileId, page, pageSize: 25 });
+  history(fileId?: string, page = 1, pageSize = 25): Promise<EditHistoryPage> {
+    return apiGet<EditHistoryPage>("/api/edits", { view: "history", fileId, page, pageSize });
+  },
+  exportUrl(fileId: string): string {
+    return `/api/files/${fileId}/export`;
   },
 };

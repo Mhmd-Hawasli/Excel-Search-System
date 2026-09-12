@@ -1,0 +1,9 @@
+global using ExcelArchive.Domain.Common;
+global using ExcelArchive.Infrastructure.Implementations.Excel;
+global using ExcelArchive.Infrastructure.Implementations.Storage;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.Extensions.Caching.Memory;
+global using Microsoft.Extensions.Configuration;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
