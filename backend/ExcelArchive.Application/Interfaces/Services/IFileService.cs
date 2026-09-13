@@ -13,6 +13,7 @@ public interface IFileService
     Task<FileMappingDto?> GetMappingAsync(Guid fileId, CancellationToken ct = default);
     Task<int> UpdateMappingAsync(Guid fileId, UpdateMappingRequest request, string actorUsername, CancellationToken ct = default);
     Task DeleteAsync(Guid fileId, string confirmName, string actorUsername, CancellationToken ct = default);
+    Task MoveAsync(Guid fileId, Guid targetGroupId, string actorUsername, CancellationToken ct = default);
     Task<bool> ExistsAsync(Guid fileId, CancellationToken ct = default);
     Task<FileExportDataDto?> GetExportDataAsync(Guid fileId, CancellationToken ct = default);
     Task<Guid> CreateReplaceJobAsync(Guid fileId, ReplaceFileRequest request, string actorUsername, CancellationToken ct = default);

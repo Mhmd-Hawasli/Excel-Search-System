@@ -13,6 +13,31 @@ export const MERGE_RULE_KEYS = [
 
 export type MergeRuleKey = (typeof MERGE_RULE_KEYS)[number];
 
+/** Canonical display names without baked-in order words (execution order is dynamic). */
+export const MERGE_RULE_SHORT_LABELS: Record<MergeRuleKey, string> = {
+  full_name: "الربط بالاسم الثلاثي مع التأكد باسم الأم",
+  composed_name: "دمج الاسم مع اسم الأب مع النسبة",
+  national_id: "الربط بالرقم الوطني",
+  personal_no: "الربط بالرقم الذاتي",
+  sham_cash: "الربط بالشام كاش",
+  phone: "الربط برقم الهاتف",
+};
+
+/** Arabic ordinals used to prefix rules by execution position (1-based). */
+export const ARABIC_ORDINALS: ReadonlyArray<string> = [
+  "الأولى",
+  "الثانية",
+  "الثالثة",
+  "الرابعة",
+  "الخامسة",
+  "السادسة",
+];
+
+export function ruleExecutionLabel(position: number, key: MergeRuleKey): string {
+  const ordinal = ARABIC_ORDINALS[position - 1] ?? String(position);
+  return `القاعدة ${ordinal} — ${MERGE_RULE_SHORT_LABELS[key]}`;
+}
+
 export const MERGE_RULES: ReadonlyArray<{
   key: MergeRuleKey;
   order: number;

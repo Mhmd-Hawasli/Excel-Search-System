@@ -32,10 +32,7 @@ public static class FunctionalCategory
 
         var numeric = Regex.Match(text, @"^([0-9]+)(?:[.,][0-9]+)?$");
         if (numeric.Success)
-        {
-            var number = int.Parse(numeric.Groups[1].Value);
-            return number is >= 1 and <= 5 ? number : Error;
-        }
+            return ParseCategoryNumber(numeric.Groups[1].Value);
 
         var normalized = ArabicNormalizer.NormalizeStored(text).Replace("الفيه", " ").Replace("فيه", " ");
         var key = Regex.Replace(normalized, @"\s+", "").Trim();
@@ -44,10 +41,7 @@ public static class FunctionalCategory
         if (key.Length == 0) return null;
 
         if (Regex.IsMatch(key, "^[0-9]+$"))
-        {
-            var number = int.Parse(key);
-            return number is >= 1 and <= 5 ? number : Error;
-        }
+            return ParseCategoryNumber(key);
 
         if (key == "او" || key.StartsWith("اول", StringComparison.Ordinal)) return 1;
         if (key.StartsWith("ثان", StringComparison.Ordinal)) return 2;
@@ -73,4 +67,11 @@ public static class FunctionalCategory
         var category = Parse(value);
         return category is not null && category != Error ? category : null;
     }
+
+    /// <summary>
+    /// V1 used Number(), which never throws: digits beyond Int32 range are
+    /// simply not 1..5, so they map to Error instead of overflowing.
+    /// </summary>
+    private static int ParseCategoryNumber(string digits) =>
+        int.TryParse(digits, out var number) && number is >= 1 and <= 5 ? number : Error;
 }

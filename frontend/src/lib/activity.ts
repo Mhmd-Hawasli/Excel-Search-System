@@ -56,6 +56,42 @@ export function parseVisitDetails(value: unknown): VisitDetails | null {
   };
 }
 
+export type EditDetails = {
+  recordId?: string;
+  fileId?: string;
+  fileName?: string;
+  personName?: string;
+  rowIndex?: number;
+  headerRaw?: string;
+  oldValue?: string;
+  newValue?: string;
+  editedBy?: string;
+};
+
+/** Typed reader for RECORD_EDITED activity details; null when absent. */
+export function parseEditDetails(value: unknown): EditDetails | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const details = value as Record<string, unknown>;
+  const rowIndex = details.rowIndex;
+  const parsedRow =
+    typeof rowIndex === "number"
+      ? rowIndex
+      : typeof rowIndex === "string" && rowIndex.trim() !== ""
+        ? Number(rowIndex)
+        : undefined;
+  return {
+    recordId: typeof details.recordId === "string" ? details.recordId : undefined,
+    fileId: typeof details.fileId === "string" ? details.fileId : undefined,
+    fileName: typeof details.fileName === "string" ? details.fileName : undefined,
+    personName: typeof details.personName === "string" ? details.personName : undefined,
+    rowIndex: Number.isFinite(parsedRow) ? parsedRow : undefined,
+    headerRaw: typeof details.headerRaw === "string" ? details.headerRaw : undefined,
+    oldValue: typeof details.oldValue === "string" ? details.oldValue : undefined,
+    newValue: typeof details.newValue === "string" ? details.newValue : undefined,
+    editedBy: typeof details.editedBy === "string" ? details.editedBy : undefined,
+  };
+}
+
 export function relativeArabic(date: Date) {
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
   const formatter = new Intl.RelativeTimeFormat("ar", { numeric: "auto" });

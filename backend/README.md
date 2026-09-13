@@ -24,6 +24,9 @@ dotnet run --project ExcelArchive.Api --urls http://0.0.0.0:5000
 - `ConnectionStrings:Default` or `DATABASE_URL`
 - `SESSION_SECRET` (>= 32 chars; in non-Development builds it is required)
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — created on first startup by the seeder
+- `TEST_USERNAME` / `TEST_PASSWORD` (defaults `test` / `test123`) — dev/QA
+  convenience account seeded with full owner permissions on every boot;
+  remove before any production deployment
 - `AllowedOrigins` — CORS origins for the Next.js frontend
 
 ## Layout (Mandoob-style layered architecture)

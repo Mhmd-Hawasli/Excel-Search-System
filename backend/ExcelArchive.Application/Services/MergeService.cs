@@ -60,6 +60,18 @@ public class MergeService(
         onProgress?.Invoke(20, "قراءة الجدول الثاني…");
         var right = ReadMergeSheet(args.RightToken, args.RightSheet);
         onProgress?.Invoke(30, null);
+        // Manual rule order comes from the UI drag-and-drop list; validate now
+        // so unknown/duplicate keys fail fast with an Arabic message.
+        IReadOnlyList<MergeRules.Definition> ordered;
+        try
+        {
+            ordered = MergeEngine.OrderedDefinitions(args.RuleOrder);
+        }
+        catch (InvalidDataException)
+        {
+            throw;
+        }
+        var ruleOrder = ordered.Select(d => d.Key).ToList();
         var result = MergeEngine.RunMerge(
             new MergeTableInput(left.Headers, left.Rows
                 .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), leftMapping),
@@ -68,15 +80,16 @@ public class MergeService(
             1, requireConfirmation: !args.IgnoreConfirmation,
             onRuleDone: (rule, index, total) => onProgress?.Invoke(
                 30 + (int)Math.Round((index + 1) / (double)total * 60),
-                $"تطبيق القاعدة {index + 1} من {total}…"));
+                $"تطبيق القاعدة {index + 1} من {total}…"),
+            ruleOrder: ruleOrder);
         onProgress?.Invoke(95, "تجهيز النتائج…");
         var session = mergeSessions.Create(
             left.SheetName, left.Headers.ToList(), result.Left, leftMapping,
             right.SheetName, right.Headers.ToList(), result.Right, rightMapping,
-            args.IgnoreConfirmation);
+            args.IgnoreConfirmation, ruleOrder);
         return new MergeRunResult(session.Id, session.LeftHeaders, session.RightHeaders,
             session.IgnoreConfirmation,
-            MergeEngine.Summarize(session.LeftRows, session.RightRows, leftMapping, rightMapping));
+            MergeEngine.Summarize(session.LeftRows, session.RightRows, leftMapping, rightMapping, session.RuleOrder));
     }
 
     public (MergeSessionData Session, MergeResult Result) DeleteKey(

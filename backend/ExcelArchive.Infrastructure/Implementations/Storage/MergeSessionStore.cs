@@ -18,7 +18,7 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
     public MergeSessionData Create(
         string leftSheet, List<string> leftHeaders, List<MergeRow> leftRows, MergeMapping leftMapping,
         string rightSheet, List<string> rightHeaders, List<MergeRow> rightRows, MergeMapping rightMapping,
-        bool ignoreConfirmation)
+        bool ignoreConfirmation, IReadOnlyList<string>? ruleOrder = null)
     {
         if (Keys.Count >= MaxEntries)
         {
@@ -31,6 +31,7 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             IgnoreConfirmation = ignoreConfirmation,
+            RuleOrder = ruleOrder is null ? [] : [.. ruleOrder],
             LeftSheetName = leftSheet,
             LeftHeaders = leftHeaders,
             LeftRows = leftRows,
@@ -101,11 +102,12 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
         var result = MergeEngine.RelinkUnmatched(
             session.LeftRows, session.RightRows,
             session.LeftMapping, session.RightMapping,
-            startKey, requireConfirmation: !session.IgnoreConfirmation);
+            startKey, requireConfirmation: !session.IgnoreConfirmation,
+            ruleOrder: session.RuleOrder);
         session.UpdatedAt = DateTime.UtcNow;
         return MergeEngine.Summarize(
             session.LeftRows, session.RightRows,
-            session.LeftMapping, session.RightMapping);
+            session.LeftMapping, session.RightMapping, session.RuleOrder);
     }
 
     private static string Key(Guid id) => $"mergesession:{id}";

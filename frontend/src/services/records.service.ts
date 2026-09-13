@@ -16,6 +16,7 @@ export interface EditedHeaderInfo {
   originalValue: string;
   lastValue: string;
   lastAt: string;
+  lastBy?: string | null;
 }
 
 export interface RelatedRecord {

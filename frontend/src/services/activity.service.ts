@@ -5,6 +5,8 @@ export interface ActivityLogItem {
   /** PascalCase action name from the backend (e.g. FileUploaded). */
   action: string;
   targetName: string;
+  /** Username of the user who performed the action; null for background events. */
+  actor: string | null;
   details: Record<string, string | number | null>;
   createdAt: string;
 }

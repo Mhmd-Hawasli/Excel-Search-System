@@ -307,9 +307,9 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                             <Badge
                               variant="outline"
                               className="shrink-0 border-amber-400 bg-amber-50 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-                              title={`القيمة الأصلية من Excel: ${editInfo.originalValue || "—"}`}
+                              title={`القيمة الأصلية من Excel: ${editInfo.originalValue || "—"}${editInfo.lastBy ? ` — آخر تعديل بواسطة: ${editInfo.lastBy}` : ""}`}
                             >
-                              معدّل
+                              معدّل{editInfo.lastBy ? ` — ${editInfo.lastBy}` : ""}
                             </Badge>
                           ) : null}
                         </dt>

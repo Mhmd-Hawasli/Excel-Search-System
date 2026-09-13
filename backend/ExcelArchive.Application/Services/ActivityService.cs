@@ -26,9 +26,26 @@ public class ActivityService(IUnitOfWork uow) : IActivityService
         var (rows, total) = await uow.ActivityLogs.SearchAsync(action, request.Search, searched, page, pageSize, ct);
 
         return new ActivityResult(rows.Select(x =>
-            new ActivityLogDto(x.Id, x.Action.ToString(), x.TargetName, ToDictionary(x.Details.RootElement), x.CreatedAt)).ToList(),
+        {
+            var details = ToDictionary(x.Details.RootElement);
+            return new ActivityLogDto(x.Id, x.Action.ToString(), x.TargetName,
+                ResolveActor(details), details, x.CreatedAt);
+        }).ToList(),
             total, page, pageSize);
     }
+
+    /// <summary>Extracts the acting user from event details across the set of
+    /// detail keys written by services (by / editedBy / visitorUsername / user).
+    /// Returns null for background events that record no actor.</summary>
+    private static string? ResolveActor(IReadOnlyDictionary<string, object?> details)
+    {
+        foreach (var key in ActorDetailKeys)
+            if (details.TryGetValue(key, out var value) && value is string s && !string.IsNullOrWhiteSpace(s))
+                return s;
+        return null;
+    }
+
+    private static readonly string[] ActorDetailKeys = ["by", "editedBy", "visitorUsername", "user", "username"];
 
     public async Task WriteAsync(ActivityAction action, string targetName, object? details = null, CancellationToken ct = default)
     {

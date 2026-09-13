@@ -76,6 +76,10 @@ export interface MergePair {
 export interface MergeRuleStat {
   key: string;
   order: number;
+  /** Canonical (fixed) rule number, kept for display next to execution order. */
+  canonicalOrder?: number | null;
+  /** 1-based execution position when a manual order was supplied. */
+  executionOrder?: number | null;
   label: string;
   description: string;
   available: boolean;
@@ -140,7 +144,7 @@ export const mergeService = {
     return response.data;
   },
   run(
-    body: { left: { token: string; sheetName: string; mapping: Record<string, number> }; right: { token: string; sheetName: string; mapping: Record<string, number> }; ignoreConfirmation: boolean },
+    body: { left: { token: string; sheetName: string; mapping: Record<string, number> }; right: { token: string; sheetName: string; mapping: Record<string, number> }; ignoreConfirmation: boolean; ruleOrder?: string[] },
     onProgress: (percent: number, detail: string | null) => void,
   ): Promise<MergeRunResult> {
     return new Promise((resolve, reject) => {

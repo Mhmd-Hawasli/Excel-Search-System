@@ -20,6 +20,7 @@ export interface EditHistoryItem {
   createdAt: string;
   personName: string | null;
   rowIndex: number | null;
+  editedBy: string | null;
 }
 
 export interface EditHistoryPage {

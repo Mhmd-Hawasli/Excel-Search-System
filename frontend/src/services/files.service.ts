@@ -92,6 +92,21 @@ export const filesService = {
     return this.remove(id, confirmName, groupId);
   },
 
+  async move(formData: FormData): Promise<MutationResult> {
+    const id = String(formData.get("id") ?? "");
+    const targetGroupId = String(formData.get("targetGroupId") ?? "");
+    try {
+      const envelope = await apiPost<ApiEnvelope<null>>(`/api/files/${id}/move`, { targetGroupId });
+      return {
+        ok: true,
+        message: envelope.message ?? "تم نقل الملف إلى المجموعة الجديدة.",
+        navigateTo: `/groups/${targetGroupId}`,
+      };
+    } catch (err) {
+      return { ok: false, error: err instanceof ApiError ? err.message : "تعذر نقل الملف." };
+    }
+  },
+
   async listByGroup(groupId: string): Promise<FileItem[]> {
     const envelope = await apiGet<ApiEnvelope<{ files: FileItem[] }>>(`/api/groups/${groupId}/files`);
     return envelope.data?.files ?? [];

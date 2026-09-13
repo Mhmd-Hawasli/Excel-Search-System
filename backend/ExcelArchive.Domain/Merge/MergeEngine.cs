@@ -129,12 +129,15 @@ public static class MergeEngine
         List<MergeRow> left, List<MergeRow> right,
         MergeMapping leftMapping, MergeMapping rightMapping,
         int startKey, bool requireConfirmation = true,
-        Action<string, int, int>? onRuleDone = null)
+        Action<string, int, int>? onRuleDone = null,
+        IReadOnlyList<string>? ruleOrder = null)
     {
         var counter = startKey;
         var pairs = new List<MatchPair>();
         var preparedLeft = left.Select(r => Prepare(r, leftMapping)).ToList();
         var preparedRight = right.Select(r => Prepare(r, rightMapping)).ToList();
+        // Manual execution order: caller permutation wins, canonical order is fallback.
+        var ordered = OrderedDefinitions(ruleOrder);
 
         void LinkPair(MergeRules.Definition rule, PreparedRow a, PreparedRow chosen, bool confirmed)
         {
@@ -150,9 +153,9 @@ public static class MergeEngine
                 confirmed, LinkFor(rule, a).Display, LinkFor(rule, chosen).Display));
         }
 
-        for (var ruleIndex = 0; ruleIndex < MergeRules.All.Count; ruleIndex++)
+        for (var ruleIndex = 0; ruleIndex < ordered.Count; ruleIndex++)
         {
-            var rule = MergeRules.All[ruleIndex];
+            var rule = ordered[ruleIndex];
             var ambiguousLeft = AmbiguousLinks(preparedLeft, rule);
             var ambiguousRight = AmbiguousLinks(preparedRight, rule);
             var rightByLink = new Dictionary<string, List<PreparedRow>>(StringComparer.Ordinal);
@@ -211,7 +214,7 @@ public static class MergeEngine
                 }
                 LinkPair(rule, a, chosen, confirmed);
             }
-            onRuleDone?.Invoke(rule.Key, ruleIndex, MergeRules.All.Count);
+            onRuleDone?.Invoke(rule.Key, ruleIndex, ordered.Count);
         }
         return (pairs, counter);
     }
@@ -260,13 +263,23 @@ public static class MergeEngine
             0, [])).ToList();
     }
 
-    private static List<RuleStat> StatsWithPairs(List<RuleStat> stats, List<MatchPair> pairs)
+    private static List<RuleStat> StatsWithPairs(List<RuleStat> stats, List<MatchPair> pairs, IReadOnlyList<string>? executedOrder = null)
     {
         foreach (var s in stats)
         {
             s.Pairs.AddRange(pairs.Where(p => p.Rule == s.Key));
         }
-        return stats.Select(s => s with { MatchedPairs = s.Pairs.Count }).ToList();
+        // Manual execution affects order numbers shown in UI (rule.order):
+        // first executed rule = 1 ... last = 6. Canonical definition order is
+        // kept inside MergeRules.All for reference.
+        var orderByKey = executedOrder is null
+            ? stats.ToDictionary(s => s.Key, s => s.Order, StringComparer.Ordinal)
+            : executedOrder
+                .Select((key, index) => (key, order: index + 1))
+                .ToDictionary(x => x.key, x => x.order, StringComparer.Ordinal);
+        return stats
+            .OrderBy(s => orderByKey.TryGetValue(s.Key, out var o) ? o : int.MaxValue)
+            .Select(s => s with { MatchedPairs = s.Pairs.Count, Order = orderByKey.TryGetValue(s.Key, out var o) ? o : s.Order }).ToList();
     }
 
     public static MergeStatus Status(int leftCount, int rightCount, int pairCount)
@@ -280,7 +293,8 @@ public static class MergeEngine
     public static MergeResult RunMerge(
         MergeTableInput left, MergeTableInput right,
         int startKey = 1, bool requireConfirmation = true,
-        Action<string, int, int>? onRuleDone = null)
+        Action<string, int, int>? onRuleDone = null,
+        IReadOnlyList<string>? ruleOrder = null)
     {
         var leftRows = left.Rows.Select(r => new MergeRow
         {
@@ -299,9 +313,10 @@ public static class MergeEngine
             Confirmed = false,
         }).ToList();
         var (pairs, _) = ApplyRules(leftRows, rightRows, left.Mapping, right.Mapping,
-            startKey, requireConfirmation, onRuleDone);
+            startKey, requireConfirmation, onRuleDone, ruleOrder);
+        var executedOrder = OrderedDefinitions(ruleOrder).Select(d => d.Key).ToList();
         return new MergeResult(leftRows, rightRows, pairs,
-            StatsWithPairs(BuildRuleStats(leftRows, rightRows, left.Mapping, right.Mapping), pairs),
+            StatsWithPairs(BuildRuleStats(leftRows, rightRows, left.Mapping, right.Mapping), pairs, executedOrder),
             Status(leftRows.Count, rightRows.Count, pairs.Count));
     }
 
@@ -331,11 +346,13 @@ public static class MergeEngine
 
     public static MergeResult Summarize(
         List<MergeRow> left, List<MergeRow> right,
-        MergeMapping leftMapping, MergeMapping rightMapping)
+        MergeMapping leftMapping, MergeMapping rightMapping,
+        IReadOnlyList<string>? ruleOrder = null)
     {
         var pairs = CurrentPairs(left, right, leftMapping, rightMapping);
+        var executedOrder = OrderedDefinitions(ruleOrder).Select(d => d.Key).ToList();
         return new MergeResult(left, right, pairs,
-            StatsWithPairs(BuildRuleStats(left, right, leftMapping, rightMapping), pairs),
+            StatsWithPairs(BuildRuleStats(left, right, leftMapping, rightMapping), pairs, executedOrder),
             Status(left.Count, right.Count, pairs.Count));
     }
 
@@ -350,13 +367,48 @@ public static class MergeEngine
         return max + 1;
     }
 
+    /// <summary>
+    /// Canonical default execution order (used when the caller does not supply
+    /// a manual order). UI drag-and-drop sends its own permutation instead.
+    /// </summary>
+    public static IReadOnlyList<string> DefaultRuleOrder { get; } =
+        MergeRules.Keys.ToList();
+
+    /// <summary>
+    /// Normalizes a caller-supplied manual rule order into the definitions in
+    /// execution sequence. Unknown keys throw; missing/duplicate keys fall back
+    /// to the canonical order with the supplied keys first (stable).
+    /// </summary>
+    public static IReadOnlyList<MergeRules.Definition> OrderedDefinitions(
+        IReadOnlyList<string>? ruleOrder)
+    {
+        if (ruleOrder is null || ruleOrder.Count == 0)
+            return MergeRules.All;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<MergeRules.Definition>();
+        foreach (var key in ruleOrder)
+        {
+            if (!seen.Add(key))
+                throw new InvalidDataException("ترتيب القواعد مكرر.");
+            var def = MergeRules.All.FirstOrDefault(d => d.Key == key);
+            if (def is null)
+                throw new InvalidDataException($"قاعدة ربط غير معروفة: {key}.");
+            ordered.Add(def);
+        }
+        foreach (var def in MergeRules.All)
+            if (!seen.Contains(def.Key))
+                ordered.Add(def);
+        return ordered;
+    }
+
     public static MergeResult RelinkUnmatched(
         List<MergeRow> left, List<MergeRow> right,
         MergeMapping leftMapping, MergeMapping rightMapping,
-        int startKey, bool requireConfirmation = true)
+        int startKey, bool requireConfirmation = true,
+        IReadOnlyList<string>? ruleOrder = null)
     {
-        ApplyRules(left, right, leftMapping, rightMapping, startKey, requireConfirmation);
-        return Summarize(left, right, leftMapping, rightMapping);
+        ApplyRules(left, right, leftMapping, rightMapping, startKey, requireConfirmation, null, ruleOrder);
+        return Summarize(left, right, leftMapping, rightMapping, ruleOrder);
     }
 
     /// <summary>V1 hasCommonRule: at least one linkable rule on both sides.</summary>

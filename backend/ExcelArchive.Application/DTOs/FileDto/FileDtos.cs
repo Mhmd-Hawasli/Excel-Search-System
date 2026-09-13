@@ -42,6 +42,7 @@ public record FileQualityDto(
 public record UpdateMappingRequest(IReadOnlyList<UpdateColumnMappingDto> Columns);
 public record UpdateColumnMappingDto(Guid Id, string? StandardField, Guid? CategoryId);
 public record DeleteFileRequest(string ConfirmName);
+public record MoveFileRequest(Guid TargetGroupId);
 public record ReplaceColumnDto(string HeaderRaw, string HeaderNormalized, int ColumnIndex, string? StandardField, Guid? CategoryId);
 public record ReplaceLinkedSheetsDto(IReadOnlyList<string> SheetNames, int NationalIdColumnIndex);
 public record ReplaceFileRequest(string OriginalFilename, string SheetName, int SheetIndex, int TotalRows, string? ColumnSignature, string Mode, IReadOnlyList<ReplaceColumnDto>? Columns, ReplaceLinkedSheetsDto? LinkedSheets, Guid? Token);

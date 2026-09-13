@@ -6,6 +6,7 @@ import { ArrowRight, Upload } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { FileCard } from "@/components/file-card";
 import { FlashMessage } from "@/components/flash-message";
+import { MoveFileButton } from "@/components/move-file-button";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +23,7 @@ export function GroupDetail({ groupId }: { groupId: string }) {
   const { data, loading, error: loadError } = useApiQuery(() => groupsService.get(groupId), [groupId]);
 
   const canUpload = hasPermission(user?.permissions ?? [], "upload.view");
+  const canMoveFiles = hasPermission(user?.permissions ?? [], "groups.update");
 
   if (loadError) {
     return (
@@ -87,18 +89,30 @@ export function GroupDetail({ groupId }: { groupId: string }) {
       ) : (
         <div className="grid gap-3">
           {files.map((file) => (
-            <FileCard
-              key={file.id}
-              href={`/groups/${group.id}/files/${file.id}`}
-              name={file.name}
-              description={file.description}
-              originalFilename={file.originalFilename}
-              rowCount={file.rowCount}
-              columnCount={file.columnCount}
-              version={file.version}
-              uploadedAt={new Date(file.uploadedAt)}
-              hasEdits={file.hasEdits}
-            />
+            <div key={file.id} className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <FileCard
+                  href={`/groups/${group.id}/files/${file.id}`}
+                  name={file.name}
+                  description={file.description}
+                  originalFilename={file.originalFilename}
+                  rowCount={file.rowCount}
+                  columnCount={file.columnCount}
+                  version={file.version}
+                  uploadedAt={new Date(file.uploadedAt)}
+                  hasEdits={file.hasEdits}
+                />
+              </div>
+              {canMoveFiles ? (
+                <MoveFileButton
+                  fileId={file.id}
+                  fileName={file.name}
+                  currentGroupId={group.id}
+                  label="نقل"
+                  aria-label={`نقل ${file.name} إلى مجموعة أخرى`}
+                />
+              ) : null}
+            </div>
           ))}
         </div>
       )}

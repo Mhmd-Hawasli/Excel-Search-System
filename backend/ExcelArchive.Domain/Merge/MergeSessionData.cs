@@ -9,6 +9,8 @@ public sealed class MergeSessionData
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public bool IgnoreConfirmation { get; set; }
+    /// <summary>Manual execution order chosen by the user (first = runs first).</summary>
+    public List<string> RuleOrder { get; set; } = [];
     public string LeftFilename { get; set; } = "";
     public string LeftSheetName { get; set; } = "";
     public List<string> LeftHeaders { get; set; } = [];

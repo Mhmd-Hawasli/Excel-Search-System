@@ -86,22 +86,16 @@ public static class ConflictExportBuilder
         var headerRow = sheet.Row(1);
         headerRow.Style.Font.Bold = true;
         headerRow.Style.Font.FontColor = XLColor.White;
+        var fullRange = sheet.Range(1, 1, rows.Count + 1, Headers.Length);
+        fullRange.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        fullRange.Style.Alignment.WrapText = true;
         for (var rowIndex = 1; rowIndex <= rows.Count + 1; rowIndex++)
-        {
-            var excelRow = sheet.Row(rowIndex);
-            excelRow.Height = 30;
-            for (var c = 1; c <= Headers.Length; c++)
-            {
-                var cell = excelRow.Cell(c);
-                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                cell.Style.Alignment.WrapText = true;
-                cell.Style.Border.TopBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.RightBorder = XLBorderStyleValues.Thin;
-            }
-        }
+            sheet.Row(rowIndex).Height = 30;
         for (var i = 0; i < Headers.Length; i++)
             sheet.Column(i + 1).Width = Widths[i];
         using var ms = new MemoryStream();

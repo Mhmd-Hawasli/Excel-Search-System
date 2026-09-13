@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Download, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
+import { MoveFileButton } from "@/components/move-file-button";
 import { TypedDeleteButton } from "@/components/typed-delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
   const canViewHistory = hasPermission(permissions, "edits.view");
   const canExport = hasPermission(permissions, "export.run");
   const canManageFiles = hasPermission(permissions, "groups.view");
+  const canMoveFiles = hasPermission(permissions, "groups.update");
   const showEditedBadge = hasPermission(permissions, "edits.badge");
 
   if (loading || !data) {
@@ -103,6 +105,15 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
                   تصدير Excel
                 </a>
               </Button>
+            ) : null}
+            {canMoveFiles ? (
+              <MoveFileButton
+                fileId={file.id}
+                fileName={file.name}
+                currentGroupId={groupId}
+                label="نقل إلى مجموعة"
+                size="default"
+              />
             ) : null}
             {canManageFiles ? (
               <TypedDeleteButton

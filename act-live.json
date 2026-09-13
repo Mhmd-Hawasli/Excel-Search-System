@@ -1,0 +1,774 @@
+﻿{
+    "items":  [
+                  {
+                      "id":  "5ece4ec0-b775-41d4-83d8-6a656e5e880e",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"upload.run\", \"conflicts.filters\", \"categories.view\", \"categories.manage\", \"conflicts.view\", \"groups.create\", \"upload.view\", \"groups.update\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T12:09:08.063Z"
+                  },
+                  {
+                      "id":  "383b71cf-1d58-45ec-bc53-f156487aedde",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"upload.run\", \"categories.view\", \"conflicts.filters\", \"conflicts.view\", \"upload.view\", \"groups.update\", \"groups.create\", \"categories.manage\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T11:55:39.634Z"
+                  },
+                  {
+                      "id":  "a6f98270-f39b-48d3-b736-222880b006e1",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "mhmd",
+                      "actor":  "admin",
+                      "details":  {
+                                      "by":  "admin",
+                                      "permissions":  "[\"conflicts.filters\", \"categories.view\", \"conflicts.view\", \"groups.create\", \"upload.view\", \"categories.manage\", \"groups.update\", \"upload.run\", \"users.create\", \"users.update\", \"users.delete\", \"users.view\", \"backup.restore\", \"backup.view\", \"backup.export\", \"activity.view\", \"activity.browse\", \"merge.view\", \"sheetMerge.view\", \"export.view\", \"export.run\", \"edits.view\", \"edits.badge\", \"edits.update\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T11:55:16.337Z"
+                  },
+                  {
+                      "id":  "5c45f413-f4b0-4b4b-b8f4-2ca184bbc3a7",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "Rasha",
+                      "actor":  "admin",
+                      "details":  {
+                                      "by":  "admin",
+                                      "permissions":  "[\"categories.manage\", \"conflicts.view\", \"upload.view\", \"upload.run\", \"conflicts.filters\", \"groups.update\", \"categories.view\", \"groups.create\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T11:54:15.822Z"
+                  },
+                  {
+                      "id":  "ee414660-4cf2-47fb-8af3-cb7bef96b388",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "mhmd",
+                      "actor":  "admin",
+                      "details":  {
+                                      "by":  "admin",
+                                      "permissions":  "[\"groups.create\", \"groups.update\", \"categories.view\", \"categories.manage\", \"upload.view\", \"upload.run\", \"conflicts.view\", \"conflicts.filters\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T11:54:08.622Z"
+                  },
+                  {
+                      "id":  "ba518970-3181-4bd3-bf6f-eb1c72d5b33a",
+                      "action":  "RecordEdited",
+                      "targetName":  "صراط سمير حسن",
+                      "actor":  "test",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "test",
+                                      "newValue":  "A+",
+                                      "oldValue":  "O-",
+                                      "recordId":  "d795963e-5fb1-489a-b0ff-ffc5ee34ee1c",
+                                      "rowIndex":  4711,
+                                      "headerRaw":  "فصيلة الدم",
+                                      "personName":  "صراط سمير حسن"
+                                  },
+                      "createdAt":  "2026-09-13T11:48:11.414Z"
+                  },
+                  {
+                      "id":  "c19ed217-f13a-417b-8d71-403f4577bff9",
+                      "action":  "UserCreated",
+                      "targetName":  "Rasha",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-13T10:50:40.421Z"
+                  },
+                  {
+                      "id":  "64761fbe-a0bd-4005-ad9a-b803b376564c",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "test",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "test",
+                                      "newValue":  "0988030801",
+                                      "oldValue":  "0988000000",
+                                      "recordId":  "22bd5df4-908e-493c-a19a-518901cb8ad7",
+                                      "rowIndex":  7521,
+                                      "headerRaw":  "الهاتف(سوري حصرا)"
+                                  },
+                      "createdAt":  "2026-09-13T10:32:34.039Z"
+                  },
+                  {
+                      "id":  "8f46d1d4-6b30-4d1b-9789-771d05ce779b",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "test",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "test",
+                                      "newValue":  "0988000000",
+                                      "oldValue":  "0988030801",
+                                      "recordId":  "22bd5df4-908e-493c-a19a-518901cb8ad7",
+                                      "rowIndex":  7521,
+                                      "headerRaw":  "الهاتف(سوري حصرا)"
+                                  },
+                      "createdAt":  "2026-09-13T10:32:26.675Z"
+                  },
+                  {
+                      "id":  "d1790ca2-bbc3-40c7-b374-df85b7e72889",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"categories.view\", \"groups.create\", \"upload.run\", \"groups.update\", \"upload.view\", \"categories.manage\", \"conflicts.filters\", \"conflicts.view\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T10:19:14.025Z"
+                  },
+                  {
+                      "id":  "b7360a30-f7e8-4a06-b68c-0173e23644b5",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"categories.view\", \"conflicts.filters\", \"conflicts.view\", \"categories.manage\", \"groups.create\", \"groups.update\", \"upload.view\", \"upload.run\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T10:11:04.71Z"
+                  },
+                  {
+                      "id":  "7de1eca3-bb91-44bf-805f-5c37c6c5af10",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "admin",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "admin",
+                                      "newValue":  "2387",
+                                      "oldValue":  "__TEST__USER__",
+                                      "recordId":  "d795963e-5fb1-489a-b0ff-ffc5ee34ee1c",
+                                      "rowIndex":  4711,
+                                      "headerRaw":  "الرقم الذاتي"
+                                  },
+                      "createdAt":  "2026-09-13T10:10:59.987Z"
+                  },
+                  {
+                      "id":  "324fd927-1488-4ea7-a38b-0a0081a53381",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "admin",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "admin",
+                                      "newValue":  "__TEST__USER__",
+                                      "oldValue":  "2387",
+                                      "recordId":  "d795963e-5fb1-489a-b0ff-ffc5ee34ee1c",
+                                      "rowIndex":  4711,
+                                      "headerRaw":  "الرقم الذاتي"
+                                  },
+                      "createdAt":  "2026-09-13T10:10:59.691Z"
+                  },
+                  {
+                      "id":  "718116d7-a950-425a-98cb-d9462e591e69",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "admin",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "admin",
+                                      "newValue":  "2387",
+                                      "oldValue":  "__TEST__999",
+                                      "recordId":  "d795963e-5fb1-489a-b0ff-ffc5ee34ee1c",
+                                      "rowIndex":  4711,
+                                      "headerRaw":  "الرقم الذاتي"
+                                  },
+                      "createdAt":  "2026-09-13T10:07:49.554Z"
+                  },
+                  {
+                      "id":  "d9173885-16ab-49af-8656-366d9c1751ee",
+                      "action":  "RecordEdited",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  "admin",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "editedBy":  "admin",
+                                      "newValue":  "__TEST__999",
+                                      "oldValue":  "2387",
+                                      "recordId":  "d795963e-5fb1-489a-b0ff-ffc5ee34ee1c",
+                                      "rowIndex":  4711,
+                                      "headerRaw":  "الرقم الذاتي"
+                                  },
+                      "createdAt":  "2026-09-13T10:07:49.481Z"
+                  },
+                  {
+                      "id":  "0892fe45-fa87-4a1f-a829-c358d5b87e6b",
+                      "action":  "RecordVisited",
+                      "targetName":  "حميد علي العلي",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "44398a58-74e1-46df-95d7-184cde57a2ad",
+                                      "rowIndex":  1725,
+                                      "personName":  "حميد علي العلي",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:48:44.087Z"
+                  },
+                  {
+                      "id":  "9683363b-29a3-4d20-896d-f9bb1306e54e",
+                      "action":  "RecordEdited",
+                      "targetName":  "ملف العقود",
+                      "actor":  null,
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "newValue":  "",
+                                      "oldValue":  "تجربة",
+                                      "recordId":  "87f9b57d-5c62-4178-aaf5-b505c53102e3",
+                                      "rowIndex":  1603,
+                                      "headerRaw":  "Column1"
+                                  },
+                      "createdAt":  "2026-09-13T09:44:38.337Z"
+                  },
+                  {
+                      "id":  "29a30516-5779-4f60-af10-13fe1ebbd433",
+                      "action":  "RecordVisited",
+                      "targetName":  "حسين علي العبد الله",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "87f9b57d-5c62-4178-aaf5-b505c53102e3",
+                                      "rowIndex":  1603,
+                                      "personName":  "حسين علي العبد الله",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:44:30.784Z"
+                  },
+                  {
+                      "id":  "84057a7d-6827-4d2f-b96c-44d8c6f4ff73",
+                      "action":  "RecordEdited",
+                      "targetName":  "ملف العقود",
+                      "actor":  null,
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "newValue":  "تجربة",
+                                      "oldValue":  "",
+                                      "recordId":  "87f9b57d-5c62-4178-aaf5-b505c53102e3",
+                                      "rowIndex":  1603,
+                                      "headerRaw":  "Column1"
+                                  },
+                      "createdAt":  "2026-09-13T09:36:45.324Z"
+                  },
+                  {
+                      "id":  "15f1ff10-bed9-4b38-bd0f-d1559f68a578",
+                      "action":  "RecordVisited",
+                      "targetName":  "حسين علي العبد الله",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "87f9b57d-5c62-4178-aaf5-b505c53102e3",
+                                      "rowIndex":  1603,
+                                      "personName":  "حسين علي العبد الله",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:36:11.518Z"
+                  },
+                  {
+                      "id":  "fff0c206-5bdb-43f4-95c5-889b9ce56c72",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد عبد العزبه",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "b5e00a07-5923-449f-99a0-61a1a25d05ec",
+                                      "rowIndex":  4260,
+                                      "personName":  "محمد عبد العزبه",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:22:10.069Z"
+                  },
+                  {
+                      "id":  "646d1410-ee82-40af-94a5-f32a8608f694",
+                      "action":  "RecordVisited",
+                      "targetName":  "ماجد احمد ابراهيم",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "033769fb-9088-4a95-a32b-de4afb673352",
+                                      "rowIndex":  1600,
+                                      "personName":  "ماجد احمد ابراهيم",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:21:43.35Z"
+                  },
+                  {
+                      "id":  "fea4dc32-212c-4ce5-8830-f5c71f3b91b7",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد عبد العزبه",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "b5e00a07-5923-449f-99a0-61a1a25d05ec",
+                                      "rowIndex":  4260,
+                                      "personName":  "محمد عبد العزبه",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:20:46.526Z"
+                  },
+                  {
+                      "id":  "88807885-ff17-4a7e-808e-41bd8394c9d8",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد عبد العزبه",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "b5e00a07-5923-449f-99a0-61a1a25d05ec",
+                                      "rowIndex":  4260,
+                                      "personName":  "محمد عبد العزبه",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:20:01.751Z"
+                  },
+                  {
+                      "id":  "cc55ff5a-d8ce-43cb-b473-17333a2a2ba4",
+                      "action":  "RecordVisited",
+                      "targetName":  "عقل شامان الشامان",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "3e6c05f0-74bc-493d-bf72-bba30eec0704",
+                                      "rowIndex":  4207,
+                                      "personName":  "عقل شامان الشامان",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T09:11:09.242Z"
+                  },
+                  {
+                      "id":  "292e4128-be59-42df-ab88-ce364db3546b",
+                      "action":  "FileUpdated",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  null,
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "newRows":  7520,
+                                      "previousRows":  7520
+                                  },
+                      "createdAt":  "2026-09-13T08:45:34.098Z"
+                  },
+                  {
+                      "id":  "6d4dc73a-b16e-472c-9b87-20c5883759af",
+                      "action":  "FileUpdated",
+                      "targetName":  "مالية جدد",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "fileId":  "b2a22c2a-cdb9-4fca-8d9e-61b314d8c6db",
+                                      "movedToGroupId":  "76dcc0f1-5441-48d2-a1c3-eb42d7eff4ca",
+                                      "movedToGroupName":  "ملفات المالية"
+                                  },
+                      "createdAt":  "2026-09-13T08:28:21.515Z"
+                  },
+                  {
+                      "id":  "7af20e11-f885-4ab9-bb94-76cc3a93d000",
+                      "action":  "FileUpdated",
+                      "targetName":  "مالية فرات",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "fileId":  "d5b4aad2-bd01-4bd4-a3ae-0abcaae7efc9",
+                                      "movedToGroupId":  "76dcc0f1-5441-48d2-a1c3-eb42d7eff4ca",
+                                      "movedToGroupName":  "ملفات المالية"
+                                  },
+                      "createdAt":  "2026-09-13T08:28:06.076Z"
+                  },
+                  {
+                      "id":  "2b27e4ad-a69a-4247-8a45-8c791721d674",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"categories.view\", \"conflicts.view\", \"categories.manage\", \"groups.create\", \"conflicts.filters\", \"upload.run\", \"upload.view\", \"groups.update\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T08:16:49.925Z"
+                  },
+                  {
+                      "id":  "b90571cc-e451-4b28-82a3-02991e5cadd7",
+                      "action":  "FileUploaded",
+                      "targetName":  "المسميات الوظيفية هيا",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  3310,
+                                      "fileId":  "49085caf-2167-47f6-877c-7c3e0e279a35",
+                                      "sheetName":  "Sheet1"
+                                  },
+                      "createdAt":  "2026-09-13T08:16:26.191Z"
+                  },
+                  {
+                      "id":  "d614db47-6a65-4918-adeb-998f748ae5f7",
+                      "action":  "FileUploaded",
+                      "targetName":  "مالية وسطى",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  1607,
+                                      "fileId":  "2f620a87-4414-4169-8728-36ae01018c70",
+                                      "sheetName":  "تحضير للدمج"
+                                  },
+                      "createdAt":  "2026-09-13T08:03:49.349Z"
+                  },
+                  {
+                      "id":  "bca6c47b-51ab-4fe6-b76a-ed1fd630d829",
+                      "action":  "FileUploaded",
+                      "targetName":  "مالية قداما",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  3933,
+                                      "fileId":  "80095384-dcd3-4c7a-8eea-b1cbfdc36312",
+                                      "sheetName":  "احتياط اساسي"
+                                  },
+                      "createdAt":  "2026-09-13T08:00:45.408Z"
+                  },
+                  {
+                      "id":  "075d3ace-a61c-4806-a97b-baf608629a62",
+                      "action":  "FileUploaded",
+                      "targetName":  "مالية فرات",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  707,
+                                      "fileId":  "d5b4aad2-bd01-4bd4-a3ae-0abcaae7efc9",
+                                      "sheetName":  "Sheet1"
+                                  },
+                      "createdAt":  "2026-09-13T07:57:17.329Z"
+                  },
+                  {
+                      "id":  "ee7d67f5-9944-4df3-818e-6d251cc8fdaf",
+                      "action":  "FileUploaded",
+                      "targetName":  "مالية جدد",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  718,
+                                      "fileId":  "b2a22c2a-cdb9-4fca-8d9e-61b314d8c6db",
+                                      "sheetName":  "ورقة1"
+                                  },
+                      "createdAt":  "2026-09-13T07:55:34.562Z"
+                  },
+                  {
+                      "id":  "cca5db7f-90bc-4b17-86aa-0a50089f442d",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد محمود أحمد",
+                      "actor":  "admin",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "4fcb30f3-e5db-4598-80ef-02f259127ce9",
+                                      "rowIndex":  5842,
+                                      "personName":  "محمد محمود أحمد",
+                                      "visitorUsername":  "admin",
+                                      "visitorDisplayName":  "المدير"
+                                  },
+                      "createdAt":  "2026-09-13T07:51:47.534Z"
+                  },
+                  {
+                      "id":  "9d3d76f7-79ba-4768-a00a-8ae318e9aa0e",
+                      "action":  "GroupCreated",
+                      "targetName":  "المسميات الوظيفية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-13T07:37:05.354Z"
+                  },
+                  {
+                      "id":  "7796a1e4-1972-429c-9fbc-b88b3f825bc7",
+                      "action":  "RecordVisited",
+                      "targetName":  "احمد منصور السحار",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "ad4dc696-1d58-4cf6-ade6-e37b2c9f5b29",
+                                      "rowIndex":  3360,
+                                      "personName":  "احمد منصور السحار",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T06:47:41.168Z"
+                  },
+                  {
+                      "id":  "04deb920-6cd8-4feb-94f3-a812c4af5787",
+                      "action":  "RecordVisited",
+                      "targetName":  "عماد الدين خضر الحميدو",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "c5112bf7-40d4-486c-bb90-5ef2acea9a29",
+                                      "rowIndex":  1901,
+                                      "personName":  "عماد الدين خضر الحميدو",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T06:39:57.104Z"
+                  },
+                  {
+                      "id":  "ba676b08-dae1-4494-9955-80ce15a05c46",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد عبد الله حماده",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "وزارة - تنقيب وانتاج",
+                                      "recordId":  "15c15c8a-ec6c-47eb-8112-03f1f41b6c38",
+                                      "rowIndex":  1684,
+                                      "personName":  "محمد عبد الله حماده",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T06:19:43.855Z"
+                  },
+                  {
+                      "id":  "a86f45e1-6ef9-40b7-a47f-779faa3cb1c3",
+                      "action":  "RecordVisited",
+                      "targetName":  "موفق محمد عماد",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "0d542622-b739-4cdc-9ac8-565638e01ae8",
+                                      "rowIndex":  7405,
+                                      "personName":  "موفق محمد عماد",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T06:12:58.183Z"
+                  },
+                  {
+                      "id":  "4443beb3-10d2-43f1-aa9c-786dbb89d17a",
+                      "action":  "RecordVisited",
+                      "targetName":  "محمد عدنان المظلوم",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1",
+                                      "fileName":  "ملف العقود",
+                                      "recordId":  "959febb9-cc18-4dc7-9b58-e553745060f4",
+                                      "rowIndex":  3913,
+                                      "personName":  "محمد عدنان المظلوم",
+                                      "visitorUsername":  "mhmd",
+                                      "visitorDisplayName":  "مالك النظام"
+                                  },
+                      "createdAt":  "2026-09-13T06:11:00.086Z"
+                  },
+                  {
+                      "id":  "5a2f6ff5-a1b2-4e5d-ae7e-c8758cf68411",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"upload.view\", \"groups.create\", \"categories.manage\", \"groups.update\", \"categories.view\", \"conflicts.view\", \"upload.run\", \"conflicts.filters\", \"groups.viewScoped\", \"groups.viewScoped\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-13T04:26:53.901Z"
+                  },
+                  {
+                      "id":  "a738c019-dcbd-4ff0-aa75-4eda4801817b",
+                      "action":  "TemplateCreated",
+                      "targetName":  "وزارة",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1"
+                                  },
+                      "createdAt":  "2026-09-12T20:23:53.596Z"
+                  },
+                  {
+                      "id":  "dffdd2ba-9703-41bf-aedf-d2bc513cb59f",
+                      "action":  "FileUploaded",
+                      "targetName":  "وزارة - تنقيب وانتاج",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  7520,
+                                      "fileId":  "47783e76-cf1d-4258-a0aa-a42ea33499b4",
+                                      "sheetName":  "الموظفون"
+                                  },
+                      "createdAt":  "2026-09-12T20:23:46.353Z"
+                  },
+                  {
+                      "id":  "14e9b85a-85bd-49e5-aa03-cc3ecc4a82b8",
+                      "action":  "TemplateCreated",
+                      "targetName":  "ملف العقود",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "groupId":  "6c1c4204-cc99-43a0-b9cf-e78886dd55f1"
+                                  },
+                      "createdAt":  "2026-09-12T20:20:19.947Z"
+                  },
+                  {
+                      "id":  "14cf0c46-03e2-40b9-b972-d31f079a04a9",
+                      "action":  "FileUploaded",
+                      "targetName":  "ملف العقود",
+                      "actor":  null,
+                      "details":  {
+                                      "rows":  8185,
+                                      "fileId":  "a68cf685-1673-466c-8931-d5f511dde513",
+                                      "sheetName":  "أساسي"
+                                  },
+                      "createdAt":  "2026-09-12T20:20:06.876Z"
+                  },
+                  {
+                      "id":  "f96d7b65-f155-452e-a1d3-c829daba9510",
+                      "action":  "CategoryCreated",
+                      "targetName":  "الشهادات",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:16:45.686Z"
+                  },
+                  {
+                      "id":  "bb05da6a-8338-4c88-a927-c8c8d4097da3",
+                      "action":  "CategoryCreated",
+                      "targetName":  "السويات التنظيمية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:14:06.224Z"
+                  },
+                  {
+                      "id":  "452b51d7-453c-4451-82fd-b6b4bab00744",
+                      "action":  "CategoryCreated",
+                      "targetName":  "معلومات العمل",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:13:47.743Z"
+                  },
+                  {
+                      "id":  "c1669c95-992f-40bb-957e-93308cfda657",
+                      "action":  "CategoryCreated",
+                      "targetName":  "معلومات شخصية ثانوية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:13:36.843Z"
+                  },
+                  {
+                      "id":  "82a54b6c-c5f9-440f-ae3c-f0c30636ec52",
+                      "action":  "CategoryCreated",
+                      "targetName":  "معلومات شخصية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:13:23.699Z"
+                  },
+                  {
+                      "id":  "ea4c67dc-847e-42af-9e97-2cc4158a8d78",
+                      "action":  "GroupCreated",
+                      "targetName":  "ملفات المالية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:11:55.369Z"
+                  },
+                  {
+                      "id":  "f96b1f61-a091-4b57-859e-cddb7fbe0563",
+                      "action":  "GroupCreated",
+                      "targetName":  "الملفات الأساسية",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd"
+                                  },
+                      "createdAt":  "2026-09-12T20:11:46.966Z"
+                  },
+                  {
+                      "id":  "8cc9592d-c78f-4686-84f0-d6e911f7f8dc",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "test",
+                      "details":  {
+                                      "by":  "test",
+                                      "permissions":  "[\"groups.create\", \"groups.update\", \"categories.view\", \"conflicts.filters\", \"categories.manage\", \"upload.run\", \"conflicts.view\", \"upload.view\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-12T14:35:06.792Z"
+                  },
+                  {
+                      "id":  "07e37d1e-245e-44c5-8287-e83879061dd5",
+                      "action":  "UserUpdated",
+                      "targetName":  "admin",
+                      "actor":  "admin",
+                      "details":  {
+                                      "by":  "admin"
+                                  },
+                      "createdAt":  "2026-09-12T14:34:14.366Z"
+                  },
+                  {
+                      "id":  "be3e6717-fb86-494f-abbb-ad1cc431bfbe",
+                      "action":  "UserCreated",
+                      "targetName":  "test",
+                      "actor":  "admin",
+                      "details":  {
+                                      "by":  "admin"
+                                  },
+                      "createdAt":  "2026-09-12T14:34:07.13Z"
+                  },
+                  {
+                      "id":  "e89ac804-d29a-461d-8f5a-440a9aae6ab4",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"conflicts.filters\", \"categories.manage\", \"upload.run\", \"categories.view\", \"conflicts.view\", \"upload.view\", \"edits.badge\", \"merge.view\", \"users.view\", \"backup.view\", \"users.delete\", \"activity.view\", \"edits.view\", \"users.update\", \"backup.restore\", \"sheetMerge.view\", \"export.run\", \"groups.update\", \"users.create\", \"edits.update\", \"activity.browse\", \"backup.export\", \"groups.create\", \"export.view\", \"groups.view\"]"
+                                  },
+                      "createdAt":  "2026-09-12T14:32:20.711Z"
+                  },
+                  {
+                      "id":  "994c856f-0e78-4fe1-b1a9-32901f103d65",
+                      "action":  "UserPermissionsUpdated",
+                      "targetName":  "admin",
+                      "actor":  "mhmd",
+                      "details":  {
+                                      "by":  "mhmd",
+                                      "permissions":  "[\"conflicts.filters\", \"conflicts.view\", \"upload.view\", \"categories.view\", \"categories.manage\", \"upload.run\"]"
+                                  },
+                      "createdAt":  "2026-09-12T13:07:10.932Z"
+                  }
+              ],
+    "total":  58,
+    "page":  1,
+    "pageSize":  200
+}

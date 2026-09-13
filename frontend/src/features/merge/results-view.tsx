@@ -19,6 +19,28 @@ type MergeStatus = MergeRunResult["status"];
 type RuleStat = MergeRuleStat;
 const MAX_PAIRS_PER_RULE = 200;
 
+const ARABIC_RULE_ORDINALS = ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة"] as const;
+
+function toArabicOrdinal(position: number): string {
+  return ARABIC_RULE_ORDINALS[position - 1] ?? String(position);
+}
+
+const RULE_SHORT_TITLES: Record<string, string> = {
+  full_name: "الربط بالاسم الثلاثي مع التأكد باسم الأم",
+  composed_name: "دمج الاسم مع اسم الأب مع النسبة",
+  national_id: "الربط بالرقم الوطني",
+  personal_no: "الربط بالرقم الذاتي",
+  sham_cash: "الربط بالشام كاش",
+  phone: "الربط برقم الهاتف",
+};
+
+function ruleShortTitle(rule: RuleStat): string {
+  const known = RULE_SHORT_TITLES[rule.key];
+  if (known) return known;
+  const parts = rule.label.split(" — ");
+  return parts.length > 1 ? parts.slice(1).join(" — ") : rule.label;
+}
+
 function StatusBanner({ status }: { status: MergeStatus }) {
   const complete = status.state === "complete";
   return (
@@ -62,11 +84,20 @@ function StatusBanner({ status }: { status: MergeStatus }) {
 function RuleCard({ rule }: { rule: RuleStat }) {
   const [open, setOpen] = useState(false);
   const visible = rule.pairs.slice(0, MAX_PAIRS_PER_RULE);
+  const executionPosition = rule.executionOrder ?? rule.order;
+  // Canonical fixed number vs manual execution position, e.g. "القاعدة 5 (تنفيذ 1)".
+  const canonicalPosition = rule.canonicalOrder ?? rule.order;
+  const executionLabel =
+    executionPosition === canonicalPosition
+      ? `القاعدة ${toArabicOrdinal(executionPosition)}`
+      : `القاعدة ${toArabicOrdinal(canonicalPosition)} (نُفِّذت ${toArabicOrdinal(executionPosition)})`;
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-3 py-4">
         <div className="space-y-1">
-          <CardTitle className="text-base">{rule.label}</CardTitle>
+          <CardTitle className="text-base">
+            {executionLabel} — {ruleShortTitle(rule)}
+          </CardTitle>
           <p className="text-xs leading-5 text-muted-foreground">{rule.description}</p>
         </div>
         <div className="flex items-center gap-2">

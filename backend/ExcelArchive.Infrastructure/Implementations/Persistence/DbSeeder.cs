@@ -16,6 +16,11 @@ public static class DbSeeder
         // from AppDbContext on first boot (idempotent on later boots).
         await db.Database.EnsureCreatedAsync();
 
+        // V2 addition: record_edits.edited_by (who made each edit). EnsureCreated
+        // cannot alter an existing database, so the column is added idempotently.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS edited_by text");
+
         // Install pg_trgm + trigram search indexes idempotently.
         // Required index/cache setup failure must be visible in readiness
         // (docs/04), not merely logged: seeder warns here, /health/ready must
@@ -53,45 +58,9 @@ public static class DbSeeder
             logger.LogWarning(ex, "Could not install search indexes; continuing without trigram indexes.");
         }
 
-        if (!db.Users.Any())
-        {
-            var username = configuration["ADMIN_USERNAME"] ?? "admin";
-            var password = configuration["ADMIN_PASSWORD"] ?? "admin123";
-            db.Users.Add(new ExcelArchive.Domain.Entities.User
-            {
-                Username = username,
-                PasswordHash = auth.HashPassword(password),
-                DisplayName = "المدير",
-                IsActive = true,
-                Permissions = Permissions.OwnerGlobals
-                    .Select(key => new ExcelArchive.Domain.Entities.UserPermission { Permission = key })
-                    .ToList(),
-            });
-            await db.SaveChangesAsync();
-        }
-        else
-        {
-            // Upgrade path: grant missing canonical owner globals to the admin.
-            // Legacy extras already in the DB (groups.manage, search.view) are left
-            // untouched; they resolve as no-ops via UnifyDataPermissions/HasPermission.
-            var adminName = configuration["ADMIN_USERNAME"] ?? "admin";
-            var admin = await db.Users.Include(u => u.Permissions)
-                .FirstOrDefaultAsync(u => u.Username == adminName);
-            if (admin is not null)
-            {
-                var missing = Permissions.OwnerGlobals
-                    .Except(admin.Permissions
-                        .Where(p => p.GroupId is null && p.FileId is null)
-                        .Select(p => p.Permission))
-                    .Select(key => new ExcelArchive.Domain.Entities.UserPermission { UserId = admin.Id, Permission = key })
-                    .ToList();
-                if (missing.Count > 0)
-                {
-                    db.UserPermissions.AddRange(missing);
-                    await db.SaveChangesAsync();
-                }
-            }
-        }
+        // Admin account is a real user with specific permissions.
+        // Managed manually in the database — seeder must never create or update it,
+        // so existing data (display name, status, permissions, password) stays as-is.
 
         // System owner seed (V1 parity: prisma/seed-owner.ts).
         // The password is only set on creation — re-running never reverts a
@@ -129,6 +98,45 @@ public static class DbSeeder
         }
         db.UserPermissions.AddRange(Permissions.OwnerGlobals
             .Select(key => new ExcelArchive.Domain.Entities.UserPermission { UserId = owner.Id, Permission = key }));
+        await db.SaveChangesAsync();
+
+        // Test account seed (dev/QA convenience: test / test123).
+        // Unlike the owner account, the password IS enforced on every boot so
+        // the documented test credentials always work after a restart.
+        // Override with TEST_USERNAME / TEST_PASSWORD; remove this block (and
+        // the compose defaults) before any production deployment.
+        var testName = configuration["TEST_USERNAME"] ?? "test";
+        var testUser = await db.Users.Include(u => u.Permissions)
+            .FirstOrDefaultAsync(u => u.Username == testName);
+        if (testUser is null)
+        {
+            testUser = new ExcelArchive.Domain.Entities.User
+            {
+                Username = testName,
+                PasswordHash = auth.HashPassword(configuration["TEST_PASSWORD"] ?? "test123"),
+                DisplayName = "مستخدم التجربة",
+                IsActive = true,
+            };
+            db.Users.Add(testUser);
+            await db.SaveChangesAsync();
+            testUser = await db.Users.Include(u => u.Permissions)
+                .FirstAsync(u => u.Username == testName);
+        }
+        else
+        {
+            testUser.IsActive = true;
+            testUser.DisplayName = "مستخدم التجربة";
+            testUser.PasswordHash = auth.HashPassword(configuration["TEST_PASSWORD"] ?? "test123");
+            await db.SaveChangesAsync();
+        }
+        var staleTestPermissions = testUser.Permissions.ToList();
+        if (staleTestPermissions.Count > 0)
+        {
+            db.UserPermissions.RemoveRange(staleTestPermissions);
+            await db.SaveChangesAsync();
+        }
+        db.UserPermissions.AddRange(Permissions.OwnerGlobals
+            .Select(key => new ExcelArchive.Domain.Entities.UserPermission { UserId = testUser.Id, Permission = key }));
         await db.SaveChangesAsync();
     }
 }

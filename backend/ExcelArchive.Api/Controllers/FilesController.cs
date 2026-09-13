@@ -128,6 +128,21 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
         catch (Exception ex) { return HandleError(ex); }
     }
 
+    [HttpPost("files/{id:guid}/move")]
+    public async Task<IActionResult> Move(Guid id, [FromBody] MoveFileRequest request)
+    {
+        var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
+        if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null || request.TargetGroupId == Guid.Empty)
+            return Bad("حدد المجموعة الجديدة للملف.");
+        try
+        {
+            await files.MoveAsync(id, request.TargetGroupId, user.Username);
+            return Ok(ApiResponse.Success(null, "تم نقل الملف إلى المجموعة الجديدة."));
+        }
+        catch (Exception ex) { return HandleError(ex); }
+    }
+
     [HttpGet("files/{id:guid}/export")]
     public async Task<IActionResult> Export(Guid id)
     {

@@ -72,33 +72,32 @@ public static class FileExportBuilder
                 var text = cell is DateTime ? "31/12/2025" : cell.ToString() ?? "";
                 if (text.Length == 0) continue;
                 longest = Math.Max(longest, DisplayLength(text));
+                if (longest + 2 >= MaxColumnWidth) break;
             }
             sheet.Column(c + 1).Width = Math.Min(MaxColumnWidth, Math.Max(MinColumnWidth, longest + 2));
         }
     }
 
+    /// <summary>
+    /// تطبيق التنسيق على النطاق كله دفعة واحدة (نفس أسلوب Merge/SheetMerge): التنسيق
+    /// الخلوي المتكرر لكل خلية يضخّم ملف التصدير ويبطئ فتحه بشدة مع آلاف الصفوف.
+    /// </summary>
     private static void StyleTableRange(IXLWorksheet sheet, int rowCount, int columnCount)
     {
+        var fullRange = sheet.Range(1, 1, rowCount + 1, columnCount);
+        fullRange.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.TopBorderColor = XLColor.FromHtml("#BFBFBF");
+        fullRange.Style.Border.LeftBorderColor = XLColor.FromHtml("#BFBFBF");
+        fullRange.Style.Border.BottomBorderColor = XLColor.FromHtml("#BFBFBF");
+        fullRange.Style.Border.RightBorderColor = XLColor.FromHtml("#BFBFBF");
+        fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        fullRange.Style.Alignment.WrapText = true;
         for (var r = 1; r <= rowCount + 1; r++)
-        {
-            var row = sheet.Row(r);
-            row.Height = 30;
-            for (var c = 1; c <= columnCount; c++)
-            {
-                var cell = row.Cell(c);
-                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                cell.Style.Alignment.WrapText = true;
-                cell.Style.Border.TopBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.RightBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.TopBorderColor = XLColor.FromHtml("#BFBFBF");
-                cell.Style.Border.LeftBorderColor = XLColor.FromHtml("#BFBFBF");
-                cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#BFBFBF");
-                cell.Style.Border.RightBorderColor = XLColor.FromHtml("#BFBFBF");
-            }
-        }
+            sheet.Row(r).Height = 30;
     }
 
     /// <summary>Parses DD/MM/YYYY or YYYY-MM-DD (validated) like V1 parseStoredDate.

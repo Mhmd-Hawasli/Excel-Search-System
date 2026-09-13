@@ -62,24 +62,16 @@ public static class SheetMergeExportBuilder
 
     private static void StyleTableRange(IXLWorksheet sheet, int rowCount, int columnCount)
     {
+        var fullRange = sheet.Range(1, 1, rowCount + 1, columnCount);
+        fullRange.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+        fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        fullRange.Style.Alignment.WrapText = true;
         for (var r = 1; r <= rowCount + 1; r++)
-        {
             sheet.Row(r).Height = RowHeightPoints;
-            for (var c = 1; c <= columnCount; c++)
-            {
-                var cell = sheet.Row(r).Cell(c);
-                cell.Style.Border.TopBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.RightBorder = XLBorderStyleValues.Thin;
-            }
-        }
-        foreach (var col in sheet.Columns(1, columnCount))
-        {
-            col.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            col.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            col.Style.Alignment.WrapText = true;
-        }
     }
 
     private static void ApplyRowFormats(IXLWorksheet sheet, int excelRow, SheetRowFormats? formats, int columnCount)

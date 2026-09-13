@@ -198,6 +198,27 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             new { fileId, records = rowCount, by = actorUsername }, ct);
     }
 
+    /// <summary>Moves a file (and its records/edits/version) to another group.
+    /// Name uniqueness is global, so only the GroupId changes.</summary>
+    public async Task MoveAsync(Guid fileId, Guid targetGroupId, string actorUsername, CancellationToken ct = default)
+    {
+        var file = await uow.Files.FindAsync(fileId, ct)
+            ?? throw new KeyNotFoundException("الملف غير موجود.");
+        if (targetGroupId == file.GroupId)
+            throw new InvalidOperationException("الملف موجود بالفعل في هذه المجموعة.");
+        var target = await uow.Groups.FindAsync(targetGroupId, ct)
+            ?? throw new KeyNotFoundException("المجموعة الجديدة غير موجودة.");
+        var name = file.Name;
+        await uow.ExecuteInTransactionAsync(async () =>
+        {
+            file.GroupId = targetGroupId;
+            file.UpdatedAt = DateTime.UtcNow;
+            await uow.SaveChangesAsync(ct);
+            await activity.WriteAsync(ActivityAction.FileUpdated, name,
+                new { fileId, movedToGroupId = targetGroupId, movedToGroupName = target.Name, by = actorUsername }, ct);
+        }, ct);
+    }
+
     public async Task<bool> ExistsAsync(Guid fileId, CancellationToken ct = default)
         => await uow.Files.FindAsync(fileId, ct) is not null;
 

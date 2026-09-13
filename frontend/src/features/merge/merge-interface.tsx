@@ -1,6 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { mergeService } from "@/services/misc.service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,12 +25,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MappingForm } from "@/features/merge/mapping-form";
 import { ResultsView, type MergeClientResult } from "@/features/merge/results-view";
-import { LoaderCircle, Play, RefreshCw, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Play, RefreshCw, RotateCcw, Upload } from "lucide-react";
 import {
+  MERGE_RULE_KEYS,
   MERGE_RULES,
+  ruleExecutionLabel,
   type MergeFieldKey,
   type MergeInspection,
   type MergeMapping,
+  type MergeRuleKey,
 } from "@/lib/merge/types";
 import { suggestMergeMapping } from "@/lib/merge/suggest";
 
@@ -218,6 +238,87 @@ function ruleHints(left: MergeMapping, right: MergeMapping) {
   return hints;
 }
 
+function SortableRuleItem({
+  ruleKey,
+  position,
+  total,
+  ready,
+  disabled,
+  onMove,
+}: {
+  ruleKey: MergeRuleKey;
+  position: number;
+  total: number;
+  ready: boolean;
+  disabled: boolean;
+  onMove: (key: MergeRuleKey, direction: -1 | 1) => void;
+}) {
+  const rule = MERGE_RULES.find((item) => item.key === ruleKey);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: ruleKey,
+    disabled,
+  });
+  if (!rule) return null;
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-start gap-2 rounded-lg border bg-background p-3 text-sm transition-shadow ${
+        isDragging ? "border-primary shadow-lg" : ""
+      } ${ready ? "" : "opacity-60"}`}
+    >
+      <span
+        {...attributes}
+        {...listeners}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-label={`اسحب لتغيير ترتيب ${ruleExecutionLabel(position, ruleKey)}`}
+        title="اسحب لتغيير الترتيب"
+        className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-md border text-muted-foreground ${
+          disabled ? "cursor-not-allowed opacity-50" : "cursor-grab active:cursor-grabbing"
+        }`}
+      >
+        <GripVertical className="size-4" />
+      </span>
+      <Badge variant={ready ? "default" : "outline"} className="mt-0.5 shrink-0 ltr-numbers">
+        {position}
+      </Badge>
+      <span className="min-w-0 flex-1">
+        <span className="font-semibold">
+          {ruleExecutionLabel(position, ruleKey)} ({rule.method})
+        </span>
+        <span className="block text-xs text-muted-foreground">
+          {ready ? "ستُطبق على الأسطر غير المربوطة" : "لن تُطبق — أعمدة القاعدة غير محددة في الجدولين"}
+        </span>
+      </span>
+      <span className="flex shrink-0 flex-col gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-7"
+          disabled={disabled || position <= 1}
+          onClick={() => onMove(ruleKey, -1)}
+          aria-label={`نقل ${ruleExecutionLabel(position, ruleKey)} للأعلى`}
+        >
+          <ChevronUp className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-7"
+          disabled={disabled || position >= total}
+          onClick={() => onMove(ruleKey, 1)}
+          aria-label={`نقل ${ruleExecutionLabel(position, ruleKey)} للأسفل`}
+        >
+          <ChevronDown className="size-4" />
+        </Button>
+      </span>
+    </li>
+  );
+}
+
 export function MergeInterface() {
   const [left, setLeft] = useState<TableState>(emptyTable());
   const [right, setRight] = useState<TableState>(emptyTable());
@@ -228,13 +329,45 @@ export function MergeInterface() {
   const [result, setResult] = useState<MergeClientResult | null>(null);
   const [step, setStep] = useState(0);
   const [ignoreConfirmation, setIgnoreConfirmation] = useState(false);
+  /** Manual execution order (first element runs first). Drag/drop + up/down reorder it. */
+  const [ruleOrder, setRuleOrder] = useState<MergeRuleKey[]>([...MERGE_RULE_KEYS]);
 
   const ready = Boolean(
     left.inspection && right.inspection && !left.error && !right.error && !left.uploading && !right.uploading && !running,
   );
   const hints = ruleHints(left.mapping, right.mapping);
+  const readinessByKey = new Map(hints.map((hint) => [hint.key, hint.ready]));
   const activeRules = hints.filter((hint) => hint.ready);
   const canRun = ready && activeRules.length > 0;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function moveRule(key: MergeRuleKey, direction: -1 | 1) {
+    if (running) return;
+    setRuleOrder((current) => {
+      const index = current.indexOf(key);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      return arrayMove(current, index, target);
+    });
+  }
+
+  function handleRuleDragEnd(event: DragEndEvent) {
+    if (running || !event.over || event.active.id === event.over.id) return;
+    setRuleOrder((current) => {
+      const oldIndex = current.indexOf(event.active.id as MergeRuleKey);
+      const newIndex = current.indexOf(event.over?.id as MergeRuleKey);
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return arrayMove(current, oldIndex, newIndex);
+    });
+  }
+
+  function resetRuleOrder() {
+    if (running) return;
+    setRuleOrder([...MERGE_RULE_KEYS]);
+  }
 
   async function run() {
     if (!canRun || !left.inspection || !right.inspection) return;
@@ -252,6 +385,7 @@ export function MergeInterface() {
             mapping: right.mapping,
           },
           ignoreConfirmation,
+          ruleOrder,
         },
         (percent, detail) => {
           setRunProgress(percent);
@@ -274,6 +408,7 @@ export function MergeInterface() {
     setRunError(null);
     setStep(0);
     setIgnoreConfirmation(false);
+    setRuleOrder([...MERGE_RULE_KEYS]);
     setRunProgress(0);
     setRunDetail(null);
   }
@@ -338,42 +473,52 @@ export function MergeInterface() {
           <Card className="min-w-0">
             <CardContent className="space-y-4 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-bold">القواعد التي ستُطبق</h3>
-                {activeRules.length ? (
-                  <Badge variant="secondary">{activeRules.length} قواعد جاهزة</Badge>
-                ) : (
-                  <Badge variant="outline">لا توجد قواعد جاهزة بعد</Badge>
-                )}
+                <h3 className="font-bold">القواعد التي ستُطبق — رتّبها يدويًا حسب أولوية التنفيذ</h3>
+                <span className="flex flex-wrap items-center gap-2">
+                  {activeRules.length ? (
+                    <Badge variant="secondary">{activeRules.length} قواعد جاهزة</Badge>
+                  ) : (
+                    <Badge variant="outline">لا توجد قواعد جاهزة بعد</Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={resetRuleOrder}
+                    disabled={running}
+                    aria-label="إعادة ترتيب القواعد للوضع الافتراضي"
+                  >
+                    <RotateCcw className="size-4" />
+                    الترتيب الافتراضي
+                  </Button>
+                </span>
               </div>
-              <ul className="grid gap-2 text-sm md:grid-cols-2">
-                {hints.map((hint) => {
-                  const rule = MERGE_RULES.find((entry) => entry.key === hint.key)!;
-                  return (
-                    <li
-                      key={hint.key}
-                      className={`flex items-start gap-2 rounded-lg border p-3 ${
-                        hint.ready ? "border-primary/30 bg-primary/5" : "opacity-60"
-                      }`}
-                    >
-                      {hint.ready ? (
-                        <span className="mt-1 size-2 rounded-full bg-primary" />
-                      ) : (
-                        <span className="mt-1 size-2 rounded-full bg-muted-foreground/40" />
-                      )}
-                      <span>
-                        <span className="font-semibold">
-                          {rule.label.split(" — ")[0]} ({rule.method})
-                        </span>
-                        <span className="block text-xs text-muted-foreground">
-                          {hint.ready
-                            ? "ستُطبق على الأسطر غير المربوطة"
-                            : "لن تُطبق — أعمدة القاعدة غير محددة في الجدولين"}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <p className="text-xs leading-6 text-muted-foreground">
+                اسحب أي قاعدة من المقبض أو استخدم زرّي الأعلى/الأسفل لتحديد من تُنفَّذ أولًا. تُطبَّق القواعد
+                بالترتيب الظاهر هنا: الأولى تأخذ أولوية الربط، ثم تُطبَّق التالية على الأسطر غير المربوطة فقط.
+              </p>
+              <DndContext
+                id="merge-rule-order"
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleRuleDragEnd}
+              >
+                <SortableContext items={ruleOrder} strategy={verticalListSortingStrategy}>
+                  <ul className="grid gap-2 text-sm md:grid-cols-2">
+                    {ruleOrder.map((ruleKey, index) => (
+                      <SortableRuleItem
+                        key={ruleKey}
+                        ruleKey={ruleKey}
+                        position={index + 1}
+                        total={ruleOrder.length}
+                        ready={readinessByKey.get(ruleKey) ?? false}
+                        disabled={running}
+                        onMove={moveRule}
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+              </DndContext>
               {runError ? <p className="text-sm text-destructive">{runError}</p> : null}
               <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition hover:border-primary/50">
                 <input

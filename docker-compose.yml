@@ -29,9 +29,11 @@ services:
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      TEST_USERNAME: ${TEST_USERNAME:-test}
+      TEST_PASSWORD: ${TEST_PASSWORD:-test123}
       SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-characters}
-      AllowedOrigins__0: http://localhost:3300
-      AllowedOrigins__1: http://localhost:3000
+      AllowedOrigins__0: http://localhost:3000
+      AllowedOrigins__1: http://127.0.0.1:3000
     ports:
       - "5000:5000"
 
@@ -47,7 +49,7 @@ services:
     environment:
       BACKEND_URL: http://backend:5000
     ports:
-      - "3300:3000"
+      - "3000:3000"
 
 volumes:
   excel_archive_2_data:

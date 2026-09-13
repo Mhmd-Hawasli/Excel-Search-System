@@ -197,6 +197,7 @@ export function EditsPage() {
                       <th scope="col" className="p-3 text-right font-bold">القيمة القديمة</th>
                       <th scope="col" className="p-3 text-right font-bold">القيمة الجديدة</th>
                       <th scope="col" className="p-3 text-right font-bold">التاريخ</th>
+                      <th scope="col" className="p-3 text-right font-bold">المستخدم</th>
                       <th scope="col" className="p-3 text-right font-bold">السجل</th>
                     </tr>
                   </thead>
@@ -208,6 +209,7 @@ export function EditsPage() {
                         <td className="p-3 text-muted-foreground">{item.oldValue || "—"}</td>
                         <td className="p-3 font-semibold">{item.newValue || "—"}</td>
                         <td className="p-3 text-xs text-muted-foreground">{item.createdAt}</td>
+                        <td className="p-3 font-semibold">{item.editedBy || "—"}</td>
                         <td className="p-3">
                           <Link href={`/records/${item.recordId}`} className="text-primary hover:underline">
                             فتح السجل

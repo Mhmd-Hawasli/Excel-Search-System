@@ -55,7 +55,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             byRecord.TryGetValue(e.RecordId, out var person);
             return new EditDto(e.Id, e.RecordId, e.FileId, e.FileColumnId,
                 e.HeaderRaw, e.OldValue, e.NewValue, e.CreatedAt,
-                person?.DisplayName(), person?.RowIndex);
+                person?.DisplayName(), person?.RowIndex, e.EditedBy);
         }).ToList(), total, page, pageSize);
     }
 
@@ -66,17 +66,18 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         foreach (var edit in edits.OrderBy(e => e.CreatedAt))
         {
             if (!headers.TryGetValue(edit.HeaderRaw, out var existing))
-                headers[edit.HeaderRaw] = new EditedHeaderDto(1, edit.OldValue, edit.NewValue, edit.CreatedAt);
+                headers[edit.HeaderRaw] = new EditedHeaderDto(1, edit.OldValue, edit.NewValue, edit.CreatedAt, edit.EditedBy);
             else
                 headers[edit.HeaderRaw] = existing with
                 {
                     Count = existing.Count + 1,
                     LastValue = edit.NewValue,
                     LastAt = edit.CreatedAt,
+                    LastBy = edit.EditedBy ?? existing.LastBy,
                 };
         }
         return new RecordEditsResult(
-            edits.Select(e => new RecordEditInfoDto(e.Id, e.HeaderRaw, e.FileColumnId, e.OldValue, e.NewValue, e.CreatedAt)).ToList(),
+            edits.Select(e => new RecordEditInfoDto(e.Id, e.HeaderRaw, e.FileColumnId, e.OldValue, e.NewValue, e.CreatedAt, e.EditedBy)).ToList(),
             headers);
     }
 
@@ -129,6 +130,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
                 HeaderRaw = target.HeaderRaw,
                 OldValue = oldValue,
                 NewValue = newValue,
+                EditedBy = actorUsername,
             });
 
             // Recompute sf_*/n_*/d_*/nationalIdNum via the shared mapper (V1 buildRecordFieldUpdates).
@@ -215,8 +217,14 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         // Activity outside the data transaction would hide write failures; V1 logs
         // RECORD_EDITED in the same transaction. Keep a separate insert here only
         // because ActivityService owns its own SaveChanges; failure still surfaces.
-        await activity.WriteAsync(Domain.Enums.ActivityAction.RecordEdited, record.File.Name,
-            new { fileId = record.FileId, recordId = record.Id, rowIndex = record.RowIndex, headerRaw = target.HeaderRaw, oldValue, newValue }, ct);
+        var personName = record.SfFullName
+            ?? string.Join(" ", new[] { record.SfFirstName, record.SfFatherName, record.SfLastName }
+                .Where(p => !string.IsNullOrWhiteSpace(p)));
+        if (string.IsNullOrWhiteSpace(personName)) personName = "سجل بلا اسم";
+        await activity.WriteAsync(Domain.Enums.ActivityAction.RecordEdited, personName,
+            new { fileId = record.FileId, recordId = record.Id, rowIndex = record.RowIndex,
+                headerRaw = target.HeaderRaw, oldValue, newValue, editedBy = actorUsername,
+                personName }, ct);
         return new EditResult(true, oldValue, newValue);
     }
 
