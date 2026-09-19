@@ -19,13 +19,15 @@ public sealed class PermissionTests
         "upload.view", "upload.run",
         "conflicts.view", "conflicts.filters",
         "categories.view", "categories.manage",
-        "groups.view", "groups.viewScoped", "groups.create", "groups.update",
+        "groups.view", "groups.viewScoped", "groups.create", "groups.update", "groups.defaultSearch",
+        "records.view", "records.create", "records.delete",
+        "bulkSearch.view",
     ];
 
     [Fact]
-    public void CanonicalCatalog_HasExactly26Keys()
+    public void CanonicalCatalog_HasExactly31Keys()
     {
-        Assert.Equal(26, Permissions.Canonical.Length);
+        Assert.Equal(31, Permissions.Canonical.Length);
         Assert.Equal(ExpectedCanonical.OrderBy(k => k), Permissions.Canonical.OrderBy(k => k));
         Assert.DoesNotContain(Permissions.GroupsManage, Permissions.Canonical);
         Assert.DoesNotContain(Permissions.SearchView, Permissions.Canonical);
@@ -35,7 +37,7 @@ public sealed class PermissionTests
     [Fact]
     public void OwnerGlobals_ExcludeOnlyScopedKey()
     {
-        Assert.Equal(25, Permissions.OwnerGlobals.Length);
+        Assert.Equal(30, Permissions.OwnerGlobals.Length);
         Assert.DoesNotContain(Permissions.GroupsViewScoped, Permissions.OwnerGlobals);
         Assert.Contains(Permissions.GroupsView, Permissions.OwnerGlobals);
     }

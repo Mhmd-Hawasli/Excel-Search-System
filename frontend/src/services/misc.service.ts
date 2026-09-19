@@ -144,7 +144,7 @@ export const mergeService = {
     return response.data;
   },
   run(
-    body: { left: { token: string; sheetName: string; mapping: Record<string, number> }; right: { token: string; sheetName: string; mapping: Record<string, number> }; ignoreConfirmation: boolean; ruleOrder?: string[] },
+    body: { left: { token: string; sheetName: string; mapping: Record<string, number> }; right: { token: string; sheetName: string; mapping: Record<string, number> }; ignoreConfirmation: boolean; ruleOrder?: string[]; customRules?: { linkField: string; confirmField?: string | null }[] },
     onProgress: (percent: number, detail: string | null) => void,
   ): Promise<MergeRunResult> {
     return new Promise((resolve, reject) => {

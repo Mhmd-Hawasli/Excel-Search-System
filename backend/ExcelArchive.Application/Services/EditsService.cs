@@ -47,15 +47,17 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, ct);
         // Person full name for the history table (V1 UI-12): one lookup for
         // the page, mapped in memory so deleted records stay visible.
-        var recordIds = rows.Select(e => e.RecordId).Distinct().ToList();
+        // Archived (previous-version) edits carry a null record id and keep
+        // their values visible in history without a person link.
+        var recordIds = rows.Where(e => e.RecordId.HasValue).Select(e => e.RecordId!.Value).Distinct().ToList();
         var people = await uow.Records.ListPeopleByIdsAsync(recordIds, ct);
         var byRecord = people.Select(r => new EditPerson(r.Id, r.SfFullName, r.SfFirstName, r.SfFatherName, r.SfLastName, r.RowIndex)).ToDictionary(r => r.Id);
         return new EditsResult(rows.Select(e =>
         {
-            byRecord.TryGetValue(e.RecordId, out var person);
+            byRecord.TryGetValue(e.RecordId ?? Guid.Empty, out var person);
             return new EditDto(e.Id, e.RecordId, e.FileId, e.FileColumnId,
                 e.HeaderRaw, e.OldValue, e.NewValue, e.CreatedAt,
-                person?.DisplayName(), person?.RowIndex, e.EditedBy);
+                person?.DisplayName(), person?.RowIndex, e.EditedBy, e.FileVersion);
         }).ToList(), total, page, pageSize);
     }
 
@@ -127,6 +129,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
                 RecordId = record.Id,
                 FileId = record.FileId,
                 FileColumnId = target.Id,
+                FileVersion = record.File?.Version ?? 1,
                 HeaderRaw = target.HeaderRaw,
                 OldValue = oldValue,
                 NewValue = newValue,

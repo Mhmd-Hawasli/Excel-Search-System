@@ -213,4 +213,49 @@ public sealed class ExcelEngineTests : IDisposable
         Assert.Single(inspection.Preview);
         Assert.Equal(["أحمد", "123456789"], inspection.Preview[0]);
     }
+
+    [Fact]
+    public void TableDetection_EmptiedTable_FallsBackToPlainScan()
+    {
+        using var wb = Book();
+        var ws = wb.Worksheets.Add("H");
+        ws.Cell("A1").Value = "h1";
+        ws.Cell("B1").Value = "h2";
+        ws.Cell("A2").Value = "v1";
+        ws.Cell("B2").Value = "v2";
+        ws.Range("A1:B2").CreateTable("T0");
+        ws.Row(2).Delete();
+        // Must not throw (previously a NullReference → generic 500 on sheet select).
+        Assert.Null(ExcelTableRange.ForSheet(ws));
+    }
+
+    [Fact]
+    public async Task InspectSheet_HeaderOnlyTableSheet_Succeeds()
+    {
+        using var wb = Book();
+        var first = wb.Worksheets.Add("First");
+        first.Cell("A1").Value = "name";
+        first.Cell("A2").Value = "x";
+        var second = wb.Worksheets.Add("Second");
+        second.Cell("A1").Value = "h1";
+        second.Cell("B1").Value = "h2";
+        second.Range("A1:B1").CreateTable("T0");
+        var dir = Path.Combine(Path.GetTempPath(), "enginetable", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var config = TestHelpers.Config();
+            config["UploadStore:Path"] = dir;
+            var inspector = new WorkbookInspector(new WorkbookFileStore(config));
+            using var ms = new MemoryStream(Save(wb));
+            var result = await inspector.InspectAsync(ms, "f.xlsx");
+            var token = Guid.Parse((string)result["token"]!);
+            var sheet = await inspector.InspectSheetAsync(token, "Second");
+            Assert.Equal("Second", (string)sheet["sheetName"]!);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

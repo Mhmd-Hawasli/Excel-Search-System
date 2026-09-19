@@ -8,4 +8,5 @@ public sealed record SearchPlan(
     IReadOnlyList<string> TextTokens,
     string NumericNeedle,
     string NormalizedText,
-    int? CategoryNeedle);
+    int? CategoryNeedle,
+    bool IncludeSimilar = true);

@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace ExcelArchive.Api.Controllers;
 
-public class FilesController(IFileService files, IAuthService auth, IFileExportBuilder exports) : ApiControllerBase(auth)
+public class FilesController(IFileService files, IAuthService auth, IFileExportBuilder exports, IReplacePreviewService? preview = null) : ApiControllerBase(auth)
 {
     [HttpPost("files/check-name")]
     public async Task<IActionResult> CheckName([FromBody] CheckFileNameRequest request)
@@ -144,7 +144,7 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     }
 
     [HttpGet("files/{id:guid}/export")]
-    public async Task<IActionResult> Export(Guid id)
+    public async Task<IActionResult> Export(Guid id, [FromQuery] bool markEdits = false)
     {
         var user = await RequirePermissionAsync(Permissions.ExportRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
@@ -153,7 +153,7 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
         var scope = await Auth.ResolveDataScope(user);
         if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
 
-        var bytes = exports.Build(data.SheetName, data.Headers, data.Records, data.Edits);
+        var bytes = exports.Build(data.SheetName, data.Headers, data.Records, data.Edits, markEdits);
 
         var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var encoded = Uri.EscapeDataString($"{data.FileName}-معدل-{date}.xlsx");
@@ -186,6 +186,34 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
         {
             var jobId = await files.CreateReplaceJobAsync(id, request, user.Username);
             return StatusCode(StatusCodes.Status202Accepted, ApiResponse.Success(new { jobId }, "تم بدء استبدال الملف."));
+        }
+        catch (Exception ex) { return HandleError(ex); }
+    }
+
+    /// <summary>Cell-by-cell replace preview: column check first, then every
+    /// cell of the staged workbook vs the stored rows, flagging values that
+    /// were manually edited internally. Read-only, capped payload.</summary>
+    [HttpPost("files/{id:guid}/replace-preview")]
+    public async Task<IActionResult> ReplacePreview(Guid id, [FromBody] ReplaceFileRequest request)
+    {
+        var user = await RequirePermissionAsync(Permissions.UploadRun);
+        if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        var target = await files.GetAsync(id);
+        if (target is null) return NotFound(ApiResponse.Failure("الملف المراد تحديثه غير موجود."));
+        var scope = await Auth.ResolveDataScope(user);
+        if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
+        if (request is null || request.Token is null || request.Token == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.OriginalFilename) || request.OriginalFilename.Length > 255
+            || string.IsNullOrWhiteSpace(request.SheetName) || request.SheetName.Length > 255
+            || request.SheetIndex < 1 || request.TotalRows < 0
+            || request.Columns is null || request.Columns.Count == 0
+            || (request.Mode != "same" && request.Mode != "different"))
+            return Bad("إعدادات الاستبدال غير مكتملة.");
+        try
+        {
+            if (preview is null) return HandleError(new InvalidOperationException("خدمة المعاينة غير متاحة."));
+            var result = await preview.PreviewAsync(id, request);
+            return Ok(ApiResponse.Success(result));
         }
         catch (Exception ex) { return HandleError(ex); }
     }

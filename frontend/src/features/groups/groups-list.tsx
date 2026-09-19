@@ -23,6 +23,7 @@ export function GroupsList() {
 
   const canCreate = hasPermission(user?.permissions ?? [], "groups.create");
   const canUpdate = hasPermission(user?.permissions ?? [], "groups.update");
+  const canDefaultSearch = hasPermission(user?.permissions ?? [], "groups.defaultSearch");
 
   return (
     <div className="space-y-7">
@@ -37,7 +38,15 @@ export function GroupsList() {
             <MutationForm action={groupsService.create} resetOnSuccess onSuccess={refetch} pendingMessage="جارٍ إنشاء المجموعة…" className="grid gap-4 md:grid-cols-[1fr_2fr_auto] md:items-end">
               <div className="space-y-2"><Label htmlFor="new-group-name">اسم المجموعة</Label><Input id="new-group-name" name="name" required /></div>
               <div className="space-y-2"><Label htmlFor="new-group-description">الوصف</Label><Input id="new-group-description" name="description" /></div>
-              <Button type="submit"><Plus className="size-4" />إنشاء المجموعة</Button>
+              <div className="flex items-center gap-2 pb-2">
+                {canDefaultSearch ? (
+                  <label htmlFor="new-group-default-search" className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <input id="new-group-default-search" type="checkbox" name="includeInDefaultSearch" defaultChecked className="size-4 accent-primary" />
+                    تضمين في البحث الافتراضي
+                  </label>
+                ) : null}
+                <Button type="submit"><Plus className="size-4" />إنشاء المجموعة</Button>
+              </div>
             </MutationForm>
           </CardContent>
         </Card>
@@ -59,6 +68,9 @@ export function GroupsList() {
                       <CardTitle><Link href={`/groups/${group.id}`} className="hover:underline">{group.name}</Link></CardTitle>
                       <Badge variant="secondary">{group.fileCount} ملف</Badge>
                       <Badge variant="outline">{group.recordCount.toLocaleString("en-US")} سجل</Badge>
+                      {group.includeInDefaultSearch === false ? (
+                        <Badge variant="outline" className="border-amber-400 text-amber-700">مستبعدة من البحث الافتراضي</Badge>
+                      ) : null}
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">{group.description || "لا يوجد وصف لهذه المجموعة."}</p>
                   </div>
@@ -84,7 +96,15 @@ export function GroupsList() {
                       <input type="hidden" name="id" value={group.id} />
                       <div className="space-y-2"><Label htmlFor={`group-name-${group.id}`}>الاسم</Label><Input id={`group-name-${group.id}`} name="name" defaultValue={group.name} required /></div>
                       <div className="space-y-2"><Label htmlFor={`group-description-${group.id}`}>الوصف</Label><Input id={`group-description-${group.id}`} name="description" defaultValue={group.description} /></div>
-                      <Button type="submit" variant="secondary">حفظ التعديلات</Button>
+                      <div className="flex items-center gap-2 pb-2">
+                        {canDefaultSearch ? (
+                          <label htmlFor={`group-default-search-${group.id}`} className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                            <input id={`group-default-search-${group.id}`} type="checkbox" name="includeInDefaultSearch" defaultChecked={group.includeInDefaultSearch !== false} className="size-4 accent-primary" />
+                            تضمين في البحث الافتراضي
+                          </label>
+                        ) : null}
+                        <Button type="submit" variant="secondary">حفظ التعديلات</Button>
+                      </div>
                     </MutationForm>
                   </details>
                 ) : null}

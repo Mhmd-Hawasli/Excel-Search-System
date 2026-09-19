@@ -11,9 +11,12 @@ export interface EditedFileSummary {
 
 export interface EditHistoryItem {
   id: string;
-  recordId: string;
+  /** Null for edits archived from a previous file version (record replaced). */
+  recordId: string | null;
   fileId: string;
   fileColumnId: string | null;
+  /** File version this edit was made on (1 = first version). */
+  fileVersion: number;
   headerRaw: string;
   oldValue: string;
   newValue: string;
@@ -37,7 +40,7 @@ export const editsService = {
   history(fileId?: string, page = 1, pageSize = 25): Promise<EditHistoryPage> {
     return apiGet<EditHistoryPage>("/api/edits", { view: "history", fileId, page, pageSize });
   },
-  exportUrl(fileId: string): string {
-    return `/api/files/${fileId}/export`;
+  exportUrl(fileId: string, markEdits = false): string {
+    return `/api/files/${fileId}/export${markEdits ? "?markEdits=true" : ""}`;
   },
 };

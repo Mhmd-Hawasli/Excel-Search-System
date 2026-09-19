@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Download, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -19,6 +20,7 @@ import { filesService } from "@/services/files.service";
 export function FileDetail({ groupId, fileId }: { groupId: string; fileId: string }) {
   const { data: user } = useApiQuery(() => authService.me(), []);
   const { data, loading, error } = useApiQuery(() => filesService.detail(fileId, groupId), [fileId, groupId]);
+  const [markEdits, setMarkEdits] = useState(false);
 
   const permissions = user?.permissions ?? [];
   const canEditMapping = hasPermission(permissions, "upload.view");
@@ -52,6 +54,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
   }
 
   const { file, columns, qualityIssueCount, editCount } = data;
+  const exportHref = `/api/files/${file.id}/export${markEdits ? "?markEdits=true" : ""}`;
 
   return (
     <div className="space-y-7">
@@ -100,7 +103,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
             ) : null}
             {canExport ? (
               <Button asChild variant="outline">
-                <a href={`/api/files/${file.id}/export`}>
+                <a href={exportHref}>
                   <Download className="size-4" />
                   تصدير Excel
                 </a>
@@ -127,13 +130,37 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
         }
       />
 
+      {file.version > 1 ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4 text-sm md:flex-row md:items-center md:justify-between">
+          <p className="font-bold flex items-center gap-2 text-primary">
+            <RefreshCw className="size-4" />
+            هذا إصدار جديد (الإصدار {file.version}) — سجل تعديلات الإصدارات السابقة محفوظ ومؤرشف في سجل التعديلات
+          </p>
+          {canViewHistory ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {showEditedBadge && editCount > 0 ? (
         <div className="flex flex-col gap-3 rounded-xl border border-amber-400/60 bg-amber-50 p-4 text-sm md:flex-row md:items-center md:justify-between dark:bg-amber-950/20">
           <p className="font-bold flex items-center gap-2 text-amber-900 dark:text-amber-100">
             <PencilLine className="size-4" />
             هذا الملف تم تعديله يدويًا
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canExport ? (
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-amber-400/60 bg-background px-3 py-1.5 text-sm font-medium text-amber-900 dark:text-amber-100">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={markEdits}
+                  onChange={(e) => setMarkEdits(e.target.checked)}
+                />
+                تعليم القيم التي تم تعديلها
+              </label>
+            ) : null}
             {canViewHistory ? (
               <Button asChild size="sm" variant="outline">
                 <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
@@ -141,7 +168,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
             ) : null}
             {canExport ? (
               <Button asChild size="sm">
-                <a href={`/api/files/${file.id}/export`}>
+                <a href={exportHref}>
                   <Download className="size-4" />
                   تصدير Excel بالقيم المعدلة
                 </a>

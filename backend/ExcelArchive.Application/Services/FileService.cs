@@ -240,8 +240,11 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                         p => p.Name,
                         p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? ""
                             : p.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : p.Value.GetRawText()),
-                ToHeaderMap(r.FmtFills), ToHeaderMap(r.FmtFontColors))).ToList(),
-            edits.Select(e => new ExportEditDto(e.RecordId.ToString(), e.HeaderRaw, e.OldValue)).ToList());
+                ToHeaderMap(r.FmtFills), ToHeaderMap(r.FmtFontColors),
+                r.SfFullName, r.DNationalId ?? r.SfNationalId?.ToString())).ToList(),
+            edits.Select(e => new ExportEditDto(
+                e.RecordId?.ToString(), e.HeaderRaw, e.OldValue, e.NewValue,
+                e.EditedBy, e.CreatedAt)).ToList());
     }
 
     private static Dictionary<string, string>? ToHeaderMap(JsonDocument? doc)
@@ -269,20 +272,43 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             c.HeaderRaw ?? "", c.HeaderNormalized ?? "", c.ColumnIndex, c.StandardField, c.CategoryId)).ToList();
         if (mapped.Any(c => string.IsNullOrWhiteSpace(c.HeaderRaw) || c.ColumnIndex < 1))
             throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+        // Per-cell keep-old choices (preview toggles): meaningful only for the
+        // direct (same) update where rows correspond by name/key.
+        var keepOld = (request.KeepOldCells ?? []).ToList();
+        if (keepOld.Count > 0 && request.Mode != "same")
+            throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+        if (keepOld.Count > 5000
+            || keepOld.Any(k => k.RowIndex < 1
+                || string.IsNullOrWhiteSpace(k.HeaderRaw) || k.HeaderRaw.Length > 500
+                || (k.MatchKey is not null && k.MatchKey.Length > 64)))
+            throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+        // Smart name-based structure check (NOT positional): columns are matched
+        // by normalized header name. Added/reordered columns keep the direct
+        // update path; only REMOVED columns require the alternate-version path.
+        var newByNormalized = new Dictionary<string, ReplaceColumnDto>(StringComparer.Ordinal);
+        foreach (var c in mapped)
+        {
+            if (newByNormalized.ContainsKey(c.HeaderNormalized ?? ""))
+                throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+            newByNormalized[c.HeaderNormalized ?? ""] = c;
+        }
         if (request.Mode == "same"
-            && (target.Columns.Count != mapped.Count
-                || target.Columns.Where((c, i) => c.HeaderNormalized != (mapped[i].HeaderNormalized ?? "")).Any()))
+            && target.Columns.Any(c => !newByNormalized.ContainsKey(c.HeaderNormalized)))
             throw new ConflictException("تغيرت بنية الأعمدة؛ يجب إنشاء إصدار بديل مع ربط جديد.");
-        var targetColumns = target.Columns.ToList();
         if (request.Mode == "same")
         {
-            // Same structure inherits the target's field/category mapping by position.
-            mapped = mapped.Select((c, i) => c with
-            {
-                StandardField = targetColumns[i].StandardField is null
-                    ? null : StandardFieldKeys.Key(targetColumns[i].StandardField!.Value),
-                CategoryId = targetColumns[i].CategoryId,
-            }).ToList();
+            // Same structure inherits the target's field/category mapping by
+            // column NAME, so inserted/reordered columns don't break the link.
+            // Brand-new columns keep the mapping sent by the wizard.
+            var targetByNormalized = target.Columns.ToDictionary(c => c.HeaderNormalized);
+            mapped = mapped.Select(c => targetByNormalized.TryGetValue(c.HeaderNormalized ?? "", out var t)
+                ? c with
+                {
+                    StandardField = t.StandardField is null
+                        ? null : StandardFieldKeys.Key(t.StandardField.Value),
+                    CategoryId = t.CategoryId,
+                }
+                : c).ToList();
         }
         var seen = new HashSet<string>();
         foreach (var c in mapped)
@@ -339,6 +365,12 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                 mode = "replace",
                 fileId = target.Id,
                 replaceMode = request.Mode,
+                keepOldCells = keepOld.Select(k => new
+                {
+                    rowIndex = k.RowIndex,
+                    headerRaw = k.HeaderRaw,
+                    matchKey = k.MatchKey,
+                }),
                 linkedSheets = request.LinkedSheets is null ? null : new
                 {
                     sheetNames = request.LinkedSheets.SheetNames,

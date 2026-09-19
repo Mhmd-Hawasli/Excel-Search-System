@@ -143,7 +143,7 @@ export function ConflictResults({
                     <bdi className="break-all font-mono text-xs">{formatNationalId(row.nationalId) || "—"}</bdi>
                   </td>
                   <td className="p-4">
-                    <bdi className="break-all font-mono text-xs ltr-numbers">
+                    <bdi className="break-all font-mono text-xs ltr-numbers" dir="ltr">
                       {row.shamCash ? formatShamCash(row.shamCash) || row.shamCash : "—"}
                     </bdi>
                   </td>

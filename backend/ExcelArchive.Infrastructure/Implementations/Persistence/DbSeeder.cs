@@ -21,6 +21,29 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS edited_by text");
 
+        // V2 addition: groups.include_in_default_search (default search scope
+        // preset). Existing groups stay included; unchecking a group only
+        // changes the initial scope of the general search.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS include_in_default_search boolean NOT NULL DEFAULT true");
+
+        // V2 addition: versioned edit archive. File updates used to
+        // cascade-delete the whole edit log; instead old edits are re-pointed
+        // to the surviving file with their original version stamped, so the
+        // history section keeps V1 edits while record pages only ever show
+        // current-version edits (archived rows carry a null record_id).
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS file_version integer NOT NULL DEFAULT 1");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ALTER COLUMN record_id DROP NOT NULL");
+        // Surviving live edits predate versioning: they were all made on
+        // their file's then-current version (older ones were cascade-deleted
+        // before). Archived rows carry a null record_id and are never
+        // touched; new edits are stamped at creation, so this only ever
+        // repairs pre-upgrade rows.
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE record_edits e SET file_version = f.version FROM files f WHERE f.id = e.file_id AND e.record_id IS NOT NULL AND e.file_version <> f.version");
+
         // Install pg_trgm + trigram search indexes idempotently.
         // Required index/cache setup failure must be visible in readiness
         // (docs/04), not merely logged: seeder warns here, /health/ready must

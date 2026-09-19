@@ -42,10 +42,14 @@ public class GroupsController(IGroupService groups, IAuthService auth) : ApiCont
     {
         var user = await RequirePermissionAsync(Permissions.GroupsCreate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        // التضمين في البحث الافتراضي يحتاج صلاحية مستقلة: بدونه تُنشأ المجموعة مضمّنة دائماً.
+        var effective = Auth.HasPermission(user, Permissions.GroupsDefaultSearch)
+            ? request
+            : request with { IncludeInDefaultSearch = true };
         try
         {
             return StatusCode(StatusCodes.Status201Created,
-                ApiResponse.Success(new { group = await groups.CreateAsync(request, user.Username) }, "تم إنشاء المجموعة."));
+                ApiResponse.Success(new { group = await groups.CreateAsync(effective, user.Username) }, "تم إنشاء المجموعة."));
         }
         catch (Exception ex) { return HandleError(ex); }
     }
@@ -55,9 +59,13 @@ public class GroupsController(IGroupService groups, IAuthService auth) : ApiCont
     {
         var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        // بدون صلاحية التضمين يُتجاهل العلم المرسل وتبقى القيمة الحالية كما هي.
+        var effective = Auth.HasPermission(user, Permissions.GroupsDefaultSearch)
+            ? request
+            : request with { IncludeInDefaultSearch = null };
         try
         {
-            return Ok(ApiResponse.Success(new { group = await groups.UpdateAsync(id, request, user.Username) }, "تم حفظ تعديلات المجموعة."));
+            return Ok(ApiResponse.Success(new { group = await groups.UpdateAsync(id, effective, user.Username) }, "تم حفظ تعديلات المجموعة."));
         }
         catch (Exception ex) { return HandleError(ex); }
     }

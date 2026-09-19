@@ -45,6 +45,7 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
                 {
                     id = g.Id, name = g.Name, description = g.Description,
                     sortOrder = g.SortOrder, createdAt = g.CreatedAt, updatedAt = g.UpdatedAt,
+                    includeInDefaultSearch = g.IncludeInDefaultSearch,
                 }).ToList(),
                 categories = categories.Select(c => new
                 {
@@ -111,8 +112,9 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
                 recordEdits = edits.Select(e => new
                 {
                     id = e.Id, recordId = e.RecordId, fileId = e.FileId, fileColumnId = e.FileColumnId,
+                    fileVersion = e.FileVersion,
                     headerRaw = e.HeaderRaw, oldValue = e.OldValue, newValue = e.NewValue,
-                    createdAt = e.CreatedAt,
+                    createdAt = e.CreatedAt, editedBy = e.EditedBy,
                 }).ToList(),
             },
         };

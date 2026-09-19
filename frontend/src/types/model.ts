@@ -7,6 +7,7 @@ export interface Group {
   updatedAt: string;
   fileCount: number;
   recordCount: number;
+  includeInDefaultSearch: boolean;
 }
 
 export interface GroupFile {
@@ -123,6 +124,62 @@ export interface WorkbookInspection {
   originalFilename: string;
   sheets: Array<{ name: string; rowCount: number }>;
   selected: SheetInspection;
+}
+
+export interface ReplacePreviewChange {
+  rowIndex: number;
+  headerRaw: string;
+  columnIndex: number;
+  currentValue: string;
+  newValue: string;
+  wasManuallyEdited: boolean;
+  editedBy: string | null;
+  editedAt: string | null;
+  matchKey: string | null;
+}
+
+export interface ReplacePreviewColumnStat {
+  headerRaw: string;
+  columnIndex: number;
+  changedCells: number;
+  manualOverwriteCells: number;
+}
+
+export interface ReplacePreviewNewColumn {
+  headerRaw: string;
+  columnIndex: number;
+  filledValues: number;
+}
+
+export interface ReplacePreviewSummary {
+  totalRowsCurrent: number;
+  totalRowsNew: number;
+  matchedRows: number;
+  addedRows: number;
+  removedRows: number;
+  totalCellsCompared: number;
+  changedCells: number;
+  changedRows: number;
+  unchangedRows: number;
+  manualOverwriteCount: number;
+  matchMode: string;
+  hasMoreChanges: boolean;
+}
+
+export interface ReplacePreview {
+  identical: boolean;
+  addedColumns: string[];
+  removedColumns: string[];
+  summary: ReplacePreviewSummary | null;
+  columnStats: ReplacePreviewColumnStat[] | null;
+  changes: ReplacePreviewChange[] | null;
+  addedRowSample: number[] | null;
+  removedRowSample: number[] | null;
+  truncated: boolean;
+  matchMode: string | null;
+  nationalIdHeader: string | null;
+  currentVersion: number;
+  newColumns: ReplacePreviewNewColumn[] | null;
 }
 
 export interface CategoryOption {

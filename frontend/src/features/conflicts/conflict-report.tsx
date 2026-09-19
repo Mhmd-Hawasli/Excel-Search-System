@@ -99,16 +99,14 @@ export function ConflictReport() {
     [canEdit, hydrated, state],
   );
 
-  const load = useCallback(async () => {
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const loadList = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [list, summary] = await Promise.all([
-        conflictsService.list(effective),
-        conflictsService.stats(),
-      ]);
+      const list = await conflictsService.list(effective);
       setData(list);
-      setStats(summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : "تعذر تحميل التقرير.");
     } finally {
@@ -116,11 +114,34 @@ export function ConflictReport() {
     }
   }, [effective]);
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const summary = await conflictsService.stats();
+      setStats(summary);
+    } catch {
+      // Keep previously loaded counts: a slow stats scan must never hide
+      // the already-fetched list (previously Promise.all failed the whole
+      // page with 500 on stats proxy timeout).
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const load = useCallback(async () => {
+    await Promise.all([loadList(), loadStats()]);
+  }, [loadList, loadStats]);
+
   useEffect(() => {
     // Intentional reload on hydrated filter change (same pattern as use-api-query).
+    // List follows filters; stats are scope-global so refresh them in the
+    // background without blocking the list.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (hydrated) void load();
-  }, [hydrated, load]);
+    if (hydrated) {
+      void loadList();
+      void loadStats();
+    }
+  }, [hydrated, loadList, loadStats]);
 
   function push(next: typeof DEFAULTS) {
     setState(next);
@@ -168,7 +189,7 @@ export function ConflictReport() {
           push({ ...state, ...next, page: resetPage ? 1 : state.page })
         }
         onRefresh={() => void load()}
-        refreshing={loading}
+        refreshing={loading || statsLoading}
         canEdit={canEdit}
         counts={
           stats

@@ -19,4 +19,13 @@ public interface IRecordRepository : IRepositoryBase<Record>
     Task<IReadOnlyList<Record>> ListBatchesByFileAsync(Guid fileId, int? afterRow, int take, CancellationToken ct = default);
     Task<IReadOnlyList<Record>> ListExportRowsAsync(Guid fileId, CancellationToken ct = default);
     Task<IReadOnlyList<Guid>> AllIdsAsync(CancellationToken ct = default);
+
+    // Manual insert (إدخال سجل جديد): file-scoped uniqueness + suggestions.
+    Task<int> GetMaxRowIndexAsync(Guid fileId, CancellationToken ct = default);
+    Task<bool> ExistsNationalAsync(Guid fileId, string dNationalId, CancellationToken ct = default);
+    Task<bool> ExistsShamAsync(Guid fileId, long shamValue, CancellationToken ct = default);
+    Task<bool> ExistsPersonalAsync(Guid fileId, string dPersonalNo, CancellationToken ct = default);
+    Task<bool> ExistsPhoneAsync(Guid fileId, string dPhone, CancellationToken ct = default);
+    Task<bool> ExistsRawAsync(Guid fileId, string headerRaw, string value, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ListDistinctValuesAsync(Guid fileId, string headerRaw, int take, CancellationToken ct = default);
 }

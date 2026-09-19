@@ -1,8 +1,8 @@
 ﻿namespace ExcelArchive.Application.DTOs.GroupDto;
 
-public record GroupDto(Guid Id, string Name, string Description, int SortOrder, DateTime CreatedAt, DateTime UpdatedAt, int FileCount = 0, long RecordCount = 0);
-public record CreateGroupRequest(string Name, string Description = "");
-public record UpdateGroupRequest(string Name, string Description = "");
+public record GroupDto(Guid Id, string Name, string Description, int SortOrder, DateTime CreatedAt, DateTime UpdatedAt, int FileCount = 0, long RecordCount = 0, bool IncludeInDefaultSearch = true);
+public record CreateGroupRequest(string Name, string Description = "", bool IncludeInDefaultSearch = true);
+public record UpdateGroupRequest(string Name, string Description = "", bool? IncludeInDefaultSearch = null);
 public record ReorderGroupRequest(Guid Id, string Direction);
 public record DeleteGroupRequest(Guid Id, string ConfirmName);
 

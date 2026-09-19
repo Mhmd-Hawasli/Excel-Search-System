@@ -11,4 +11,5 @@ public record SearchQuery(
     int Page,
     int PageSize,
     string? SortBy,
-    string SortDirection);
+    string SortDirection,
+    bool IncludeSimilar = true);

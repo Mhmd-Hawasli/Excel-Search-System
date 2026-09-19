@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { FileCheck2, FileWarning, LoaderCircle, RefreshCw, UploadCloud } from "lucide-react";
+import { Eye, FileCheck2, FileWarning, LoaderCircle, RefreshCw, TriangleAlert, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
-import type { SheetInspection, WorkbookInspection } from "@/types/model";
+import type { ReplacePreview, ReplacePreviewChange, SheetInspection, WorkbookInspection } from "@/types/model";
 import { STANDARD_FIELD_KEYS, type StandardFieldKey } from "@/lib/standard-fields";
 import { STANDARD_FIELD_LABELS } from "@/lib/standard-fields";
 import { ensureUniqueStandardFields } from "@/lib/standard-fields";
@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useUploadJobPolling } from "@/hooks/use-upload-job-polling";
 import { ApiError } from "@/services/api-client";
+import { filesService } from "@/services/files.service";
 import { uploadService } from "@/services/upload.service";
 
 type ExistingColumn = {
@@ -62,13 +63,55 @@ export function FileUpdateWizard({
   const [sheet, setSheet] = useState<SheetInspection | null>(null);
   const [columns, setColumns] = useState<MappedColumn[]>([]);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<ReplacePreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [manualOnly, setManualOnly] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const [page, setPage] = useState(1);
+  const autoPreviewKey = useRef<string | null>(null);
+  // Per-cell choices: which changed cells keep their OLD value instead of the
+  // new one. Default (absent from the map) is always the NEW value.
+  const [overrides, setOverrides] = useState<Map<string, ReplacePreviewChange>>(new Map());
+
+  function overrideKey(row: Pick<ReplacePreviewChange, "rowIndex" | "headerRaw">) {
+    return JSON.stringify([row.rowIndex, row.headerRaw]);
+  }
+  function setCellChoice(row: ReplacePreviewChange, keepOld: boolean) {
+    setOverrides((current) => {
+      const next = new Map(current);
+      if (keepOld) next.set(overrideKey(row), row);
+      else next.delete(overrideKey(row));
+      return next;
+    });
+  }
+  function keepAllOld() {
+    setOverrides(new Map((preview?.changes ?? []).map((row) => [overrideKey(row), row])));
+  }
+  function keepAllNew() {
+    setOverrides(new Map());
+  }
+  function keepManualOld() {
+    setOverrides(
+      new Map(
+        (preview?.changes ?? [])
+          .filter((row) => row.wasManuallyEdited)
+          .map((row) => [overrideKey(row), row]),
+      ),
+    );
+  }
   const [job, setJob] = useUploadJobPolling({
-    doneMessage: "تم حفظ الإصدار الجديد واستبدال بيانات الملف بنجاح.",
+    doneMessage: "تم إنشاء الإصدار الجديد بنجاح. سجل تعديلات الإصدار السابق محفوظ في سجل التعديلات.",
     failedFallbackMessage: "فشل تحديث الملف وبقيت البيانات السابقة محفوظة.",
   });
 
   function applySheet(next: SheetInspection | null) {
     setSheet(next);
+    setPreview(null);
+    setManualOnly(false);
+    setFilterText("");
+    setPage(1);
+    setOverrides(new Map());
+    autoPreviewKey.current = null;
     if (!next) {
       setColumns([]);
       return;
@@ -89,38 +132,33 @@ export function FileUpdateWizard({
       ),
     );
   }
-  const identical = useMemo(
-    () =>
-      Boolean(
-        sheet &&
-          existingColumns.length === sheet.columns.length &&
-          existingColumns.every(
-            (column, index) => column.headerNormalized === sheet.columns[index]?.headerNormalized,
-          ),
-      ),
-    [sheet, existingColumns],
-  );
+  const identical = useMemo(() => {
+    if (!sheet) return false;
+    const newSet = new Set(sheet.columns.map((column) => column.headerNormalized));
+    // Smart name-based check (not positional): direct update is allowed as long
+    // as no column was REMOVED. Added/reordered columns are matched by name
+    // and reported separately in the preview.
+    return existingColumns.every((column) => newSet.has(column.headerNormalized));
+  }, [sheet, existingColumns]);
   const diff = useMemo(() => {
-    if (!sheet) return { added: [] as string[], removed: [] as string[], renamed: [] as string[] };
+    if (!sheet) return { added: [] as string[], removed: [] as string[], reordered: false };
     const oldSet = new Set(existingColumns.map((column) => column.headerNormalized));
     const newSet = new Set(sheet.columns.map((column) => column.headerNormalized));
+    const added = sheet.columns
+      .filter((column) => !oldSet.has(column.headerNormalized))
+      .map((column) => column.headerRaw);
+    const removed = existingColumns
+      .filter((column) => !newSet.has(column.headerNormalized))
+      .map((column) => column.headerRaw);
+    const sameOrder =
+      existingColumns.length === sheet.columns.length &&
+      existingColumns.every(
+        (column, index) => column.headerNormalized === sheet.columns[index]?.headerNormalized,
+      );
     return {
-      added: sheet.columns
-        .filter((column) => !oldSet.has(column.headerNormalized))
-        .map((column) => column.headerRaw),
-      removed: existingColumns
-        .filter((column) => !newSet.has(column.headerNormalized))
-        .map((column) => column.headerRaw),
-      renamed: existingColumns
-        .map((old, index) => ({
-          old: old.headerRaw,
-          next: sheet.columns[index]?.headerRaw,
-          changed: Boolean(
-            sheet.columns[index] && old.headerNormalized !== sheet.columns[index].headerNormalized,
-          ),
-        }))
-        .filter((item) => item.changed)
-        .map((item) => `${item.old} ← ${item.next}`),
+      added,
+      removed,
+      reordered: added.length === 0 && removed.length === 0 && !sameOrder,
     };
   }, [sheet, existingColumns]);
 
@@ -145,28 +183,92 @@ export function FileUpdateWizard({
       current.map((column, itemIndex) => (itemIndex === index ? { ...column, ...patch } : column)),
     );
   }
+  function buildReplaceBody() {
+    if (!inspection || !sheet) return null;
+    return {
+      mode: identical ? "same" : "different",
+      token: inspection.token,
+      originalFilename: inspection.originalFilename,
+      sheetName: sheet.sheetName,
+      sheetIndex: sheet.sheetIndex,
+      totalRows: sheet.rowCount,
+      linkedSheets: sheet.linkedSheets ?? undefined,
+      keepOldCells:
+        overrides.size > 0
+          ? [...overrides.values()].map((row) => ({
+              rowIndex: row.rowIndex,
+              headerRaw: row.headerRaw,
+              matchKey: row.matchKey,
+            }))
+          : undefined,
+      columns: columns.map(
+        ({ headerRaw, headerNormalized, columnIndex, standardField, categoryId }) => ({
+          headerRaw,
+          headerNormalized,
+          columnIndex,
+          standardField,
+          categoryId,
+        }),
+      ),
+    } satisfies Record<string, unknown>;
+  }
+
+  const filteredChanges = useMemo(() => {
+    const rows = preview?.changes ?? [];
+    const needle = filterText.trim();
+    return rows.filter((row) => {
+      if (manualOnly && !row.wasManuallyEdited) return false;
+      if (!needle) return true;
+      return (
+        row.headerRaw.includes(needle) ||
+        row.currentValue.includes(needle) ||
+        row.newValue.includes(needle) ||
+        String(row.rowIndex).includes(needle)
+      );
+    });
+  }, [preview, manualOnly, filterText]);
+
+  const pageSize = 50;
+  const pageCount = Math.max(1, Math.ceil(filteredChanges.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = filteredChanges.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  async function runPreview() {
+    const body = buildReplaceBody();
+    if (!body) return;
+    setPreviewBusy(true);
+    try {
+      const result = await filesService.previewReplace(fileId, body);
+      setPreview(result);
+      setPage(1);
+      setOverrides(new Map());
+      if (result.identical && (result.summary?.changedCells ?? 0) === 0) {
+        toast.success("البيانات متطابقة تمامًا — لا توجد خلايا متغيرة.");
+      }
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : "تعذر معاينة الفروقات.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  // مقارنة تلقائية خلية بخلية فور اختيار ورقة ببنية مطابقة —
+  // لا حاجة لضغط أي زر: كل خلية في الملف الجديد تُقارن مع قيمتها الحالية.
+  useEffect(() => {
+    if (!identical || !sheet || !inspection || preview || previewBusy || busy || job) return;
+    const key = `${inspection.token}:${sheet.sheetName}:${sheet.sheetIndex}`;
+    if (autoPreviewKey.current === key) return;
+    autoPreviewKey.current = key;
+    void runPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identical, sheet, inspection, preview, previewBusy, busy, job]);
+
   async function start() {
-    if (!inspection || !sheet) return;
+    const body = buildReplaceBody();
+    if (!body || !sheet) return;
     setBusy(true);
     try {
-      const { jobId } = await uploadService.replace(fileId, {
-        mode: identical ? "same" : "different",
-        token: inspection.token,
-        originalFilename: inspection.originalFilename,
-        sheetName: sheet.sheetName,
-        sheetIndex: sheet.sheetIndex,
-        totalRows: sheet.rowCount,
-        linkedSheets: sheet.linkedSheets ?? undefined,
-        columns: columns.map(
-          ({ headerRaw, headerNormalized, columnIndex, standardField, categoryId }) => ({
-            headerRaw,
-            headerNormalized,
-            columnIndex,
-            standardField,
-            categoryId,
-          }),
-        ),
-      });
+      const { jobId } = await uploadService.replace(fileId, body);
       setJob({
         id: jobId,
         fileId: null,
@@ -199,13 +301,15 @@ export function FileUpdateWizard({
               <LoaderCircle className="size-6 animate-spin" />
             )}
             {job.status === "DONE"
-              ? "تم استبدال الملف بنجاح"
+              ? "تم إنشاء الإصدار الجديد بنجاح"
               : job.status === "FAILED"
                 ? "فشل الاستبدال وبقي الملف القديم"
                 : "جارٍ تجهيز الإصدار الجديد"}
           </CardTitle>
           <CardDescription>
-            لا تُحذف البيانات القديمة إلا بعد اكتمال استيراد البيانات الجديدة.
+            {job.status === "DONE"
+              ? "سجل تعديلات الإصدار السابق محفوظ ومؤرشف في سجل التعديلات، وصفحة البيانات تعرض تعديلات الإصدار الحالي فقط."
+              : "لا تُحذف البيانات القديمة إلا بعد اكتمال استيراد البيانات الجديدة."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -287,18 +391,35 @@ export function FileUpdateWizard({
             </CardHeader>
             <CardContent>
               {identical ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">الصفوف الحالية</p>
-                    <p className="text-2xl font-black">{currentRows.toLocaleString("en-US")}</p>
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg bg-muted p-4">
+                      <p className="text-xs text-muted-foreground">الصفوف الحالية</p>
+                      <p className="text-2xl font-black">{currentRows.toLocaleString("en-US")}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted p-4">
+                      <p className="text-xs text-muted-foreground">الصفوف الجديدة</p>
+                      <p className="text-2xl font-black">{sheet.rowCount.toLocaleString("en-US")}</p>
+                    </div>
                   </div>
-                  <div className="rounded-lg bg-muted p-4">
-                    <p className="text-xs text-muted-foreground">الصفوف الجديدة</p>
-                    <p className="text-2xl font-black">{sheet.rowCount.toLocaleString("en-US")}</p>
-                  </div>
-                </div>
+                  {diff.added.length ? (
+                    <div className="mt-3">
+                      <p className="mb-2 font-bold">أعمدة جديدة ستُضاف (تُطابق بقية الأعمدة بالاسم)</p>
+                      {diff.added.map((item) => (
+                        <Badge key={item} className="mb-1 ms-1 bg-primary/15 text-primary">
+                          + {item}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  {diff.reordered ? (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      نفس الأعمدة بترتيب مختلف — ستُطابق القيم حسب اسم العمود وليس موضعه.
+                    </p>
+                  ) : null}
+                </>
               ) : (
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <p className="mb-2 font-bold">أعمدة مضافة</p>
                     {diff.added.length ? (
@@ -318,18 +439,6 @@ export function FileUpdateWizard({
                         <Badge key={item} variant="destructive" className="mb-1 ms-1">
                           {item}
                         </Badge>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">لا يوجد</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="mb-2 font-bold">أسماء متغيرة حسب الموضع</p>
-                    {diff.renamed.length ? (
-                      diff.renamed.map((item) => (
-                        <p key={item} className="text-sm">
-                          {item}
-                        </p>
                       ))
                     ) : (
                       <p className="text-sm text-muted-foreground">لا يوجد</p>
@@ -385,6 +494,345 @@ export function FileUpdateWizard({
               </CardContent>
             </Card>
           ) : null}
+          {identical ? (
+            <Card className="border-primary/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Eye className="size-5 text-primary" />
+                  معاينة الفروقات خلية بخلية
+                </CardTitle>
+                <CardDescription>
+                  يقارن كل خلية بين القيمة الحالية في النظام والقيمة في الملف الجديد،
+                  ويميز القيم التي تم تعديلها داخليًا وستُستبدل.
+                  {preview?.matchMode === "nationalId"
+                    ? " المطابقة تمت عبر الرقم الوطني."
+                    : " المطابقة تمت حسب ترتيب الصفوف."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void runPreview()}
+                    disabled={previewBusy || busy}
+                  >
+                    {previewBusy ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <Eye className="size-4" />
+                    )}
+                    {preview ? "إعادة معاينة الفروقات" : "معاينة الفروقات قبل التحديث"}
+                  </Button>
+                  {preview?.summary ? (
+                    <p className="text-xs text-muted-foreground">
+                      {preview.summary.totalCellsCompared.toLocaleString("en-US")} خلية تمت مقارنتها
+                      خلال ثوانٍ — التقرير يعرض أول {Math.min(500, preview.summary.changedCells).toLocaleString("en-US")} خلية متغيرة.
+                    </p>
+                  ) : previewBusy ? (
+                    <p className="flex items-center gap-2 text-xs font-bold text-primary">
+                      <LoaderCircle className="size-4 animate-spin" />
+                      جارٍ مقارنة كل خلية مع القيمة الحالية في النظام…
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      ستُقارن كل خلية تلقائيًا مع القيمة الحالية فور اختيار الورقة، ويمكنك إعادة
+                      التشغيل يدويًا من هنا.
+                    </p>
+                  )}
+                </div>
+
+                {preview?.summary ? (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                      <div className="rounded-lg bg-muted p-3">
+                        <p className="text-xs text-muted-foreground">خلايا متغيرة</p>
+                        <p className="mt-1 text-xl font-black">{preview.summary.changedCells.toLocaleString("en-US")}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-3">
+                        <p className="text-xs text-muted-foreground">صفوف متغيرة</p>
+                        <p className="mt-1 text-xl font-black">{preview.summary.changedRows.toLocaleString("en-US")}</p>
+                      </div>
+                      <div className="rounded-lg bg-amber-500/10 p-3">
+                        <p className="text-xs text-muted-foreground">قيم يدوية ستُستبدل</p>
+                        <p className="mt-1 text-xl font-black text-amber-700 dark:text-amber-300">
+                          {preview.summary.manualOverwriteCount.toLocaleString("en-US")}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-3">
+                        <p className="text-xs text-muted-foreground">صفوف مضافة</p>
+                        <p className="mt-1 text-xl font-black">{preview.summary.addedRows.toLocaleString("en-US")}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-3">
+                        <p className="text-xs text-muted-foreground">صفوف محذوفة</p>
+                        <p className="mt-1 text-xl font-black">{preview.summary.removedRows.toLocaleString("en-US")}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted p-3">
+                        <p className="text-xs text-muted-foreground">صفوف بلا تغيير</p>
+                        <p className="mt-1 text-xl font-black">{preview.summary.unchangedRows.toLocaleString("en-US")}</p>
+                      </div>
+                    </div>
+
+                    {preview.summary.manualOverwriteCount > 0 ? (
+                      <div className="flex gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
+                        <TriangleAlert className="size-5 shrink-0 text-amber-600" />
+                        <p>
+                          <span className="font-bold">
+                            {preview.summary.manualOverwriteCount.toLocaleString("en-US")} قيمة معدلة يدويًا
+                          </span>{" "}
+                          ستُستبدل بقيم الملف الجديد. هذه الصفوف مميزة باللون الكهرماني في الجدول أدناه.
+                          التعديلات القديمة تبقى مؤرشفة في سجل التعديلات.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {preview.newColumns && preview.newColumns.length ? (
+                      <div className="overflow-x-auto rounded-lg border border-primary/30">
+                        <table className="w-full text-sm">
+                          <thead className="bg-primary/5">
+                            <tr>
+                              <th className="p-2 text-right">عمود جديد سيُضاف</th>
+                              <th className="p-2 text-right">قيم معبأة في الملف الجديد</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {preview.newColumns.map((c) => (
+                              <tr key={c.headerRaw} className="border-t">
+                                <td className="p-2 font-bold">+ {c.headerRaw}</td>
+                                <td className="p-2">{c.filledValues.toLocaleString("en-US")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+
+                    {preview.summary.changedCells === 0 ? (
+                      <p className="rounded-lg bg-primary/5 p-3 text-sm font-bold text-primary">
+                        {preview.newColumns && preview.newColumns.length
+                          ? "القيم في الأعمدة المشتركة متطابقة تمامًا — التحديث سيضيف الأعمدة الجديدة أعلاه فقط."
+                          : "البيانات متطابقة تمامًا — لا يوجد أي اختلاف بين النظام والملف الجديد."}
+                      </p>
+                    ) : (
+                      <>
+                        {preview.columnStats && preview.columnStats.some((c) => c.changedCells > 0) ? (
+                          <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted">
+                                <tr>
+                                  <th className="p-2 text-right">العمود</th>
+                                  <th className="p-2 text-right">خلايا متغيرة</th>
+                                  <th className="p-2 text-right">منها يدوية</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {preview.columnStats
+                                  .filter((c) => c.changedCells > 0)
+                                  .sort((a, b) => b.changedCells - a.changedCells)
+                                  .slice(0, 20)
+                                  .map((c) => (
+                                    <tr key={c.headerRaw} className="border-t">
+                                      <td className="p-2 font-bold">{c.headerRaw}</td>
+                                      <td className="p-2">{c.changedCells.toLocaleString("en-US")}</td>
+                                      <td className="p-2">
+                                        {c.manualOverwriteCells > 0 ? (
+                                          <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                                            {c.manualOverwriteCells.toLocaleString("en-US")} يدوية
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Input
+                            placeholder="بحث بعمود أو قيمة أو رقم صف…"
+                            value={filterText}
+                            onChange={(e) => {
+                              setFilterText(e.target.value);
+                              setPage(1);
+                            }}
+                            className="sm:max-w-xs"
+                          />
+                          <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              checked={manualOnly}
+                              onChange={(e) => {
+                                setManualOnly(e.target.checked);
+                                setPage(1);
+                              }}
+                            />
+                            إظهار القيم المعدلة يدويًا فقط
+                          </label>
+                          <p className="text-xs text-muted-foreground sm:ms-auto">
+                            {filteredChanges.length.toLocaleString("en-US")} من{" "}
+                            {preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة
+                            {preview.truncated ? " (يُعرض أول 500)" : ""}
+                            {" — "}
+                            {overrides.size > 0 ? (
+                              <span className="font-bold text-amber-700 dark:text-amber-300">
+                                {overrides.size.toLocaleString("en-US")} خلية ستبقى بقيمتها القديمة
+                              </span>
+                            ) : (
+                              <span>الكل يعتمد القيمة الجديدة (افتراضي)</span>
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-bold">اعتماد جماعي:</span>
+                          <Button type="button" size="sm" variant="outline" onClick={keepAllNew}>
+                            الكل: الجديدة
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={keepAllOld}>
+                            الكل: القديمة
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={keepManualOld}>
+                            المعدلة يدويًا فقط: القديمة
+                          </Button>
+                          {preview.truncated ? (
+                            <span className="text-xs text-muted-foreground">
+                              الاختيار يشمل الخلايا المعروضة (أول 500) فقط.
+                            </span>
+                          ) : null}
+                        </div>
+
+                        {pageRows.length ? (
+                          <div className="overflow-x-auto rounded-lg border">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted">
+                                <tr>
+                                  <th className="p-2 text-right">صف</th>
+                                  <th className="p-2 text-right">العمود</th>
+                                  <th className="p-2 text-right">القيمة الحالية</th>
+                                  <th className="p-2 text-right">القيمة الجديدة</th>
+                                  <th className="p-2 text-right">الحالة</th>
+                                  <th className="p-2 text-right">الاعتماد</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pageRows.map((row, i) => {
+                                  const keepOld = overrides.has(overrideKey(row));
+                                  return (
+                                  <tr
+                                    key={`${row.rowIndex}-${row.headerRaw}-${i}`}
+                                    className={
+                                      row.wasManuallyEdited
+                                        ? "border-t bg-amber-500/10"
+                                        : "border-t"
+                                    }
+                                  >
+                                    <td className="p-2">{row.rowIndex.toLocaleString("en-US")}</td>
+                                    <td className="p-2 font-bold">{row.headerRaw}</td>
+                                    <td
+                                      className={
+                                        keepOld
+                                          ? "max-w-45 p-2 break-words font-bold text-foreground"
+                                          : "max-w-45 p-2 break-words text-muted-foreground"
+                                      }
+                                    >
+                                      {row.currentValue === "" ? "—" : row.currentValue}
+                                    </td>
+                                    <td
+                                      className={
+                                        keepOld
+                                          ? "max-w-45 p-2 break-words text-muted-foreground"
+                                          : "max-w-45 p-2 break-words font-bold text-primary"
+                                      }
+                                    >
+                                      {row.newValue === "" ? "—" : row.newValue}
+                                    </td>
+                                    <td className="p-2">
+                                      {row.wasManuallyEdited ? (
+                                        <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-200">
+                                          معدلة يدويًا{row.editedBy ? ` — ${row.editedBy}` : ""}
+                                        </Badge>
+                                      ) : (
+                                        <span className="text-muted-foreground">عادية</span>
+                                      )}
+                                    </td>
+                                    <td className="p-2">
+                                      <div
+                                        role="group"
+                                        aria-label={`اعتماد القيمة للصف ${row.rowIndex} عمود ${row.headerRaw}`}
+                                        className="flex w-fit overflow-hidden rounded-md border text-xs font-bold"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => setCellChoice(row, false)}
+                                          aria-pressed={!keepOld}
+                                          className={
+                                            !keepOld
+                                              ? "bg-primary px-2.5 py-1.5 text-primary-foreground"
+                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                          }
+                                        >
+                                          الجديدة
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setCellChoice(row, true)}
+                                          aria-pressed={keepOld}
+                                          className={
+                                            keepOld
+                                              ? "bg-amber-500 px-2.5 py-1.5 text-white"
+                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                          }
+                                        >
+                                          القديمة
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">لا توجد نتائج مطابقة للفلتر الحالي.</p>
+                        )}
+
+                        {pageCount > 1 ? (
+                          <div className="flex items-center justify-between text-sm">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={safePage <= 1}
+                              onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            >
+                              السابق
+                            </Button>
+                            <p className="text-muted-foreground">
+                              صفحة {safePage.toLocaleString("en-US")} من {pageCount.toLocaleString("en-US")}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={safePage >= pageCount}
+                              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                            >
+                              التالي
+                            </Button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button size="lg" variant={identical ? "default" : "destructive"} className="w-full">
@@ -399,8 +847,12 @@ export function FileUpdateWizard({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {identical
-                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد. لا يُحتفظ بالبيانات السابقة.`
-                    : `سيُستورد إصدار جديد من ${sheet.rowCount.toLocaleString("en-US")} صف. بعد نجاحه فقط، سيُحذف الملف القديم وترتفع قيمة الإصدار.`}
+                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف إصدارًا جديدًا. تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.${
+                        overrides.size > 0
+                          ? ` وسيُحتفظ بـ ${overrides.size.toLocaleString("en-US")} خلية بقيمها القديمة حسب اختيارك أعلاه.`
+                          : ""
+                      }`
+                    : `سيُستورد إصدار جديد من ${sheet.rowCount.toLocaleString("en-US")} صف. بعد نجاحه فقط، سيُحذف الملف القديم وترتفع قيمة الإصدار. تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

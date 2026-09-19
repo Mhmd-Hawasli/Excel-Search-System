@@ -20,7 +20,7 @@ public class GroupService(IUnitOfWork uow, IActivityService activity, IAuthServi
         {
             counts.TryGetValue(x.Id, out var c);
             return new GroupDto(x.Id, x.Name, x.Description, x.SortOrder,
-                x.CreatedAt, x.UpdatedAt, c.Files, c.Records);
+                x.CreatedAt, x.UpdatedAt, c.Files, c.Records, x.IncludeInDefaultSearch);
         }).ToList();
     }
 
@@ -31,7 +31,7 @@ public class GroupService(IUnitOfWork uow, IActivityService activity, IAuthServi
         var counts = await uow.Files.CountByGroupAsync(scope.FileIds, ct);
         counts.TryGetValue(row.Id, out var c);
         return new GroupDto(row.Id, row.Name, row.Description, row.SortOrder,
-            row.CreatedAt, row.UpdatedAt, c.Files, c.Records);
+            row.CreatedAt, row.UpdatedAt, c.Files, c.Records, row.IncludeInDefaultSearch);
     }
 
     public async Task<GroupDetailDto?> GetDetailAsync(
@@ -59,7 +59,7 @@ public class GroupService(IUnitOfWork uow, IActivityService activity, IAuthServi
         if (await uow.Groups.NameExistsAsync(name, ct: ct))
             throw new InvalidOperationException("يوجد اسم مجموعة مطابق بالفعل.");
         var last = await uow.Groups.MaxSortOrderAsync(ct) ?? -1;
-        var group = new Group { Name = name, Description = description, SortOrder = last + 1 };
+        var group = new Group { Name = name, Description = description, SortOrder = last + 1, IncludeInDefaultSearch = request.IncludeInDefaultSearch };
         await uow.ExecuteInTransactionAsync(async () =>
         {
             uow.Groups.Add(group);
@@ -81,10 +81,12 @@ public class GroupService(IUnitOfWork uow, IActivityService activity, IAuthServi
         {
             group.Name = name;
             group.Description = description;
+            if (request.IncludeInDefaultSearch.HasValue)
+                group.IncludeInDefaultSearch = request.IncludeInDefaultSearch.Value;
             group.UpdatedAt = DateTime.UtcNow;
             await uow.Groups.SaveAsync(ct);
             await activity.WriteAsync(ActivityAction.GroupUpdated, group.Name,
-                new { by = actorUsername }, ct);
+                new { by = actorUsername, includeInDefaultSearch = group.IncludeInDefaultSearch }, ct);
         }, ct);
         return ToDto(group, group.Files.Count, group.Files.Sum(f => f.RowCount));
     }
@@ -137,5 +139,5 @@ public class GroupService(IUnitOfWork uow, IActivityService activity, IAuthServi
     }
 
     private static GroupDto ToDto(Group x, int files, long records) =>
-        new(x.Id, x.Name, x.Description, x.SortOrder, x.CreatedAt, x.UpdatedAt, files, records);
+        new(x.Id, x.Name, x.Description, x.SortOrder, x.CreatedAt, x.UpdatedAt, files, records, x.IncludeInDefaultSearch);
 }

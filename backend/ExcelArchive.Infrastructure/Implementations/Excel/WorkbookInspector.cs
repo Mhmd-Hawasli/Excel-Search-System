@@ -34,29 +34,46 @@ public sealed class WorkbookInspector(WorkbookFileStore store) : IWorkbookInspec
             await store.WriteSidecarAsync(token, sidecar, ct);
             var first = workbook.Worksheets.First();
             var table = sidecar.Tables.TryGetValue(first.Name, out var t) ? t : null;
-            var selected = SheetInspector.InspectWorksheet(workbook, first, 1, table);
-            return new Dictionary<string, object?>
+            try
             {
-                ["token"] = token,
-                ["originalFilename"] = fileName,
-                ["sheets"] = workbook.Worksheets.Select(s => new { name = s.Name, rowCount = Math.Max(0, (s.LastRowUsed()?.RowNumber() ?? 1) - 1) }).ToList(),
-                ["selected"] = selected,
-            };
+                var selected = SheetInspector.InspectWorksheet(workbook, first, 1, table);
+                return new Dictionary<string, object?>
+                {
+                    ["token"] = token,
+                    ["originalFilename"] = fileName,
+                    ["sheets"] = workbook.Worksheets.Select(s => new { name = s.Name, rowCount = Math.Max(0, (s.LastRowUsed()?.RowNumber() ?? 1) - 1) }).ToList(),
+                    ["selected"] = selected,
+                };
+            }
+            catch (UnresolvableCellException ex) { throw new InvalidDataException(ex.Message); }
         }
     }
 
     public async Task<IReadOnlyDictionary<string, object?>> InspectSheetAsync(Guid token, string sheetName, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(sheetName)) throw new InvalidDataException("بيانات الورقة غير صالحة.");
-        var bytes = await store.LoadAsync(token.ToString(), ct);
-        using var workbook = SheetInspector.Load(bytes);
-        var sheets = workbook.Worksheets.ToList();
-        var index = sheets.FindIndex(s => s.Name == sheetName);
-        if (index < 0) throw new InvalidDataException("الورقة المحددة غير موجودة في المصنف.");
-        var sidecar = await store.ReadSidecarAsync(token.ToString(), ct);
-        var ws = sheets[index];
-        var table = FormatSidecarStore.TableRange(sidecar, ws.Name, index + 1);
-        return ToSheetDictionary(token, SheetInspector.InspectWorksheet(workbook, ws, index + 1, table));
+        byte[] bytes;
+        try { bytes = await store.LoadAsync(token.ToString(), ct); }
+        catch (KeyNotFoundException) { throw; }
+        catch (InvalidDataException) { throw; }
+        catch { throw new InvalidDataException("تعذر قراءة المصنف. أعد رفع الملف ثم حاول مجددًا."); }
+        XLWorkbook workbook;
+        try { workbook = SheetInspector.Load(bytes); }
+        catch { throw new InvalidDataException("تعذر قراءة الورقة المحددة. أعد رفع الملف ثم حاول مجددًا."); }
+        using (workbook)
+        {
+            var sheets = workbook.Worksheets.ToList();
+            var index = sheets.FindIndex(s => s.Name == sheetName);
+            if (index < 0) throw new InvalidDataException("الورقة المحددة غير موجودة في المصنف.");
+            var sidecar = await store.ReadSidecarAsync(token.ToString(), ct);
+            var ws = sheets[index];
+            var table = FormatSidecarStore.TableRange(sidecar, ws.Name, index + 1);
+            try
+            {
+                return ToSheetDictionary(token, SheetInspector.InspectWorksheet(workbook, ws, index + 1, table));
+            }
+            catch (UnresolvableCellException ex) { throw new InvalidDataException(ex.Message); }
+        }
     }
 
     /// <summary>Real linked inspection: joined columns/preview/summary (P2.3 engine).</summary>
@@ -66,11 +83,24 @@ public sealed class WorkbookInspector(WorkbookFileStore store) : IWorkbookInspec
             || config.SheetNames.Distinct(StringComparer.Ordinal).Count() != config.SheetNames.Count
             || config.NationalIdColumnIndex < 1)
             throw new InvalidDataException("اختر الأوراق الإضافية وعمود الرقم الوطني في الورقة الأساسية.");
-        var bytes = await store.LoadAsync(token.ToString(), ct);
-        using var workbook = SheetInspector.Load(bytes);
-        var sidecar = await store.ReadSidecarAsync(token.ToString(), ct);
-        var (inspection, _) = LinkedSheetEngine.MergeLinkedSheets(workbook, config, sidecar?.Tables);
-        return inspection;
+        byte[] bytes;
+        try { bytes = await store.LoadAsync(token.ToString(), ct); }
+        catch (KeyNotFoundException) { throw; }
+        catch (InvalidDataException) { throw; }
+        catch { throw new InvalidDataException("تعذر قراءة المصنف. أعد رفع الملف ثم حاول مجددًا."); }
+        XLWorkbook workbook;
+        try { workbook = SheetInspector.Load(bytes); }
+        catch { throw new InvalidDataException("تعذر قراءة المصنف. أعد رفع الملف ثم حاول مجددًا."); }
+        using (workbook)
+        {
+            try
+            {
+                var sidecar = await store.ReadSidecarAsync(token.ToString(), ct);
+                var (inspection, _) = LinkedSheetEngine.MergeLinkedSheets(workbook, config, sidecar?.Tables);
+                return inspection;
+            }
+            catch (UnresolvableCellException ex) { throw new InvalidDataException(ex.Message); }
+        }
     }
 
     public async Task<WorkbookImportData> ReadForImportAsync(byte[] bytes, string token, WorkbookImportSpec spec, CancellationToken ct = default)

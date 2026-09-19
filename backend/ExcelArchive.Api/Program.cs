@@ -80,6 +80,9 @@ builder.Services.AddSingleton<MergeExportStore>();
 builder.Services.AddSingleton<IMergeExportStore>(sp => sp.GetRequiredService<MergeExportStore>());
 builder.Services.AddSingleton<SheetMergeStore>();
 builder.Services.AddSingleton<ISheetMergeStore>(sp => sp.GetRequiredService<SheetMergeStore>());
+builder.Services.AddSingleton<BulkSearchFileStore>();
+builder.Services.AddSingleton<IBulkSearchFileStore>(sp => sp.GetRequiredService<BulkSearchFileStore>());
+builder.Services.AddScoped<IBulkSearchService, BulkSearchService>();
 builder.Services.AddSingleton<IMergeService, MergeService>();
 builder.Services.AddSingleton<ISheetMergeService, SheetMergeService>();
 builder.Services.AddScoped<IConflictCacheService, ConflictCacheService>();
@@ -106,6 +109,7 @@ builder.Services.AddScoped<IRecordService, RecordService>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IUploadJobProcessor, UploadJobProcessor>();
+builder.Services.AddScoped<IReplacePreviewService, ReplacePreviewService>();
 builder.Services.AddHostedService<UploadBackgroundService>();
 
 builder.Services.AddHttpContextAccessor();

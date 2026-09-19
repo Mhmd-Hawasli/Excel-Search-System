@@ -45,4 +45,9 @@ public record DeleteFileRequest(string ConfirmName);
 public record MoveFileRequest(Guid TargetGroupId);
 public record ReplaceColumnDto(string HeaderRaw, string HeaderNormalized, int ColumnIndex, string? StandardField, Guid? CategoryId);
 public record ReplaceLinkedSheetsDto(IReadOnlyList<string> SheetNames, int NationalIdColumnIndex);
-public record ReplaceFileRequest(string OriginalFilename, string SheetName, int SheetIndex, int TotalRows, string? ColumnSignature, string Mode, IReadOnlyList<ReplaceColumnDto>? Columns, ReplaceLinkedSheetsDto? LinkedSheets, Guid? Token);
+/// <summary>One cell the user chose to KEEP at its current (old) value instead
+/// of taking the new workbook's value. Row identity mirrors the preview's
+/// match mode: national-id key when matched by national id, else Excel row.
+/// HeaderRaw is the system's (current) header name.</summary>
+public record KeepOldCellDto(int RowIndex, string HeaderRaw, string? MatchKey);
+public record ReplaceFileRequest(string OriginalFilename, string SheetName, int SheetIndex, int TotalRows, string? ColumnSignature, string Mode, IReadOnlyList<ReplaceColumnDto>? Columns, ReplaceLinkedSheetsDto? LinkedSheets, Guid? Token, IReadOnlyList<KeepOldCellDto>? KeepOldCells = null);

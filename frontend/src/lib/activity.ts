@@ -3,7 +3,7 @@ export type ActivityAction =
   | "GROUP_CREATED" | "GROUP_UPDATED" | "GROUP_REORDERED" | "GROUP_DELETED"
   | "CATEGORY_CREATED" | "CATEGORY_UPDATED" | "CATEGORY_REORDERED" | "CATEGORY_DELETED"
   | "COLUMN_REORDERED" | "COLUMN_RECATEGORIZED" | "TEMPLATE_CREATED" | "BACKUP_RESTORED"
-  | "RECORD_EDITED" | "RECORD_VISITED"
+  | "RECORD_EDITED" | "RECORD_VISITED" | "RECORD_DELETED"
   | "USER_CREATED" | "USER_UPDATED" | "USER_DELETED" | "USER_PERMISSIONS_UPDATED";
 
 export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
@@ -25,6 +25,7 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   BACKUP_RESTORED: "استعادة نسخة احتياطية",
   RECORD_EDITED: "تعديل سجل",
   RECORD_VISITED: "زيارة صفحة سجل",
+  RECORD_DELETED: "حذف سجل",
   USER_CREATED: "إنشاء مستخدم",
   USER_UPDATED: "تحديث مستخدم",
   USER_DELETED: "حذف مستخدم",

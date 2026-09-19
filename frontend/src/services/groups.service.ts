@@ -29,6 +29,7 @@ export const groupsService = {
       const envelope = await apiPost<ApiEnvelope<{ group: Group }>>("/api/groups", {
         name: String(formData.get("name") ?? ""),
         description: String(formData.get("description") ?? ""),
+        includeInDefaultSearch: formData.get("includeInDefaultSearch") !== null,
       });
       if (!envelope.data) return { ok: false, error: "تعذر إنشاء المجموعة." };
       return toMutationResult(envelope, "تم إنشاء المجموعة.");
@@ -43,6 +44,7 @@ export const groupsService = {
       const envelope = await apiPatch<ApiEnvelope<{ group: Group }>>(`/api/groups/${id}`, {
         name: String(formData.get("name") ?? ""),
         description: String(formData.get("description") ?? ""),
+        includeInDefaultSearch: formData.get("includeInDefaultSearch") !== null,
       });
       if (!envelope.data) return { ok: false, error: "تعذر حفظ التعديلات." };
       return toMutationResult(envelope, "تم حفظ تعديلات المجموعة.");

@@ -119,21 +119,40 @@ public class MergeController(IAuthService auth, IMergeService merge) : ApiContro
                 StatusCodes.Status400BadRequest);
             return;
         }
+        var customSpecs = request.CustomRules?
+            .Select(c => new Domain.Merge.CustomMergeSpec(
+                (c.LinkField ?? "").Trim(),
+                string.IsNullOrWhiteSpace(c.ConfirmField) ? null : c.ConfirmField.Trim()))
+            .ToList();
+        if (customSpecs is { Count: 0 }) customSpecs = null;
         var args = new MergeRunArgs(
             request.Left.Token, request.Left.SheetName.Trim(), request.Left.Mapping,
             request.Right.Token, request.Right.SheetName.Trim(), request.Right.Mapping,
-            request.IgnoreConfirmation ?? false, request.RuleOrder);
+            request.IgnoreConfirmation ?? false, request.RuleOrder, customSpecs);
         // V1 validates mappings + common rule + manual rule order before streaming.
         try
         {
             var leftMapping = Domain.Merge.MergeMapping.From(args.LeftMapping);
             var rightMapping = Domain.Merge.MergeMapping.From(args.RightMapping);
-            Domain.Merge.MergeEngine.OrderedDefinitions(args.RuleOrder);
-            if (!Domain.Merge.MergeEngine.HasCommonRule(leftMapping, rightMapping))
+            if (customSpecs is not null)
             {
-                await JsonError("لا توجد قاعدة ربط ممكنة: يجب تحديد عمود الاسم الثلاثي (أو أعمدة الاسم واسم الأب والنسبة) أو أحد الأرقام في الجدولين.",
-                    StatusCodes.Status422UnprocessableEntity);
-                return;
+                var custom = Domain.Merge.MergeEngine.BuildCustomRules(customSpecs);
+                if (!Domain.Merge.MergeEngine.HasCommonCustomRule(leftMapping, rightMapping, custom))
+                {
+                    await JsonError("لا توجد قاعدة ربط ممكنة: يجب ربط حقل الربط لكل قاعدة مخصصة في الجدولين.",
+                        StatusCodes.Status422UnprocessableEntity);
+                    return;
+                }
+            }
+            else
+            {
+                Domain.Merge.MergeEngine.OrderedDefinitions(args.RuleOrder);
+                if (!Domain.Merge.MergeEngine.HasCommonRule(leftMapping, rightMapping))
+                {
+                    await JsonError("لا توجد قاعدة ربط ممكنة: يجب تحديد عمود الاسم الثلاثي (أو أعمدة الاسم واسم الأب والنسبة) أو أحد الأرقام في الجدولين.",
+                        StatusCodes.Status422UnprocessableEntity);
+                    return;
+                }
             }
         }
         catch (ArgumentException ex)
@@ -335,7 +354,9 @@ public class MergeController(IAuthService auth, IMergeService merge) : ApiContro
             {
                 key = s.Key,
                 order = s.Order,
-                canonicalOrder = Domain.Merge.MergeRules.ByKey(s.Key).Order,
+                canonicalOrder = Domain.Merge.MergeEngine.IsCustomRuleKey(s.Key)
+                    ? s.Order
+                    : Domain.Merge.MergeRules.ByKey(s.Key).Order,
                 executionOrder = index + 1,
                 label = s.Label,
                 description = s.Description,
@@ -366,5 +387,6 @@ public class MergeController(IAuthService auth, IMergeService merge) : ApiContro
 public record MergeDeleteKeyRequest(Guid SessionId, string Table, int RowNumber);
 public record MergeSheetRequest(Guid Token, string Sheet);
 public sealed record MergeRunTable(Guid Token, string SheetName, Dictionary<string, int> Mapping);
-public sealed record MergeRunRequest(MergeRunTable? Left, MergeRunTable? Right, bool? IgnoreConfirmation, List<string>? RuleOrder);
+public sealed record CustomMergeRuleDto(string? LinkField, string? ConfirmField);
+public sealed record MergeRunRequest(MergeRunTable? Left, MergeRunTable? Right, bool? IgnoreConfirmation, List<string>? RuleOrder, List<CustomMergeRuleDto>? CustomRules);
 public record MergeExportRequest(Guid SessionId, string? Scope = "confirmed");

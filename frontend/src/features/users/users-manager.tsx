@@ -427,15 +427,13 @@ export function UsersManager({
             const isSelf = user.id === currentUserId;
             return (
               <div key={user.id} className="space-y-3 rounded-xl border bg-card p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-extrabold" dir="ltr">{user.username}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {user.displayName ? `${user.displayName} · ` : ""}{permissionSummary(user)}
-                      {isSelf ? " · حسابك" : ""}
-                    </p>
-                  </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="font-extrabold" dir="ltr">{user.username}</p>
                   <Badge variant={user.isActive ? "default" : "secondary"}>{user.isActive ? "نشط" : "معطّل"}</Badge>
+                  <p className="min-w-32 flex-1 basis-40 text-xs text-muted-foreground">
+                    {user.displayName ? `${user.displayName} · ` : ""}{permissionSummary(user)}
+                    {isSelf ? " · حسابك" : ""}
+                  </p>
                   {canUpdate ? (
                     <Button type="button" variant="outline" size="sm" onClick={() => (editingId === user.id ? setEditingId(null) : startEdit(user))}>
                       <Pencil className="size-4" />

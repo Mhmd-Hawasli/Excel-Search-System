@@ -62,6 +62,15 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    key: "records",
+    label: "السجلات",
+    permissions: [
+      { key: "records.view", label: "إظهار صفحة إدخال سجل جديد" },
+      { key: "records.create", label: "إدخال سجل جديد" },
+      { key: "records.delete", label: "حذف سجل بشكل نهائي" },
+    ],
+  },
+  {
     key: "upload",
     label: "رفع الملفات",
     permissions: [
@@ -75,6 +84,13 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { key: "conflicts.view", label: "إظهار صفحة تضارب البيانات" },
       { key: "conflicts.filters", label: "تعديل الفلاتر داخل صفحة تضارب البيانات" },
+    ],
+  },
+  {
+    key: "bulkSearch",
+    label: "البحث الجماعي",
+    permissions: [
+      { key: "bulkSearch.view", label: "إظهار قسم البحث الجماعي في صفحة البحث واستخدامه" },
     ],
   },
   {
@@ -95,6 +111,7 @@ export const PERMISSION_GROUPS = [
       { key: "groups.view", label: "عرض جميع المجموعات والملفات والبحث فيها" },
       { key: "groups.create", label: "إنشاء مجموعة جديدة" },
       { key: "groups.update", label: "التعديل على جميع المجموعات (الاسم، الوصف، الترتيب، الحذف)" },
+      { key: "groups.defaultSearch", label: "التعديل على التضمين في البحث الافتراضي (الجماعي)" },
       {
         key: "groups.viewScoped",
         label: "إظهار والبحث في المجموعات والملفات المحددة",

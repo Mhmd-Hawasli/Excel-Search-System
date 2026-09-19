@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Pager } from "@/components/pager";
+import { formatShamCashStrict } from "@/lib/conflict-format";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
 import { editsService, type EditedFileSummary, type EditHistoryPage } from "@/services/edits.service";
@@ -27,6 +28,7 @@ export function EditsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [canExport, setCanExport] = useState(false);
+  const [markEdits, setMarkEdits] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -102,6 +104,17 @@ export function EditsPage() {
               <Badge>{files.length}</Badge>
             </CardTitle>
             <CardDescription>اختر ملفًا لعرض سجل تعديلاته، أو صدّره كاملًا مع كل القيم المعدلة.</CardDescription>
+            {canExport ? (
+              <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={markEdits}
+                  onChange={(e) => setMarkEdits(e.target.checked)}
+                />
+                تعليم القيم التي تم تعديلها
+              </label>
+            ) : null}
           </CardHeader>
           <CardContent>
             {files.length === 0 ? (
@@ -160,7 +173,7 @@ export function EditsPage() {
                         </Button>
                         {canExport ? (
                           <Button type="button" variant="outline" size="sm" asChild>
-                            <a href={editsService.exportUrl(file.fileId)}>
+                            <a href={editsService.exportUrl(file.fileId, markEdits)}>
                               <Download className="size-4" />
                               تصدير الملف
                             </a>
@@ -184,6 +197,9 @@ export function EditsPage() {
               العودة إلى ملخص الملفات
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            يشمل السجل تعديلات الإصدارات السابقة للملف (مؤرشفة، بشارة الإصدار) — بينما تعرض صفحة السجل شارة التعديل للقيم المعدلة في الإصدار الحالي فقط.
+          </p>
           {historyLoading && !history ? (
             <p className="text-sm text-muted-foreground">جارٍ تحميل السجل…</p>
           ) : history && history.items.length > 0 ? (
@@ -196,27 +212,62 @@ export function EditsPage() {
                       <th scope="col" className="p-3 text-right font-bold">العمود</th>
                       <th scope="col" className="p-3 text-right font-bold">القيمة القديمة</th>
                       <th scope="col" className="p-3 text-right font-bold">القيمة الجديدة</th>
+                      <th scope="col" className="p-3 text-right font-bold">الإصدار</th>
                       <th scope="col" className="p-3 text-right font-bold">التاريخ</th>
                       <th scope="col" className="p-3 text-right font-bold">المستخدم</th>
                       <th scope="col" className="p-3 text-right font-bold">السجل</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {history.items.map((item) => (
+                    {history.items.map((item) => {
+                      // Sham-cash values surface here as raw cell text of
+                      // unknown shape: group 16-digit values 4-4-4-4 in an
+                      // isolated LTR run, render everything else untouched.
+                      const oldSham = formatShamCashStrict(item.oldValue);
+                      const newSham = formatShamCashStrict(item.newValue);
+                      // Archived edits (previous file versions) keep their
+                      // values visible here only: no record link, version badge.
+                      const archived = !item.recordId;
+                      return (
                       <tr key={item.id} className="border-t align-top transition hover:bg-muted/40">
                         <td className="p-3 font-semibold">{item.personName || "—"}</td>
                         <td className="p-3">{item.headerRaw}</td>
-                        <td className="p-3 text-muted-foreground">{item.oldValue || "—"}</td>
-                        <td className="p-3 font-semibold">{item.newValue || "—"}</td>
+                        <td className="p-3 text-muted-foreground">
+                          {oldSham ? (
+                            <bdi dir="ltr" className="ltr-numbers">{oldSham}</bdi>
+                          ) : (
+                            item.oldValue || "—"
+                          )}
+                        </td>
+                        <td className="p-3 font-semibold">
+                          {newSham ? (
+                            <bdi dir="ltr" className="ltr-numbers">{newSham}</bdi>
+                          ) : (
+                            item.newValue || "—"
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <Badge variant={archived ? "outline" : "secondary"} title={archived ? "تعديل مؤرشف من إصدار سابق — يظهر في هذا السجل فقط" : "تعديل على الإصدار الحالي"}>
+                            الإصدار {item.fileVersion}
+                          </Badge>
+                          {archived ? (
+                            <span className="mt-1 block text-[11px] text-muted-foreground">مؤرشف</span>
+                          ) : null}
+                        </td>
                         <td className="p-3 text-xs text-muted-foreground">{item.createdAt}</td>
                         <td className="p-3 font-semibold">{item.editedBy || "—"}</td>
                         <td className="p-3">
-                          <Link href={`/records/${item.recordId}`} className="text-primary hover:underline">
-                            فتح السجل
-                          </Link>
+                          {item.recordId ? (
+                            <Link href={`/records/${item.recordId}`} className="text-primary hover:underline">
+                              فتح السجل
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground" title="السجل الأصلي استُبدل بإصدار جديد">—</span>
+                          )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

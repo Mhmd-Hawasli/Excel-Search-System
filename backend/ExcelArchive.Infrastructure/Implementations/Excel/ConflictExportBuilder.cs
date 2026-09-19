@@ -9,10 +9,15 @@ namespace ExcelArchive.Infrastructure.Implementations.Excel;
 /// Conflict report workbook ported from V1 lib/conflicts/export.ts onto
 /// ClosedXML: fixed 12 columns with V1 widths, TableStyleLight9, 30pt rows,
 /// thin borders, centered wrap alignment, RTL view, padded national IDs,
-/// grouped sham display, functional-category labels, rule labels.
+/// grouped sham display, functional-category labels, rule labels, and
+/// parity banding by issue number (odd rows plain, even rows amber-tinted)
+/// mirroring the web results table.
 /// </summary>
 public static class ConflictExportBuilder
 {
+    /// <summary>Even issue numbers get this tint (amber-100, like the web
+    /// table's even-issue badge); odd rows stay unfilled.</summary>
+    public static readonly string EvenIssueFillHtml = "#FEF3C7";
     private static readonly string[] Headers =
     [
         "رقم المشكلة", "الملف", "صف Excel", "الاسم الثلاثي", "اسم الأم",
@@ -69,9 +74,13 @@ public static class ConflictExportBuilder
             var national = sheet.Cell(r + 2, 6);
             national.Value = FileExportBuilder.FitCellText(row.NationalId);
             national.Style.NumberFormat.Format = "@";
+            // Grouped digits in an RTL sheet view would otherwise render
+            // reversed ("4444 3333 2222 1111"): pin LTR reading order.
+            national.Style.Alignment.ReadingOrder = XLAlignmentReadingOrderValues.LeftToRight;
             var sham = sheet.Cell(r + 2, 7);
             sham.Value = FileExportBuilder.FitCellText(FormatSham(row.ShamCash));
             sham.Style.NumberFormat.Format = "@";
+            sham.Style.Alignment.ReadingOrder = XLAlignmentReadingOrderValues.LeftToRight;
             sheet.Cell(r + 2, 8).Value = FileExportBuilder.FitCellText(row.PersonalNo);
             sheet.Cell(r + 2, 9).Value = FileExportBuilder.FitCellText(row.Phone);
             sheet.Cell(r + 2, 10).Value = FormatFunctional(row.FunctionalCategory);
@@ -98,6 +107,20 @@ public static class ConflictExportBuilder
             sheet.Row(rowIndex).Height = 30;
         for (var i = 0; i < Headers.Length; i++)
             sheet.Column(i + 1).Width = Widths[i];
+        // Parity banding by issue number (mirrors the web table): every row
+        // whose issue number is even gets the amber tint across all columns
+        // so each issue group stays visually distinct. Direct cell fills win
+        // over the table theme, and only fill props are touched (number
+        // formats, alignment and borders set above are preserved).
+        var evenFill = XLColor.FromHtml(EvenIssueFillHtml);
+        for (var i = 0; i < rows.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (rows[i].IssueNumber % 2 != 0) continue;
+            var band = sheet.Range(i + 2, 1, i + 2, Headers.Length);
+            band.Style.Fill.PatternType = XLFillPatternValues.Solid;
+            band.Style.Fill.BackgroundColor = evenFill;
+        }
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
         return OpenXmlRtl.ApplyRightToLeft(ms.ToArray(), ["تضارب البيانات"]);

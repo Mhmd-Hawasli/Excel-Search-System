@@ -337,6 +337,10 @@ namespace ExcelArchive.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<bool>("IncludeInDefaultSearch")
+                        .HasColumnType("boolean")
+                        .HasColumnName("include_in_default_search");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -622,6 +626,10 @@ namespace ExcelArchive.Infrastructure.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<string>("EditedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("edited_by");
+
                     b.Property<Guid?>("FileColumnId")
                         .HasColumnType("uuid")
                         .HasColumnName("file_column_id");
@@ -629,6 +637,10 @@ namespace ExcelArchive.Infrastructure.Migrations
                     b.Property<Guid>("FileId")
                         .HasColumnType("uuid")
                         .HasColumnName("file_id");
+
+                    b.Property<int>("FileVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("file_version");
 
                     b.Property<string>("HeaderRaw")
                         .IsRequired()
@@ -645,7 +657,7 @@ namespace ExcelArchive.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("old_value");
 
-                    b.Property<Guid>("RecordId")
+                    b.Property<Guid?>("RecordId")
                         .HasColumnType("uuid")
                         .HasColumnName("record_id");
 
@@ -911,7 +923,6 @@ namespace ExcelArchive.Infrastructure.Migrations
                         .WithMany("Edits")
                         .HasForeignKey("RecordId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
                         .HasConstraintName("fk_record_edits_records_record_id");
 
                     b.Navigation("File");

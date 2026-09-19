@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   DatabaseBackup,
   Download,
+  FilePlus2,
   FileUp,
   FolderKanban,
   History,
@@ -41,6 +42,7 @@ const fullNavigation: NavigationSection[] = [
       { href: "/groups", label: "المجموعات", icon: FolderKanban, permission: "groups.browse" },
       { href: "/settings/categories", label: "الفئات", icon: Settings2, permission: "categories.view" },
       { href: "/conflicts", label: "تضارب البيانات", icon: ScanSearch, permission: "conflicts.view" },
+      { href: "/insert-record", label: "إدخال سجل جديد", icon: FilePlus2, permission: "records.view" },
     ],
   },
   {
@@ -308,7 +310,7 @@ export function AppShell({
                   type="search"
                   name="q"
                   aria-label="البحث العام في جميع السجلات"
-                  placeholder="ابحث بالاسم، الرقم الوطني أو الهاتف…"
+                   placeholder="ابحث بالاسم الثلاثي، الرقم الوطني، الشام كاش أو الرقم الذاتي…"
                   autoComplete="off"
                 />
                 <kbd

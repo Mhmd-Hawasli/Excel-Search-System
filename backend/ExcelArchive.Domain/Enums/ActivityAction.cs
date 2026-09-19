@@ -20,6 +20,7 @@ public enum ActivityAction
     BackupRestored,
     RecordEdited,
     RecordVisited,
+    RecordDeleted,
     UserCreated,
     UserUpdated,
     UserDeleted,

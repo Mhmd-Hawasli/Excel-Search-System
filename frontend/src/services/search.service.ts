@@ -11,6 +11,7 @@ export interface SearchParams {
   pageSize?: number;
   sortBy?: string;
   sortDirection?: string;
+  similar?: boolean;
 }
 
 export interface SearchRow {
@@ -60,6 +61,8 @@ export const searchService = {
       pageSize: params.pageSize ?? 25,
       sortBy: params.sortBy ?? "",
       sortDirection: params.sortDirection ?? "asc",
+      // Default true server-side: only send an explicit false.
+      similar: params.similar === false ? false : undefined,
     });
     if (!envelope.data) throw new Error("تعذر تحميل نتائج البحث.");
     return envelope.data;

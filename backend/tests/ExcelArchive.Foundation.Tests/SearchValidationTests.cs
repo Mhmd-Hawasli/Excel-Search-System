@@ -23,6 +23,11 @@ public sealed class SearchValidationTests
             Called = true;
             return Task.FromResult(new SearchResultSet([], 0, query.Page, query.PageSize, 0));
         }
+        public Task<IReadOnlyList<SearchResultRow>> SearchTopAsync(
+            string field, string query,
+            IReadOnlyList<Guid> groupIds, IReadOnlyList<Guid> fileIds,
+            IReadOnlyList<Guid>? allowedFileIds, int take, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<SearchResultRow>>([]);
     }
 
     private static (AppDbContext Db, AuthService Auth, StubSearch Search) Fresh()

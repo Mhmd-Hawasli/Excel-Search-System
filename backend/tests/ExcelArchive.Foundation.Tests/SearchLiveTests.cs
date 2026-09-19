@@ -45,6 +45,12 @@ public sealed class SearchLiveFixture : IAsyncLifetime
             Make(file.Id, 5, "أحمد محمد علي", "111222333", null, null, null,
                 null, null, null, null, null, null, null, null, null, tie),
             Make(file.Id, 6, "عبد الله خالد", "555666777", null, null, null,
+                null, null, null, null, null, null, null, null, null),
+            // Parts-only row (no full_name): found in full mode via name_parts composition only.
+            Make(file.Id, 7, null, null, null, null, null,
+                null, null, null, null, null, null, "كريم", "سامي", "ناصر"),
+            // Stored with ال («الاحمد»): exact still matches after stripping it on both sides.
+            Make(file.Id, 8, "مازن احمد الاحمد العلي", null, null, null, null,
                 null, null, null, null, null, null, null, null, null));
         await db.SaveChangesAsync();
     }
@@ -117,8 +123,9 @@ public sealed class SearchLiveTests(SearchLiveFixture fx, ITestOutputHelper outp
 
     private static SearchQuery Q(string query, string mode = "full", string? field = null,
         List<Guid>? groups = null, List<Guid>? files = null, List<Guid>? allowed = null,
-        int page = 1, int pageSize = 25, string? sortBy = null, string direction = "asc")
-        => new(query, mode, field, groups ?? [], files ?? [], allowed, page, pageSize, sortBy, direction);
+        int page = 1, int pageSize = 25, string? sortBy = null, string direction = "asc",
+        bool similar = true)
+        => new(query, mode, field, groups ?? [], files ?? [], allowed, page, pageSize, sortBy, direction, similar);
 
     [Fact]
     public async Task NormalizationPairs_Found()
@@ -133,8 +140,35 @@ public sealed class SearchLiveTests(SearchLiveFixture fx, ITestOutputHelper outp
         }
         var r1 = await svc.SearchAsync(Q("احمد", allowed: [FileId]));
         Assert.True(r1.Total >= 3, $"احمد -> {r1.Total}");
-        var r2 = await svc.SearchAsync(Q("فاطمه", allowed: [FileId]));
-        Assert.True(r2.Total >= 2, $"فاطمه -> {r2.Total}");
+        // Mother name lives in custom mode only; full mode must not match it.
+        var r2 = await svc.SearchAsync(Q("فاطمه", "custom", "mother_name", allowed: [FileId]));
+        Assert.Equal(2, r2.Total);
+        var r2full = await svc.SearchAsync(Q("فاطمه", allowed: [FileId]));
+        Assert.Equal(0, r2full.Total);
+    }
+
+    [Fact]
+    public async Task FullMode_ExactAfterNormalization_IgnoresDual()
+    {
+        // Stored «الاحمد» vs query «الاحمد»: exact after stripping ال on both sides.
+        RequireDb();
+        if (!Live) return;
+        var svc = Svc();
+        var r = await svc.SearchAsync(Q("مازن احمد الاحمد العلي", allowed: [FileId], similar: false));
+        Assert.True(r.Total >= 1, $"exact-ال -> {r.Total}");
+        Assert.All(r.Rows, row => Assert.Equal(0, row.MatchRank));
+    }
+
+    [Fact]
+    public async Task FullMode_NamePartsComposition()
+    {
+        // Parts-only row (no full_name) is found by composing first+father+last.
+        RequireDb();
+        if (!Live) return;
+        var svc = Svc();
+        var r = await svc.SearchAsync(Q("كريم سامي ناصر", allowed: [FileId]));
+        Assert.True(r.Total >= 1, $"composition -> {r.Total}");
+        Assert.Contains(r.Rows, row => row.MatchedField == "name_parts");
     }
 
     [Fact]
@@ -163,9 +197,32 @@ public sealed class SearchLiveTests(SearchLiveFixture fx, ITestOutputHelper outp
         // "أحمدم" (5 chars): closest word "احمد" distance 1 → 1*5 <= 5 → match.
         var close = await svc.SearchAsync(Q("أحمدم", allowed: [FileId]));
         Assert.True(close.Total >= 1, $"أحمدم -> {close.Total}");
+        // Fuzzy-only matches rank last (3), after exact (0), prefix (1) and substring (2).
+        Assert.All(close.Rows, row => Assert.Equal(3, row.MatchRank));
+        // ...unless similar matches are hidden: typo finds nothing, exact still matches.
+        var hidden = await svc.SearchAsync(Q("أحمدم", allowed: [FileId], similar: false));
+        Assert.Equal(0, hidden.Total);
+        var exactOnly = await svc.SearchAsync(Q("أحمد محمد علي", allowed: [FileId], similar: false));
+        Assert.True(exactOnly.Total >= 1, $"exact-only -> {exactOnly.Total}");
+        Assert.All(exactOnly.Rows, row => Assert.Equal(0, row.MatchRank));
         // "أحمدمم" (6 chars): distance 2 → 2*5=10 > 6 → no match anywhere.
         var far = await svc.SearchAsync(Q("أحمدمم", allowed: [FileId]));
         Assert.Equal(0, far.Total);
+    }
+
+    [Fact]
+    public async Task TopN_FuzzyParity_TypoWithinLimitFound_BeyondNot()
+    {
+        // Bulk path (SearchTopAsync) must find the same typo'd rows as the
+        // single search: "أحمدم" matches via the full_name fuzzy branch.
+        RequireDb();
+        if (!Live) return;
+        var svc = Svc();
+        var close = await svc.SearchTopAsync("full_name", "أحمدم", [], [], [FileId], 10);
+        Assert.NotEmpty(close);
+        Assert.Equal("full_name", close[0].MatchedField);
+        var far = await svc.SearchTopAsync("full_name", "أحمدمم", [], [], [FileId], 10);
+        Assert.Empty(far);
     }
 
     [Fact]
@@ -187,8 +244,8 @@ public sealed class SearchLiveTests(SearchLiveFixture fx, ITestOutputHelper outp
         var r = await svc.SearchAsync(Q("1", allowed: [FileId], sortBy: "national_id", direction: "asc"));
         var ids = r.Rows.Select(x => x.DNationalId).ToList();
         Assert.Equal(["00111222333", "00123456789", "00987654321"], ids);
-        // Row with an invalid national ID matches via mother name but sorts last (NULL).
-        var m = await svc.SearchAsync(Q("فاطمة", allowed: [FileId], sortBy: "national_id", direction: "asc"));
+        // Row with an invalid national ID matches via mother name (custom mode) but sorts last (NULL).
+        var m = await svc.SearchAsync(Q("فاطمة", "custom", "mother_name", allowed: [FileId], sortBy: "national_id", direction: "asc"));
         Assert.Equal(["00123456789", null], m.Rows.Select(x => x.DNationalId).ToList());
     }
 

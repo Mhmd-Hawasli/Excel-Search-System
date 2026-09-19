@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronUp, ExternalLink, Loader2, Search } from "lucide-react";
+import { ArrowUp, ArrowUpDown, ExternalLink, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,13 @@ import { PageHeader } from "@/components/page-header";
 import { Pager } from "@/components/pager";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatFunctionalCategory, formatNationalId, formatShamCash } from "@/lib/conflict-format";
-import { normalizeStored } from "@/lib/normalization";
-import { STANDARD_FIELD_LABELS } from "@/lib/standard-fields";
+import { computeHighlightRanges } from "@/lib/highlight";
+import { STANDARD_FIELD_LABELS, type StandardFieldKey } from "@/lib/standard-fields";
+import { hasPermission } from "@/lib/permissions";
 import { ApiError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
+import { BulkSearchInterface } from "@/features/bulk-search/bulk-search-interface";
+import { ScopeSelector } from "@/features/search/scope-selector";
 import { groupsService } from "@/services/groups.service";
 import { searchService, type SearchResponse, type SearchRow } from "@/services/search.service";
 import { cn } from "@/lib/cn";
@@ -48,51 +52,30 @@ const SORT_COLUMNS: { key: string; label: string }[] = [
   { key: "sham_cash", label: "الشام كاش" },
   { key: "personal_no", label: "الرقم الذاتي" },
   { key: "job_title", label: "المسمى الوظيفي" },
-  { key: "functional_category", label: "الفئة الوظيفية" },
   { key: "organizational_level", label: "السوية التنظيمية" },
 ];
 
 const PAGE_SIZES = [10, 25, 50, 100];
 const QUERY_IDLE_MS = 600;
 
-interface ScopeGroup {
-  id: string;
-  name: string;
-  files: { id: string; name: string }[];
-}
-
-function Highlight({ value, query }: { value: string; query: string }) {
+function Highlight({ value, query, field }: { value: string; query: string; field: StandardFieldKey | string | null }) {
   const parts = useMemo(() => {
     if (!value || !query.trim()) return null;
-    const tokens = normalizeStored(query).split(/\s+/).filter((t) => t.length > 0);
-    if (tokens.length === 0) return null;
-    const normalized = normalizeStored(value);
-    const ranges: { start: number; end: number }[] = [];
-    for (const token of tokens) {
-      let from = 0;
-      for (;;) {
-        const index = normalized.indexOf(token, from);
-        if (index < 0) break;
-        ranges.push({ start: index, end: Math.min(value.length, index + token.length) });
-        from = index + Math.max(1, token.length);
-      }
-    }
+    const ranges = computeHighlightRanges(value, query, field);
     if (ranges.length === 0) return null;
-    ranges.sort((a, b) => a.start - b.start);
-    const merged: { start: number; end: number }[] = [];
-    for (const range of ranges) {
-      const last = merged[merged.length - 1];
-      if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
-      else merged.push({ ...range });
-    }
     const nodes: React.ReactNode[] = [];
     let cursor = 0;
-    for (const range of merged) {
+    for (const range of ranges) {
       if (range.start > cursor) nodes.push(value.slice(cursor, range.start));
       nodes.push(
         <mark
           key={`${range.start}-${range.end}`}
-          className="rounded bg-amber-200 px-0.5 text-amber-950 dark:bg-amber-400/30 dark:text-amber-100"
+          title={range.fuzzy ? "مطابقة تقريبية" : undefined}
+          className={
+            range.fuzzy
+              ? "rounded bg-orange-200 px-0.5 text-orange-950 underline decoration-dotted underline-offset-2 dark:bg-orange-400/30 dark:text-orange-100"
+              : "rounded bg-amber-200 px-0.5 text-amber-950 dark:bg-amber-400/30 dark:text-amber-100"
+          }
         >
           {value.slice(range.start, range.end)}
         </mark>,
@@ -101,7 +84,7 @@ function Highlight({ value, query }: { value: string; query: string }) {
     }
     if (cursor < value.length) nodes.push(value.slice(cursor));
     return nodes;
-  }, [value, query]);
+  }, [value, query, field]);
   if (!parts) return <>{value}</>;
   return <>{parts}</>;
 }
@@ -111,212 +94,6 @@ function matchedDisplayValue(row: SearchRow): string {
   if (row.matchedField === "functional_category") return formatFunctionalCategory(row.matchedValue) || "—";
   if (row.matchedField === "national_id") return formatNationalId(row.matchedValue) || "—";
   return row.matchedValue || "—";
-}
-
-function ScopeSelector({
-  groupIds,
-  fileIds,
-  onChange,
-}: {
-  groupIds: string[];
-  fileIds: string[];
-  onChange: (next: { groupIds: string[]; fileIds: string[] }) => void;
-}) {
-  const [groups, setGroups] = useState<ScopeGroup[]>([]);
-  const [filesByGroup, setFilesByGroup] = useState<Record<string, { id: string; name: string }[]>>({});
-  const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<string[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let active = true;
-    groupsService
-      .list()
-      .then((list) => {
-        if (active) setGroups(list.map((g) => ({ id: g.id, name: g.name, files: [] })));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutside(event: PointerEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open ]);
-
-  async function expand(groupId: string) {
-    setExpanded((current) =>
-      current.includes(groupId) ? current.filter((id) => id !== groupId) : [...current, groupId],
-    );
-    if (filesByGroup[groupId]) return;
-    try {
-      const detail = await groupsService.get(groupId);
-      setFilesByGroup((current) => ({
-        ...current,
-        [groupId]: detail.files.map((f) => ({ id: f.id, name: f.name })),
-      }));
-      setGroups((current) =>
-        current.map((g) =>
-          g.id === groupId
-            ? { ...g, files: detail.files.map((f) => ({ id: f.id, name: f.name })) }
-            : g,
-        ),
-      );
-    } catch {
-      // Keep the group row; files stay unavailable.
-    }
-  }
-
-  const allSelected = groupIds.length === 0 && fileIds.length === 0;
-  const selectedFiles = groups.flatMap((g) => filesByGroup[g.id] ?? []).filter((f) => fileIds.includes(f.id));
-  const selectedGroups = groups.filter((g) => groupIds.includes(g.id));
-  const label = allSelected
-    ? "جميع الملفات"
-    : selectedGroups.length === 1 && selectedFiles.length === 0
-      ? `${selectedGroups[0].name}: جميع الملفات`
-      : `${selectedGroups.length > 0 ? `${selectedGroups.length} مجموعة و` : ""}${selectedFiles.length} ملف محدد`;
-
-  function toggleGroup(group: ScopeGroup) {
-    const files = filesByGroup[group.id] ?? group.files;
-    const selected =
-      groupIds.includes(group.id) || (files.length > 0 && files.every((f) => fileIds.includes(f.id)));
-    onChange({
-      groupIds: selected ? groupIds.filter((id) => id !== group.id) : [...groupIds, group.id],
-      fileIds: fileIds.filter((id) => !files.some((f) => f.id === id)),
-    });
-  }
-
-  function toggleFile(groupId: string, fileId: string) {
-    const selected = fileIds.includes(fileId);
-    onChange({
-      groupIds: groupIds.filter((id) => id !== groupId),
-      fileIds: selected ? fileIds.filter((id) => id !== fileId) : [...fileIds, fileId],
-    });
-  }
-
-  function option(selected: boolean, text: string) {
-    return (
-      <>
-        <span
-          className={cn(
-            "flex size-5 shrink-0 items-center justify-center rounded border",
-            selected ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background",
-          )}
-        >
-          {selected ? <Check className="size-3.5" /> : null}
-        </span>
-        <span className="truncate">{text}</span>
-      </>
-    );
-  }
-
-  return (
-    <div ref={containerRef} className="relative min-w-0 sm:min-w-64">
-      <Button
-        type="button"
-        variant="outline"
-        className="h-11 w-full justify-between px-3 font-normal"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="truncate">{label}</span>
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </Button>
-      {open ? (
-        <div
-          role="listbox"
-          aria-label="تخصيص نطاق البحث"
-          aria-multiselectable="true"
-          className="absolute end-0 top-full z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border bg-white p-1 text-card-foreground shadow-lg sm:min-w-80"
-        >
-          <button
-            type="button"
-            role="option"
-            aria-selected={allSelected}
-            className="mb-1 flex w-full items-center gap-2 rounded-sm border-b px-3 py-2 text-right text-sm font-semibold hover:bg-accent"
-            onClick={() => onChange({ groupIds: [], fileIds: [] })}
-          >
-            {option(allSelected, "جميع المجموعات والملفات")}
-          </button>
-          {groups.map((group) => {
-            const files = filesByGroup[group.id] ?? group.files;
-            const groupSelected =
-              allSelected ||
-              groupIds.includes(group.id) ||
-              (files.length > 0 && files.every((f) => fileIds.includes(f.id)));
-            const isExpanded = expanded.includes(group.id);
-            return (
-              <div key={group.id} className="border-b last:border-b-0">
-                <div className="flex items-center">
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={groupSelected}
-                    className={cn(
-                      "flex min-w-0 flex-1 items-center gap-2 rounded-sm px-3 py-2 text-right text-sm font-semibold hover:bg-accent",
-                      groupSelected && "bg-primary/5 text-primary",
-                    )}
-                    onClick={() => toggleGroup(group)}
-                  >
-                    {option(groupSelected, `${group.name} — جميع الملفات`)}
-                  </button>
-                  <button
-                    type="button"
-                    className="p-2 text-muted-foreground hover:text-foreground"
-                    aria-label={`${isExpanded ? "إخفاء" : "عرض"} ملفات ${group.name}`}
-                    onClick={() => void expand(group.id)}
-                  >
-                    {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                  </button>
-                </div>
-                {isExpanded ? (
-                  <div className="mb-1 ms-3 border-s ps-2">
-                    {files.length === 0 ? (
-                      <p className="px-3 py-2 text-xs text-muted-foreground">لا توجد ملفات محملة.</p>
-                    ) : (
-                      files.map((file) => {
-                        const fileSelected =
-                          allSelected || groupIds.includes(group.id) || fileIds.includes(file.id);
-                        return (
-                          <button
-                            key={file.id}
-                            type="button"
-                            role="option"
-                            aria-selected={fileSelected}
-                            className={cn(
-                              "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-right text-sm hover:bg-accent",
-                              fileSelected && "text-primary",
-                            )}
-                            onClick={() => toggleFile(group.id, file.id)}
-                          >
-                            {option(fileSelected, file.name)}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 interface Filters {
@@ -329,6 +106,7 @@ interface Filters {
   pageSize: number;
   sortBy: string;
   sortDir: string;
+  similar: boolean;
 }
 
 function readFromParams(params: URLSearchParams): Filters {
@@ -339,7 +117,7 @@ function readFromParams(params: URLSearchParams): Filters {
   const pageSize = num("pageSize", 25);
   return {
     q: (params.get("q") ?? "").slice(0, 200),
-    mode: params.get("mode") === "custom" ? "custom" : "full",
+    mode: params.get("mode") === "custom" ? "custom" : params.get("mode") === "bulk" ? "bulk" : "full",
     field: params.get("field") || "full_name",
     groupIds: params.getAll("groupId").filter(Boolean),
     fileIds: params.getAll("fileId").filter(Boolean),
@@ -347,6 +125,7 @@ function readFromParams(params: URLSearchParams): Filters {
     pageSize: PAGE_SIZES.includes(pageSize) ? pageSize : 25,
     sortBy: params.get("sortBy") || "",
     sortDir: params.get("sortDir") === "desc" ? "desc" : "asc",
+    similar: params.get("similar") !== "false",
   };
 }
 
@@ -361,6 +140,7 @@ function toQueryString(filters: Filters): string {
   if (filters.pageSize !== 25) params.set("pageSize", String(filters.pageSize));
   if (filters.sortBy) params.set("sortBy", filters.sortBy);
   if (filters.sortDir !== "asc") params.set("sortDir", filters.sortDir);
+  if (!filters.similar) params.set("similar", "false");
   const text = params.toString();
   return text ? `/search?${text}` : "/search";
 }
@@ -370,10 +150,56 @@ export function SearchResults() {
   const searchParams = useSearchParams();
   const [filters, setFilters] = useState<Filters>(() => readFromParams(new URLSearchParams(searchParams.toString())));
   const [draft, setDraft] = useState(filters.q);
-  const debouncedDraft = useDebouncedValue(draft.trim().slice(0, 200), QUERY_IDLE_MS);
+  // Raw draft (no trim while typing): trimming here rewrote filters.q and
+  // synced back into the input, deleting the trailing space while the user
+  // is still typing a multi-word name. The backend normalizes/tokenizes the
+  // query itself, so trailing spaces are harmless for search.
+  const debouncedDraft = useDebouncedValue(draft.slice(0, 200), QUERY_IDLE_MS);
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [canBulk, setCanBulk] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    authService
+      .me()
+      .then((me) => {
+        if (active) setCanBulk(hasPermission(me?.permissions ?? [], "bulkSearch.view"));
+      })
+      .catch(() => {
+        if (active) setCanBulk(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  // Mount-only gate: when the URL carries no explicit scope, the initial
+  // scope comes from each group's "تضمين في البحث الافتراضي" flag instead of
+  // searching everything. Skips the wasteful full-archive first fetch.
+  const paramsHaveScope = searchParams.getAll("groupId").length > 0 || searchParams.getAll("fileId").length > 0;
+  const [scopeReady, setScopeReady] = useState(paramsHaveScope);
+  const scopeResolved = useRef(paramsHaveScope);
+
+  useEffect(() => {
+    if (scopeResolved.current) return;
+    scopeResolved.current = true;
+    groupsService
+      .list()
+      .then((list) => {
+        if (list.length === 0) return;
+        const included = list.filter((g) => g.includeInDefaultSearch !== false).map((g) => g.id);
+        if (included.length === 0 || included.length === list.length) return; // none or all → keep "all"
+        setFilters((current) => {
+          if (current.groupIds.length > 0 || current.fileIds.length > 0) return current;
+          const next = { ...current, groupIds: included, page: 1 };
+          router.replace(toQueryString(next), { scroll: false });
+          return next;
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => setScopeReady(true));
+  }, [router]);
 
   // Back/forward restoration: adopt external URL changes into state.
   useEffect(() => {
@@ -401,11 +227,19 @@ export function SearchResults() {
     });
   }, [debouncedDraft, router]);
 
-  // Fetch on every committed filter change.
+  // Fetch on every committed filter change (bulk mode has its own flow).
   useEffect(() => {
+    if (!scopeReady) return;
+    if (filters.mode === "bulk") {
+      // Intentional request-status sync (same pattern as use-api-query).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let active = true;
     // Intentional request-status sync (same pattern as use-api-query).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     searchService
@@ -419,6 +253,7 @@ export function SearchResults() {
         pageSize: filters.pageSize,
         sortBy: filters.sortBy || undefined,
         sortDirection: filters.sortDir,
+        similar: filters.similar,
       })
       .then((result) => {
         if (active) setData(result);
@@ -432,7 +267,7 @@ export function SearchResults() {
     return () => {
       active = false;
     };
-  }, [filters]);
+  }, [filters, scopeReady]);
 
   function update(next: Partial<Filters>, resetPage = false) {
     setFilters((current) => {
@@ -462,7 +297,7 @@ export function SearchResults() {
       <PageHeader
         eyebrow="بحث عربي مرن"
         title="البحث في جميع السجلات"
-        description="تُراعى اختلافات الهمزة والتاء المربوطة والأرقام العربية تلقائيًا."
+        description="البحث العام: الاسم الثلاثي وتركيبه، الرقم الوطني، الشام كاش، الرقم الذاتي — وباقي الحقول في البحث المخصص. تُراعى اختلافات الهمزة والتاء المربوطة والأرقام العربية تلقائيًا."
       />
       <div className="rounded-xl border bg-card shadow-sm">
         <div className="space-y-4 p-5">
@@ -491,7 +326,30 @@ export function SearchResults() {
             >
               البحث المخصص
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filters.mode === "bulk"}
+              className={cn(
+                "flex-1 rounded-md px-4 py-2 text-sm font-bold",
+                filters.mode === "bulk" ? "bg-background shadow-sm" : "text-muted-foreground",
+              )}
+              onClick={() => update({ mode: "bulk" }, true)}
+              hidden={canBulk === false}
+            >
+              البحث الجماعي
+            </button>
           </div>
+          {filters.mode === "bulk" ? (
+            canBulk === false ? (
+              <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                لا تملك صلاحية إظهار قسم البحث الجماعي واستخدامه.
+              </p>
+            ) : (
+              <BulkSearchInterface />
+            )
+          ) : (
+          <>
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_auto]">
             <div className="relative">
               {loading ? (
@@ -538,7 +396,7 @@ export function SearchResults() {
               onChange={(scope) => update({ ...scope }, true)}
             />
           </div>
-          {(filters.groupIds.length > 0 || filters.fileIds.length > 0) && (
+          {(filters.groupIds.length > 0 || filters.fileIds.length > 0) && filters.mode !== "bulk" && (
             <button
               type="button"
               className="text-xs text-primary hover:underline"
@@ -547,9 +405,12 @@ export function SearchResults() {
               إعادة تعيين النطاق إلى جميع الملفات
             </button>
           )}
+          </>
+          )}
         </div>
       </div>
 
+      {filters.mode === "bulk" ? null : (
       <section aria-label="نتائج البحث" aria-live="polite" className="space-y-4">
         {error ? (
           <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
@@ -564,9 +425,24 @@ export function SearchResults() {
               <p className="text-sm text-muted-foreground">
                 تم العثور على <strong className="text-foreground">{data.total.toLocaleString("en-US")}</strong> نتيجة
               </p>
-              <p className="text-sm text-muted-foreground">
-                الصفحة {data.page} من {Math.max(1, data.pageCount)}
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-muted-foreground">
+                  الصفحة {data.page} من {Math.max(1, data.pageCount)}
+                </p>
+                <label
+                  htmlFor="search-similar"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm font-semibold shadow-sm transition hover:border-primary/40"
+                >
+                  <input
+                    id="search-similar"
+                    type="checkbox"
+                    checked={filters.similar}
+                    onChange={(e) => update({ similar: e.target.checked }, true)}
+                    className="size-4 accent-primary"
+                  />
+                  عرض المتشابه
+                </label>
+              </div>
             </div>
             {data.rows.length === 0 ? (
               <div className="rounded-xl border border-dashed bg-card p-6 text-center sm:p-12">
@@ -643,28 +519,35 @@ export function SearchResults() {
                             <p className="text-xs text-muted-foreground">{row.fileName}</p>
                           </td>
                           <td className="p-3 align-top">{row.sfFullName || "—"}</td>
-                          <td className="p-3 align-top">
-                            <span className="ltr-numbers">{formatNationalId(row.dNationalId) || "—"}</span>
+                          <td className="whitespace-nowrap p-3 align-top">
+                            <span dir="ltr" className="ltr-numbers">{formatNationalId(row.dNationalId) || "—"}</span>
                           </td>
                           <td className="p-3 align-top">{row.sfMotherName || "—"}</td>
-                          <td className="p-3 align-top">
-                            <span className="ltr-numbers">{formatShamCash(row.sfShamCash) || "—"}</span>
+                          <td className="whitespace-nowrap p-3 align-top">
+                            <span dir="ltr" className="ltr-numbers">{formatShamCash(row.sfShamCash) || "—"}</span>
                           </td>
                           <td className="p-3 align-top">
                             <span className="ltr-numbers">{row.sfPersonalNo || "—"}</span>
                           </td>
                           <td className="p-3 align-top">{row.sfJobTitle || "—"}</td>
-                          <td className="p-3 align-top">{formatFunctionalCategory(row.sfFunctionalCategory) || "—"}</td>
                           <td className="p-3 align-top">{row.sfOrganizationalLevel || "—"}</td>
                           <td className="p-3 align-top">
                             <div className="min-w-40 space-y-1">
                               {row.matchedField ? (
                                 <Badge variant="secondary">
-                                  {STANDARD_FIELD_LABELS[row.matchedField as keyof typeof STANDARD_FIELD_LABELS] ?? row.matchedField}
+                                  {row.matchedField === "name_parts"
+                                    ? "تركيب الاسم الثلاثي"
+                                    : (STANDARD_FIELD_LABELS[row.matchedField as keyof typeof STANDARD_FIELD_LABELS] ?? row.matchedField)}
                                 </Badge>
                               ) : null}
                               <p className="text-sm">
-                                <Highlight value={matchedDisplayValue(row)} query={filters.q} />
+                                {row.matchedField === "sham_cash" ? (
+                                  <bdi dir="ltr" className="ltr-numbers">
+                                    <Highlight value={matchedDisplayValue(row)} query={filters.q} field={row.matchedField} />
+                                  </bdi>
+                                ) : (
+                                  <Highlight value={matchedDisplayValue(row)} query={filters.q} field={row.matchedField} />
+                                )}
                               </p>
                             </div>
                           </td>
@@ -711,6 +594,7 @@ export function SearchResults() {
           </>
         ) : null}
       </section>
+      )}
     </div>
   );
 }

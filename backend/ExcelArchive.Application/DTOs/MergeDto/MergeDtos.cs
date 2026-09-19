@@ -13,7 +13,8 @@ public sealed record MergeInspection(
 public sealed record MergeRunArgs(
     Guid LeftToken, string LeftSheet, IReadOnlyDictionary<string, int> LeftMapping,
     Guid RightToken, string RightSheet, IReadOnlyDictionary<string, int> RightMapping,
-    bool IgnoreConfirmation, IReadOnlyList<string>? RuleOrder = null);
+    bool IgnoreConfirmation, IReadOnlyList<string>? RuleOrder = null,
+    IReadOnlyList<CustomMergeSpec>? CustomRules = null);
 public sealed record MergeRunResult(
     Guid SessionId, IReadOnlyList<string> LeftHeaders, IReadOnlyList<string> RightHeaders,
     bool IgnoreConfirmation, MergeResult Result);

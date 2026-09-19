@@ -53,23 +53,34 @@ public static class ExcelTableRange
 
     /// <summary>Active table range of a worksheet (first table wins), or null
     /// when the sheet has no usable table. Totals row excluded; the first row
-    /// is always treated as headers.</summary>
+    /// is always treated as headers. Never throws: a header-only or malformed
+    /// table falls back to plain-sheet scanning so inspection surfaces a
+    /// clear message instead of a generic 500.</summary>
     public static SheetTableRange? ForSheet(IXLWorksheet ws)
     {
-        var table = ws.Tables.FirstOrDefault();
-        if (table is null) return null;
-        // DataRange spans data AND the totals row; exclude totals explicitly.
-        var data = table.DataRange;
-        var headerCells = table.ShowHeaderRow ? table.HeadersRow() : null;
-        var headerRow = table.ShowHeaderRow
-            ? headerCells!.FirstCell().Address.RowNumber
-            : data.FirstCell().Address.RowNumber;
-        var firstCol = (table.ShowHeaderRow ? headerCells!.FirstCell() : data.FirstCell()).Address.ColumnNumber;
-        var lastCol = (table.ShowHeaderRow ? headerCells!.LastCell() : data.LastCell()).Address.ColumnNumber;
-        var lastRow = table.ShowTotalsRow
-            ? data.LastCell().Address.RowNumber - 1
-            : data.LastCell().Address.RowNumber;
-        if (lastRow < headerRow) return null;
-        return new SheetTableRange(headerRow, headerRow + 1, lastRow, firstCol, lastCol);
+        try
+        {
+            var table = ws.Tables.FirstOrDefault();
+            if (table is null) return null;
+            // Empty tables (headers only) expose no data range.
+            var data = table.DataRange;
+            if (data is null) return null;
+            var headerCells = table.ShowHeaderRow ? table.HeadersRow() : null;
+            if (table.ShowHeaderRow && headerCells is null) return null;
+            var headerRow = table.ShowHeaderRow
+                ? headerCells!.FirstCell().Address.RowNumber
+                : data.FirstCell().Address.RowNumber;
+            var firstCol = (table.ShowHeaderRow ? headerCells!.FirstCell() : data.FirstCell()).Address.ColumnNumber;
+            var lastCol = (table.ShowHeaderRow ? headerCells!.LastCell() : data.LastCell()).Address.ColumnNumber;
+            var lastRow = table.ShowTotalsRow
+                ? data.LastCell().Address.RowNumber - 1
+                : data.LastCell().Address.RowNumber;
+            if (lastRow < headerRow) return null;
+            return new SheetTableRange(headerRow, headerRow + 1, lastRow, firstCol, lastCol);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

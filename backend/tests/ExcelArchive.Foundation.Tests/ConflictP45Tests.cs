@@ -137,6 +137,35 @@ public sealed class ConflictP45Tests
     }
 
     [Fact]
+    public void Export_ParityBanding_ByIssueNumber()
+    {
+        var rows = new List<ConflictRowDto>
+        {
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "f.xlsx", "o.xlsx", 2,
+                "أحمد محمد علي", "فاطمة", "00000000123", "1111222233334444", "", "", 1,
+                "g1", 1, []),
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "f.xlsx", "o.xlsx", 3,
+                "سارة خالد حسن", "مريم", "00000000124", "1111222233334444", "", "", 2,
+                "g2", 2, []),
+            new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "f.xlsx", "o.xlsx", 4,
+                "خالد عمر زيد", "نور", "00000000125", "1111222233334444", "", "", 3,
+                "g3", 3, []),
+        };
+        using var wb = new XLWorkbook(new MemoryStream(ConflictExportBuilder.Build(rows)));
+        var ws = wb.Worksheets.First();
+        var evenFill = XLColor.FromHtml(ConflictExportBuilder.EvenIssueFillHtml);
+        // Odd issue rows stay unfilled across all columns...
+        Assert.Equal(XLFillPatternValues.None, ws.Cell(2, 1).Style.Fill.PatternType);
+        Assert.Equal(XLFillPatternValues.None, ws.Cell(4, 12).Style.Fill.PatternType);
+        // ...even issue rows carry the amber tint across all columns.
+        foreach (var col in Enumerable.Range(1, 12))
+        {
+            Assert.Equal(XLFillPatternValues.Solid, ws.Cell(3, col).Style.Fill.PatternType);
+            Assert.Equal(evenFill, ws.Cell(3, col).Style.Fill.BackgroundColor);
+        }
+    }
+
+    [Fact]
     public void ExportFormatHelpers()
     {
         Assert.Equal("1111 2222 3333 4444", ConflictExportBuilder.FormatSham("1111222233334444"));

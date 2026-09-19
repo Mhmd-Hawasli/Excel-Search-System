@@ -111,6 +111,41 @@ public sealed class GroupsTests
     }
 
     [Fact]
+    public async Task Create_DefaultSearchFlag_RoundTrips()
+    {
+        var (db, groups, _) = Fresh();
+        using (db)
+        {
+            var included = await groups.CreateAsync(new CreateGroupRequest("gd-1"), "admin");
+            Assert.True(included.IncludeInDefaultSearch);
+            var excluded = await groups.CreateAsync(new CreateGroupRequest("gd-2", "", false), "admin");
+            Assert.False(excluded.IncludeInDefaultSearch);
+            var listed = await groups.ListAsync(Global());
+            Assert.True(listed.Single(g => g.Id == included.Id).IncludeInDefaultSearch);
+            Assert.False(listed.Single(g => g.Id == excluded.Id).IncludeInDefaultSearch);
+        }
+    }
+
+    [Fact]
+    public async Task Update_DefaultSearchFlag_AppliesOnlyWhenProvided()
+    {
+        var (db, groups, _) = Fresh();
+        using (db)
+        {
+            var g = SeedGroup(db, "gu-1");
+            Assert.True((await groups.GetAsync(g.Id, Global()))!.IncludeInDefaultSearch);
+            var updated = await groups.UpdateAsync(g.Id, new UpdateGroupRequest("gu-1", "", false), "admin");
+            Assert.False(updated.IncludeInDefaultSearch);
+            // Omitted flag keeps the current value.
+            var kept = await groups.UpdateAsync(g.Id, new UpdateGroupRequest("gu-1-renamed"), "admin");
+            Assert.Equal("gu-1-renamed", kept.Name);
+            Assert.False(kept.IncludeInDefaultSearch);
+            var restored = await groups.UpdateAsync(g.Id, new UpdateGroupRequest("gu-1-renamed", "", true), "admin");
+            Assert.True(restored.IncludeInDefaultSearch);
+        }
+    }
+
+    [Fact]
     public async Task Update_Missing_Duplicate_Success()
     {
         var (db, groups, activity) = Fresh();

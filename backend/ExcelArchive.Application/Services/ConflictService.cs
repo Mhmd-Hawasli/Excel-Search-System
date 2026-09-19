@@ -201,6 +201,20 @@ public class ConflictService(
 
     public async Task<ConflictStatsDto> StatsAsync(DataScopeDto scope, CancellationToken ct = default)
     {
+        // Stats do not depend on list filters but cost a full archive scan
+        // (all 58 rules). Without caching, every filter change re-ran the
+        // 15-40s computation and the Next.js proxy timed out (socket hang
+        // up → HTTP 500 in the UI) while the backend kept working (499).
+        // Cache per data-scope like list queries: revision/date guarded.
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var key = ConflictCacheKeys.BuildKey("stats", ConflictCacheKeys.CanonicalStatsKey(
+            scope.FileIds?.ToList()));
+        return await cache.GetOrComputeAsync(key, today,
+            () => StatsCoreAsync(scope, ct), ct);
+    }
+
+    private async Task<ConflictStatsDto> StatsCoreAsync(DataScopeDto scope, CancellationToken ct = default)
+    {
         // V1 queryConflictStats: every rule without details over one scan.
         if (scope.GroupIds is not null && (scope.FileIds is null || scope.FileIds.Count == 0))
             return ConflictStatsDto.Empty;

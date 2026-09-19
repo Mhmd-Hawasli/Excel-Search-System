@@ -52,7 +52,16 @@ public class MergeService(
         {
             throw new InvalidDataException(ex.Message);
         }
-        if (!MergeEngine.HasCommonRule(leftMapping, rightMapping))
+        var customRules = args.CustomRules is { Count: > 0 }
+            ? MergeEngine.BuildCustomRules(args.CustomRules)
+            : null;
+        if (customRules is not null)
+        {
+            if (!MergeEngine.HasCommonCustomRule(leftMapping, rightMapping, customRules))
+                throw new InvalidOperationException(
+                    "لا توجد قاعدة ربط ممكنة: يجب ربط حقل الربط لكل قاعدة مخصصة في الجدولين.");
+        }
+        else if (!MergeEngine.HasCommonRule(leftMapping, rightMapping))
             throw new InvalidOperationException(
                 "لا توجد قاعدة ربط ممكنة: يجب تحديد عمود الاسم الثلاثي (أو أعمدة الاسم واسم الأب والنسبة) أو أحد الأرقام في الجدولين.");
         onProgress?.Invoke(5, "قراءة الجدول الأول…");
@@ -60,33 +69,56 @@ public class MergeService(
         onProgress?.Invoke(20, "قراءة الجدول الثاني…");
         var right = ReadMergeSheet(args.RightToken, args.RightSheet);
         onProgress?.Invoke(30, null);
-        // Manual rule order comes from the UI drag-and-drop list; validate now
-        // so unknown/duplicate keys fail fast with an Arabic message.
-        IReadOnlyList<MergeRules.Definition> ordered;
-        try
+        MergeResult result;
+        IReadOnlyList<string> ruleOrder;
+        if (customRules is not null)
         {
-            ordered = MergeEngine.OrderedDefinitions(args.RuleOrder);
+            ruleOrder = customRules.Select(r => r.Key).ToList();
+            result = MergeEngine.RunCustomMerge(
+                new MergeTableInput(left.Headers, left.Rows
+                    .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), leftMapping),
+                new MergeTableInput(right.Headers, right.Rows
+                    .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), rightMapping),
+                customRules, 1,
+                onRuleDone: (rule, index, total) => onProgress?.Invoke(
+                    30 + (int)Math.Round((index + 1) / (double)total * 60),
+                    $"تطبيق القاعدة {index + 1} من {total}…"));
         }
-        catch (InvalidDataException)
+        else
         {
-            throw;
+            // Manual rule order comes from the UI drag-and-drop list; validate now
+            // so unknown/duplicate keys fail fast with an Arabic message.
+            IReadOnlyList<MergeRules.Definition> ordered;
+            try
+            {
+                ordered = MergeEngine.OrderedDefinitions(args.RuleOrder);
+            }
+            catch (InvalidDataException)
+            {
+                throw;
+            }
+            ruleOrder = ordered.Select(d => d.Key).ToList();
+            result = MergeEngine.RunMerge(
+                new MergeTableInput(left.Headers, left.Rows
+                    .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), leftMapping),
+                new MergeTableInput(right.Headers, right.Rows
+                    .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), rightMapping),
+                1, requireConfirmation: !args.IgnoreConfirmation,
+                onRuleDone: (rule, index, total) => onProgress?.Invoke(
+                    30 + (int)Math.Round((index + 1) / (double)total * 60),
+                    $"تطبيق القاعدة {index + 1} من {total}…"),
+                ruleOrder: ruleOrder);
         }
-        var ruleOrder = ordered.Select(d => d.Key).ToList();
-        var result = MergeEngine.RunMerge(
-            new MergeTableInput(left.Headers, left.Rows
-                .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), leftMapping),
-            new MergeTableInput(right.Headers, right.Rows
-                .Select(r => new MergeRowInput(r.RowNumber, r.Cells)).ToList(), rightMapping),
-            1, requireConfirmation: !args.IgnoreConfirmation,
-            onRuleDone: (rule, index, total) => onProgress?.Invoke(
-                30 + (int)Math.Round((index + 1) / (double)total * 60),
-                $"تطبيق القاعدة {index + 1} من {total}…"),
-            ruleOrder: ruleOrder);
         onProgress?.Invoke(95, "تجهيز النتائج…");
         var session = mergeSessions.Create(
             left.SheetName, left.Headers.ToList(), result.Left, leftMapping,
             right.SheetName, right.Headers.ToList(), result.Right, rightMapping,
-            args.IgnoreConfirmation, ruleOrder);
+            args.IgnoreConfirmation, ruleOrder, args.CustomRules);
+        if (customRules is not null)
+            return new MergeRunResult(session.Id, session.LeftHeaders, session.RightHeaders,
+                session.IgnoreConfirmation,
+                MergeEngine.SummarizeCustom(session.LeftRows, session.RightRows,
+                    leftMapping, rightMapping, customRules));
         return new MergeRunResult(session.Id, session.LeftHeaders, session.RightHeaders,
             session.IgnoreConfirmation,
             MergeEngine.Summarize(session.LeftRows, session.RightRows, leftMapping, rightMapping, session.RuleOrder));

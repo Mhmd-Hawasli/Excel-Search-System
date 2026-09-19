@@ -11,6 +11,9 @@ public sealed class MergeSessionData
     public bool IgnoreConfirmation { get; set; }
     /// <summary>Manual execution order chosen by the user (first = runs first).</summary>
     public List<string> RuleOrder { get; set; } = [];
+    /// <summary>Custom merge specs (empty = the six preset rules). Kept for
+    /// delete-and-relink, which must re-apply the same custom rules.</summary>
+    public List<CustomMergeSpec> CustomRules { get; set; } = [];
     public string LeftFilename { get; set; } = "";
     public string LeftSheetName { get; set; } = "";
     public List<string> LeftHeaders { get; set; } = [];

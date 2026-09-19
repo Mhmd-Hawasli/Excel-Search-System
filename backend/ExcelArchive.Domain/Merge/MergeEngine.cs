@@ -8,7 +8,7 @@ namespace ExcelArchive.Domain.Merge;
 /// Cascade: full_name → composed_name → national_id → personal_no →
 /// sham_cash → phone. Uniqueness (COUNTIF=1) + confirmation per V1.
 /// </summary>
-public static class MergeEngine
+public static partial class MergeEngine
 {
     public static string CanonicalText(object? value)
         => ArabicNormalizer.NormalizeStored(value);

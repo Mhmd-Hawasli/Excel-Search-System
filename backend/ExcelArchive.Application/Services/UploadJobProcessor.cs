@@ -126,6 +126,16 @@ public class UploadJobProcessor(
         var file = await CreateFileAsync(config, config.Name, import.WorksheetName, jobId, ct);
 
         var fileColumns = await uow.FileColumns.ListByFileAsync(file.Id, ct);
+        // Per-cell keep-old choices (preview toggles): swap the workbook's value
+        // for the stored one BEFORE the empty check and shadow/quality build,
+        // so kept cells survive exactly as if the file had carried them.
+        KeepOldPlan? keepPlan = null;
+        if (replace is not null && config.KeepOldCells.Count > 0)
+        {
+            var targetColumns = await uow.FileColumns.ListByFileAsync(replace.Id, ct);
+            var oldRecords = await uow.Records.ListExportRowsAsync(replace.Id, ct);
+            keepPlan = KeepOldApplier.Build(oldRecords, targetColumns, config.Columns, config.KeepOldCells);
+        }
         var seenNational = new HashSet<string>(StringComparer.Ordinal);
         var batch = new List<Record>(BatchSize);
         var issues = new List<DataQualityIssue>();
@@ -139,6 +149,8 @@ public class UploadJobProcessor(
             foreach (var column in config.Columns)
                 data[column.HeaderRaw] = column.ColumnIndex - 1 < row.Values.Count
                     ? row.Values[column.ColumnIndex - 1] : "";
+            if (keepPlan is not null)
+                KeepOldApplier.Apply(keepPlan, data, row.RowIndex);
             if (data.Values.All(string.IsNullOrWhiteSpace))
             {
                 issues.Add(new DataQualityIssue
@@ -315,6 +327,23 @@ public class UploadJobProcessor(
                 ?? throw new KeyNotFoundException("تعذر العثور على أحد إصداري الملف لإتمام الاستبدال.");
             var job = await uow.UploadJobs.FindAsync(jobId, ct);
 
+            // Versioned edit archive: manual edits of the old version are
+            // preserved (stamped with it) instead of cascade-deleted. They
+            // stay visible in the edit history, while record pages only ever
+            // show current-version edits (archived rows carry no record id).
+            // Must run before any record/file deletion below. ListAsync (not
+            // ListByFileAsync) returns tracked entities so the changes save.
+            var previousEdits = await uow.RecordEdits.ListAsync(e => e.FileId == replace.Id, ct);
+            foreach (var edit in previousEdits)
+            {
+                edit.FileVersion = replace.Version;
+                edit.RecordId = null;
+                edit.FileColumnId = null;
+                if (mode != "same")
+                    edit.FileId = temporaryFileId;
+            }
+            await uow.SaveChangesAsync(ct);
+
             if (mode == "same")
             {
                 var tempRowCount = temporary.RowCount;
@@ -336,6 +365,11 @@ public class UploadJobProcessor(
                 target.RowCount = tempRowCount;
                 target.ColumnSignature = temporary.ColumnSignature;
                 target.UploadedAt = DateTime.UtcNow;
+                target.UpdatedAt = DateTime.UtcNow;
+                // Replacing all rows is a new version even when the structure
+                // is identical, so the UI can label it V+1 and the archived
+                // edits above stay attributed to the previous version.
+                target.Version = replace.Version + 1;
                 if (job is not null)
                 {
                     job.FileId = target.Id;
@@ -344,7 +378,7 @@ public class UploadJobProcessor(
                 }
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileUpdated, target.Name,
-                    new { fileId = target.Id, previousRows = replace.RowCount, newRows = tempRowCount }, ct);
+                    new { fileId = target.Id, version = target.Version, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count }, ct);
             }
             else
             {
@@ -364,7 +398,7 @@ public class UploadJobProcessor(
                 }
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileReplaced, target.Name,
-                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousRows, newRows }, ct);
+                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousRows, newRows, keptOldCells = config.KeepOldCells.Count }, ct);
             }
         }, ct);
     }

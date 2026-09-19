@@ -3,8 +3,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Copy, ExternalLink, Eye, EyeOff, Pencil, Printer, Search, Undo2, X } from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink, Eye, EyeOff, Loader2, Pencil, Printer, Search, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,6 +54,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
   const [columns, setColumns] = useState<RecordDetailColumn[]>([]);
   const [editedHeaders, setEditedHeaders] = useState<RecordDetail["editedHeaders"]>({});
   const [canEdit, setCanEdit] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +66,8 @@ export function RecordDetails({ recordId }: { recordId: string }) {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const visitedRef = useRef(false);
 
   // One-shot mount load (same pattern as use-api-query).
@@ -73,6 +86,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
         setEditedHeaders(detail.editedHeaders ?? {});
         const perms = me?.permissions ?? [];
         setCanEdit(hasPermission(perms, "edits.update"));
+        setCanDelete(hasPermission(perms, "records.delete"));
         setShowBadge(hasPermission(perms, "edits.badge"));
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "غير موجود.");
@@ -91,6 +105,16 @@ export function RecordDetails({ recordId }: { recordId: string }) {
     visitedRef.current = true;
     recordsService.visit(recordId).catch(() => undefined);
   }, [recordId]);
+
+  // Browser tab title: file name | full name exactly as shown in the record.
+  useEffect(() => {
+    if (!data) return;
+    const previous = document.title;
+    document.title = `${data.fileName} | ${data.displayName}`;
+    return () => {
+      document.title = previous;
+    };
+  }, [data]);
 
   const groups = useMemo(() => {
     const byKey = new Map<string, { key: string; name: string; order: number; columns: RecordDetailColumn[] }>();
@@ -206,6 +230,21 @@ export function RecordDetails({ recordId }: { recordId: string }) {
     }
   }
 
+  async function handleDelete() {
+    if (deleting || !canDelete || !data) return;
+    setDeleting(true);
+    try {
+      await recordsService.remove(recordId);
+      toast.success("تم حذف السجل نهائياً.");
+      setDeleteOpen(false);
+      router.push(`/groups/${data.groupId}/files/${data.fileId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "تعذر حذف السجل. حاول مجددًا.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>;
   if (error || !data) return <p className="text-sm text-destructive">{error ?? "غير موجود."}</p>;
 
@@ -223,10 +262,40 @@ export function RecordDetails({ recordId }: { recordId: string }) {
         title={data.displayName}
         description={`${data.fileName} — ${data.groupName} — صف ${data.rowIndex} — رُفع ${data.uploadedAt}`}
         actions={
-          <Button type="button" variant="outline" size="sm" className="no-print" onClick={() => window.print()}>
-            <Printer className="size-4" />
-            طباعة / حفظ PDF
-          </Button>
+          <div className="no-print flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
+              <Printer className="size-4" />
+              طباعة / حفظ PDF
+            </Button>
+            {canDelete ? (
+              <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="destructive" size="sm">
+                    <Trash2 className="size-4" />
+                    حذف السجل
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>حذف السجل نهائياً؟</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      سيُحذف «{data.displayName}» (صف {data.rowIndex} في {data.fileName}) مع سجل تعديلاته نهائياً،
+                      ولا يمكن التراجع عن هذا الإجراء.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel type="button" disabled={deleting}>
+                      إلغاء
+                    </AlertDialogCancel>
+                    <Button type="button" variant="destructive" disabled={deleting} onClick={() => void handleDelete()}>
+                      {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                      {deleting ? "جارٍ الحذف…" : "حذف نهائي"}
+                    </Button>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : null}
+          </div>
         }
       />
       <div className="no-print flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -323,6 +392,25 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                                 if (event.key === "Escape") setEditingId(null);
                               }}
                               aria-label={`تعديل ${column.headerRaw}`}
+                              // Numeric identifiers (sham cash first) are
+                              // always LTR so group order never reverses
+                              // while typing in the RTL page.
+                              dir={
+                                column.standardField === "sham_cash" ||
+                                column.standardField === "national_id" ||
+                                column.standardField === "personal_no" ||
+                                column.standardField === "phone"
+                                  ? "ltr"
+                                  : undefined
+                              }
+                              inputMode={
+                                column.standardField === "sham_cash" ||
+                                column.standardField === "national_id" ||
+                                column.standardField === "personal_no" ||
+                                column.standardField === "phone"
+                                  ? "numeric"
+                                  : undefined
+                              }
                               className="h-9"
                               autoFocus
                             />

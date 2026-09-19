@@ -1,5 +1,5 @@
 import type { ApiEnvelope } from "@/types/api";
-import { apiGet, apiPost } from "./api-client";
+import { apiDelete, apiGet, apiPost } from "./api-client";
 
 export interface RecordDetailColumn {
   id: string;
@@ -64,6 +64,38 @@ export interface SaveEditResult {
   edits?: Record<string, EditedHeaderInfo>;
 }
 
+export interface ManualTemplateColumn {
+  id: string;
+  headerRaw: string;
+  standardField: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  categoryOrder: number | null;
+  columnIndex: number;
+}
+
+export interface ManualTemplate {
+  fileId: string;
+  fileName: string;
+  groupId: string;
+  groupName: string;
+  columns: ManualTemplateColumn[];
+}
+
+export interface SuggestionList {
+  fileId: string;
+  standardField: string | null;
+  columnId: string | null;
+  headerRaw: string;
+  values: string[];
+}
+
+export interface ManualCreated {
+  id: string;
+  fileId: string;
+  rowIndex: number;
+}
+
 export const recordsService = {
   async get(id: string): Promise<RecordDetail> {
     const envelope = await apiGet<ApiEnvelope<RecordDetail>>(`/api/records/${id}`);
@@ -85,5 +117,33 @@ export const recordsService = {
   async visit(id: string): Promise<{ ok: boolean }> {
     const envelope = await apiPost<ApiEnvelope<{ ok: boolean }>>(`/api/records/${id}/visit`);
     return envelope.data ?? { ok: true };
+  },
+  async template(fileId: string): Promise<ManualTemplate> {
+    const envelope = await apiGet<ApiEnvelope<ManualTemplate>>(`/api/files/${fileId}/record-template`);
+    if (!envelope.data) throw new Error("تعذر تحميل أعمدة الملف.");
+    return envelope.data;
+  },
+  async suggestions(fileId: string, params: { standardField?: string; columnId?: string; take?: number }): Promise<SuggestionList> {
+    const envelope = await apiGet<ApiEnvelope<SuggestionList>>(`/api/files/${fileId}/suggestions`, {
+      standardField: params.standardField ?? "",
+      columnId: params.columnId ?? "",
+      take: params.take ?? 50,
+    });
+    if (!envelope.data) throw new Error("تعذر تحميل الاقتراحات.");
+    return envelope.data;
+  },
+  async createManual(fileId: string, values: Record<string, string>): Promise<ManualCreated> {
+    const envelope = await apiPost<ApiEnvelope<ManualCreated>>(`/api/files/${fileId}/records`, { values });
+    if (!envelope.data) throw new Error("تعذر حفظ السجل.");
+    return envelope.data;
+  },
+  async validateManual(fileId: string, values: Record<string, string>): Promise<{ ok: boolean }> {
+    const envelope = await apiPost<ApiEnvelope<{ ok: boolean }>>(`/api/files/${fileId}/records/validate`, { values });
+    return envelope.data ?? { ok: true };
+  },
+  async remove(id: string): Promise<{ fileId: string; rowIndex: number }> {
+    const envelope = await apiDelete<ApiEnvelope<{ fileId: string; rowIndex: number }>>(`/api/records/${id}`);
+    if (!envelope.data) throw new Error("تعذر حذف السجل.");
+    return envelope.data;
   },
 };

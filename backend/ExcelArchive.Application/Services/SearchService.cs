@@ -42,6 +42,23 @@ public class SearchService(ISearchRepository search) : ISearchService
             query.SortBy, query.SortDirection, page, pageSize, ct);
     }
 
+    public async Task<IReadOnlyList<SearchResultRow>> SearchTopAsync(
+        string field, string query,
+        IReadOnlyList<Guid> groupIds, IReadOnlyList<Guid> fileIds,
+        IReadOnlyList<Guid>? allowedFileIds, int take, CancellationToken ct = default)
+    {
+        if (field is null || !ByKey.ContainsKey(field))
+            return [];
+        var plan = BuildPlan(new SearchQuery(
+            query, "custom", field, groupIds, fileIds, allowedFileIds, 1, 10, null, "asc"));
+        if (string.IsNullOrWhiteSpace(query) || plan.Fields.Count == 0
+            || allowedFileIds is not null && allowedFileIds.Count == 0)
+            return [];
+
+        return await search.ExecuteTopAsync(plan, groupIds, fileIds, allowedFileIds,
+            Math.Clamp(take, 1, 100), ct);
+    }
+
     private static SearchPlan BuildPlan(SearchQuery query)
     {
         var allTokens = ArabicNormalizer.NormalizeQuery(query.Query).ToList();
@@ -53,21 +70,33 @@ public class SearchService(ISearchRepository search) : ISearchService
             // Unknown custom fields cannot happen through the validated controller;
             // stay safe and match nothing rather than falling back to full mode.
             if (query.Field is null || !ByKey.TryGetValue(query.Field, out var custom))
-                return new SearchPlan([], [], "", "", null);
+                return new SearchPlan([], [], "", "", null, query.IncludeSimilar);
             return new SearchPlan([custom],
                 custom.Kind == "text" ? allTokens : [],
                 custom.Kind == "numeric" ? numericNeedle : "",
                 string.Join(" ", allTokens),
-                categoryNeedle);
+                categoryNeedle,
+                query.IncludeSimilar);
         }
         var hasText = textTokens.Count > 0;
         var hasNumbers = numericNeedle.Length > 0;
-        var hasCategory = categoryNeedle is not null;
+        // البحث العام (full): الاسم الثلاثي وتركيبه (اسم+أب+نسبة) والرقم
+        // الوطني والشام كاش والرقم الذاتي فقط — باقي الحقول في المخصص.
+        var fullFields = new List<SearchField>();
+        if (hasText)
+        {
+            fullFields.Add(ByKey["full_name"]);
+            fullFields.Add(new SearchField("name_parts", "text", ""));
+        }
+        if (hasNumbers)
+        {
+            fullFields.Add(ByKey["national_id"]);
+            fullFields.Add(ByKey["sham_cash"]);
+            fullFields.Add(ByKey["personal_no"]);
+        }
         return new SearchPlan(
-            AllFields.Where(f =>
-                (f.Kind == "text" && hasText)
-                || (f.Kind == "numeric" && hasNumbers)
-                || (f.Kind == "functional_category" && hasCategory)).ToList(),
-            textTokens, numericNeedle, string.Join(" ", allTokens), categoryNeedle);
+            fullFields,
+            textTokens, numericNeedle, string.Join(" ", allTokens), categoryNeedle,
+            query.IncludeSimilar);
     }
 }

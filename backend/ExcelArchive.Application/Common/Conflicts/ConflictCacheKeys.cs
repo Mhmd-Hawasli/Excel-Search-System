@@ -29,4 +29,12 @@ public static class ConflictCacheKeys
         return JsonSerializer.Serialize(
             new { category, field, rule, page, pageSize, sortBy, sortDir, scope }, JsonOptions);
     }
+
+    public static string CanonicalStatsKey(IReadOnlyList<Guid>? scopeFileIds)
+    {
+        var scope = scopeFileIds is null
+            ? "global"
+            : string.Join(",", scopeFileIds.OrderBy(g => g).Select(g => g.ToString()));
+        return JsonSerializer.Serialize(new { domain = "stats", scope }, JsonOptions);
+    }
 }

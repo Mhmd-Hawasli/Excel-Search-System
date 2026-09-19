@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   closestCenter,
   DndContext,
@@ -25,7 +25,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { MappingForm } from "@/features/merge/mapping-form";
 import { ResultsView, type MergeClientResult } from "@/features/merge/results-view";
-import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Play, RefreshCw, RotateCcw, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Play, Plus, RefreshCw, RotateCcw, Trash2, Upload } from "lucide-react";
+import { MERGE_FIELD_KEYS, MERGE_FIELD_LABELS } from "@/services/misc.service";
 import {
   MERGE_RULE_KEYS,
   MERGE_RULES,
@@ -319,6 +320,36 @@ function SortableRuleItem({
   );
 }
 
+/** Link/confirm choices: standard mapped fields + composed full name. */
+type CustomFieldKey = MergeFieldKey | "composedName";
+const CUSTOM_FIELD_LABELS: Record<CustomFieldKey, string> = {
+  ...MERGE_FIELD_LABELS,
+  composedName: "تركيب الاسم الثلاثي",
+};
+const CUSTOM_FIELD_OPTIONS = [
+  ...MERGE_FIELD_KEYS.map((field) => ({ value: field as CustomFieldKey, label: MERGE_FIELD_LABELS[field] })),
+  { value: "composedName" as CustomFieldKey, label: CUSTOM_FIELD_LABELS.composedName },
+];
+
+function isCustomFieldMapped(mapping: MergeMapping, field: CustomFieldKey): boolean {
+  if (field === "composedName")
+    return (
+      mapping.fullName !== undefined ||
+      mapping.firstName !== undefined ||
+      mapping.fatherName !== undefined ||
+      mapping.lastName !== undefined
+    );
+  return mapping[field] !== undefined;
+}
+
+type CustomRuleDraft = {
+  uid: number;
+  /** Mandatory link field (standard mapped field or composed name). */
+  linkField: CustomFieldKey | "";
+  /** Optional confirm field; "" means link without confirmation. */
+  confirmField: CustomFieldKey | "";
+};
+
 export function MergeInterface() {
   const [left, setLeft] = useState<TableState>(emptyTable());
   const [right, setRight] = useState<TableState>(emptyTable());
@@ -331,6 +362,10 @@ export function MergeInterface() {
   const [ignoreConfirmation, setIgnoreConfirmation] = useState(false);
   /** Manual execution order (first element runs first). Drag/drop + up/down reorder it. */
   const [ruleOrder, setRuleOrder] = useState<MergeRuleKey[]>([...MERGE_RULE_KEYS]);
+  /** Rule section mode: preset six-rule cascade vs user-built custom rules. */
+  const [mode, setMode] = useState<"preset" | "custom">("preset");
+  const [customRules, setCustomRules] = useState<CustomRuleDraft[]>([]);
+  const customUid = useRef(1);
 
   const ready = Boolean(
     left.inspection && right.inspection && !left.error && !right.error && !left.uploading && !right.uploading && !running,
@@ -338,7 +373,34 @@ export function MergeInterface() {
   const hints = ruleHints(left.mapping, right.mapping);
   const readinessByKey = new Map(hints.map((hint) => [hint.key, hint.ready]));
   const activeRules = hints.filter((hint) => hint.ready);
-  const canRun = ready && activeRules.length > 0;
+  /** Fields available in BOTH tables — the only valid link/confirm choices. */
+  const sharedFields: CustomFieldKey[] = CUSTOM_FIELD_OPTIONS.map((option) => option.value).filter(
+    (field) => isCustomFieldMapped(left.mapping, field) && isCustomFieldMapped(right.mapping, field),
+  );
+
+  function customRuleError(rule: CustomRuleDraft, all: CustomRuleDraft[]): string | null {
+    if (!rule.linkField) return "اختر حقل الربط الإلزامي.";
+    if (!isCustomFieldMapped(left.mapping, rule.linkField) || !isCustomFieldMapped(right.mapping, rule.linkField))
+      return `حقل «${CUSTOM_FIELD_LABELS[rule.linkField]}» غير مربوط في الجدولين.`;
+    if (rule.confirmField) {
+      if (rule.confirmField === rule.linkField) return "حقل التأكيد يجب أن يختلف عن حقل الربط.";
+      if (!isCustomFieldMapped(left.mapping, rule.confirmField) || !isCustomFieldMapped(right.mapping, rule.confirmField))
+        return `حقل «${CUSTOM_FIELD_LABELS[rule.confirmField]}» غير مربوط في الجدولين.`;
+    }
+    const duplicate = all.some(
+      (other) =>
+        other.uid !== rule.uid &&
+        other.linkField === rule.linkField &&
+        (other.confirmField || "") === (rule.confirmField || ""),
+    );
+    if (duplicate) return "قاعدة مكررة: يوجد قاعدة بنفس حقلي الربط والتأكيد.";
+    return null;
+  }
+
+  const customErrors = customRules.map((rule) => customRuleError(rule, customRules));
+  const canRunCustom =
+    ready && customRules.length > 0 && customErrors.every((error) => error === null);
+  const canRun = mode === "custom" ? canRunCustom : ready && activeRules.length > 0;
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -369,6 +431,32 @@ export function MergeInterface() {
     setRuleOrder([...MERGE_RULE_KEYS]);
   }
 
+  function addCustomRule() {
+    if (running) return;
+    const uid = customUid.current++;
+    setCustomRules((current) => [...current, { uid, linkField: "", confirmField: "" }]);
+  }
+
+  function updateCustomRule(uid: number, patch: Partial<Pick<CustomRuleDraft, "linkField" | "confirmField">>) {
+    if (running) return;
+    setCustomRules((current) => current.map((rule) => (rule.uid === uid ? { ...rule, ...patch } : rule)));
+  }
+
+  function removeCustomRule(uid: number) {
+    if (running) return;
+    setCustomRules((current) => current.filter((rule) => rule.uid !== uid));
+  }
+
+  function moveCustomRule(uid: number, direction: -1 | 1) {
+    if (running) return;
+    setCustomRules((current) => {
+      const index = current.findIndex((rule) => rule.uid === uid);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= current.length) return current;
+      return arrayMove(current, index, target);
+    });
+  }
+
   async function run() {
     if (!canRun || !left.inspection || !right.inspection) return;
     setRunning(true);
@@ -384,8 +472,15 @@ export function MergeInterface() {
             sheetName: right.sheetName,
             mapping: right.mapping,
           },
-          ignoreConfirmation,
-          ruleOrder,
+          ignoreConfirmation: mode === "custom" ? false : ignoreConfirmation,
+          ruleOrder: mode === "custom" ? undefined : ruleOrder,
+          customRules:
+            mode === "custom"
+              ? customRules.map((rule) => ({
+                  linkField: rule.linkField,
+                  confirmField: rule.confirmField || null,
+                }))
+              : undefined,
         },
         (percent, detail) => {
           setRunProgress(percent);
@@ -409,6 +504,8 @@ export function MergeInterface() {
     setStep(0);
     setIgnoreConfirmation(false);
     setRuleOrder([...MERGE_RULE_KEYS]);
+    setMode("preset");
+    setCustomRules([]);
     setRunProgress(0);
     setRunDetail(null);
   }
@@ -470,6 +567,34 @@ export function MergeInterface() {
             </div>
           </fieldset>
 
+          <div className="flex rounded-lg bg-muted p-1" role="tablist" aria-label="نمط الدمج">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "preset"}
+              disabled={running}
+              onClick={() => setMode("preset")}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-bold transition ${
+                mode === "preset" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              القواعد الجاهزة
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "custom"}
+              disabled={running}
+              onClick={() => setMode("custom")}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-bold transition ${
+                mode === "custom" ? "bg-background shadow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              دمج مخصص
+            </button>
+          </div>
+
+          {mode === "preset" ? (
           <Card className="min-w-0">
             <CardContent className="space-y-4 p-5">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -558,6 +683,138 @@ export function MergeInterface() {
               </Button>
             </CardContent>
           </Card>
+          ) : (
+          <Card className="min-w-0">
+            <CardContent className="space-y-4 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-bold">دمج مخصص — حدد قواعدك الخاصة</h3>
+                {customRules.length ? (
+                  <Badge variant="secondary">{customRules.length} قواعد مخصصة</Badge>
+                ) : (
+                  <Badge variant="outline">لا توجد قواعد بعد</Badge>
+                )}
+              </div>
+              <p className="text-xs leading-6 text-muted-foreground">
+                أضف أي عدد من القواعد: لكل قاعدة حقل ربط إلزامي (حقل معياري مربوط في الجدولين) وحقل
+                تأكيد اختياري. تُطبَّق القواعد بالترتيب الظاهر هنا على الأسطر غير المربوطة فقط —
+                الأولى تأخذ أولوية الربط. شرط كل قاعدة ظهور قيمة الربط مرة واحدة فقط في الملف
+                الواحد. القاعدة المؤكَّدة تربط فقط عند تطابق حقل التأكيد أيضًا، والقاعدة بدون تأكيد
+                تربط مباشرة وتبقى «غير مؤكدة» للمراجعة. النتيجة ملف Excel بنفس بنية القواعد الجاهزة.
+              </p>
+              {sharedFields.length === 0 ? (
+                <p className="rounded-lg border border-amber-400/50 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+                  لا توجد حقول معيارية مربوطة في الجدولين بعد — حدد الأعمدة أولًا لتظهر خيارات الربط والتأكيد.
+                </p>
+              ) : null}
+              <ul className="grid gap-2 text-sm md:grid-cols-2">
+                {customRules.map((rule, index) => {
+                  const error = customErrors[index];
+                  return (
+                    <li key={rule.uid} className="space-y-3 rounded-lg border bg-background p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="default" className="ltr-numbers">القاعدة {index + 1}</Badge>
+                        <span className="flex shrink-0 items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-7"
+                            disabled={running || index <= 0}
+                            onClick={() => moveCustomRule(rule.uid, -1)}
+                            aria-label={`نقل القاعدة ${index + 1} للأعلى`}
+                          >
+                            <ChevronUp className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-7"
+                            disabled={running || index >= customRules.length - 1}
+                            onClick={() => moveCustomRule(rule.uid, 1)}
+                            aria-label={`نقل القاعدة ${index + 1} للأسفل`}
+                          >
+                            <ChevronDown className="size-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-7 text-destructive"
+                            disabled={running}
+                            onClick={() => removeCustomRule(rule.uid)}
+                            aria-label={`حذف القاعدة ${index + 1}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </span>
+                      </div>
+                      <label className="block space-y-1">
+                        <span className="text-xs font-bold">حقل الربط (إلزامي)</span>
+                        <select
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                          value={rule.linkField}
+                          disabled={running}
+                          onChange={(event) =>
+                            updateCustomRule(rule.uid, { linkField: event.target.value as CustomFieldKey | "" })
+                          }
+                        >
+                          <option value="">اختر حقل الربط…</option>
+                          {CUSTOM_FIELD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block space-y-1">
+                        <span className="text-xs font-bold">حقل التأكيد (اختياري)</span>
+                        <select
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                          value={rule.confirmField}
+                          disabled={running}
+                          onChange={(event) =>
+                            updateCustomRule(rule.uid, { confirmField: event.target.value as CustomFieldKey | "" })
+                          }
+                        >
+                          <option value="">بدون تأكيد</option>
+                          {CUSTOM_FIELD_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <Button type="button" variant="outline" onClick={addCustomRule} disabled={running}>
+                <Plus className="size-4" />
+                إضافة قاعدة
+              </Button>
+              {runError ? <p className="text-sm text-destructive">{runError}</p> : null}
+              {running ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+                    <span>{runDetail ?? "جارٍ تطبيق القواعد المخصصة…"}</span>
+                    <span className="font-bold text-foreground ltr-numbers">{runProgress}%</span>
+                  </div>
+                  <Progress value={runProgress} aria-label="نسبة تطبيق القواعد المخصصة" />
+                </div>
+              ) : null}
+              <Button size="lg" className="w-full" onClick={() => void run()} disabled={!canRun}>
+                {running ? (
+                  <LoaderCircle className="size-5 animate-spin" />
+                ) : (
+                  <Play className="size-5" />
+                )}
+                تشغيل الدمج المخصص
+              </Button>
+            </CardContent>
+          </Card>
+          )}
         </div>
       ) : result ? (
         <ResultsView result={result} onReset={reset} />

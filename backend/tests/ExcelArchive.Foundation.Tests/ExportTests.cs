@@ -8,23 +8,24 @@ namespace ExcelArchive.Foundation.Tests;
 /// <summary>P2.6 export tests: semantic workbook comparison (docs/09), not ZIP bytes.</summary>
 public sealed class ExportTests
 {
-    private static byte[] BuildSample(out List<ExportRecord> records, out List<ExportEdit> edits)
+    private static byte[] BuildSample(out List<ExportRecord> records, out List<ExportEdit> edits, bool markEdits = false)
     {
         records =
         [
             new ExportRecord(Guid.NewGuid(), 2,
                 new Dictionary<string, string> { ["الاسم"] = "أحمد", ["الرقم"] = "00123", ["التاريخ"] = "05/09/2024" },
                 new Dictionary<string, string> { ["الاسم"] = "FFFF0000" },
-                new Dictionary<string, string> { ["الرقم"] = "FF0000FF" }),
+                new Dictionary<string, string> { ["الرقم"] = "FF0000FF" },
+                "أحمد محمد علي", "00123"),
             new ExportRecord(Guid.NewGuid(), 3,
                 new Dictionary<string, string> { ["الاسم"] = "سارة", ["الرقم"] = "999", ["التاريخ"] = "not-a-date" },
-                null, null),
+                null, null, "سارة خالد حسن", "999"),
         ];
         edits =
         [
-            new ExportEdit(records[0].Id.ToString(), "الاسم", "محمد"),
+            new ExportEdit(records[0].Id.ToString(), "الاسم", "محمد", "أحمد", "test", new DateTime(2025, 12, 31, 10, 30, 0, DateTimeKind.Utc)),
         ];
-        return FileExportBuilder.Build("ورقة البيانات", ["الاسم", "الرقم", "التاريخ"], records, edits);
+        return FileExportBuilder.Build("ورقة البيانات", ["الاسم", "الرقم", "التاريخ"], records, edits, markEdits);
     }
 
     private static XLWorkbook Load(byte[] bytes) => new(new MemoryStream(bytes, writable: false));
@@ -54,13 +55,68 @@ public sealed class ExportTests
     [Fact]
     public void Export_HistorySheet_ListsOriginals()
     {
-        var bytes = BuildSample(out var records, out _);
+        // Second sheet is created only when markEdits is requested.
+        var bytes = BuildSample(out var records, out _, markEdits: true);
         using var wb = Load(bytes);
         var log = wb.Worksheets.First(w => w.Name == "سجل التعديلات");
-        Assert.Equal("الاسم", log.Cell("B2").GetString());
-        Assert.Equal("محمد", log.Cell("C2").GetString());
-        Assert.Equal("أحمد", log.Cell("D2").GetString());
-        Assert.Equal(2, log.Cell("A2").GetValue<int>());
+        Assert.Equal("رقم السطر", log.Cell(1, 1).GetString());
+        Assert.Equal("الاسم الثلاثي", log.Cell(1, 2).GetString());
+        Assert.Equal("الرقم الوطني", log.Cell(1, 3).GetString());
+        Assert.Equal("اسم العمود", log.Cell(1, 4).GetString());
+        Assert.Equal("القيمة القديمة", log.Cell(1, 5).GetString());
+        Assert.Equal("القيمة الحديثة", log.Cell(1, 6).GetString());
+        Assert.Equal("اسم حساب الشخص الذي عدل", log.Cell(1, 7).GetString());
+        Assert.Equal("تاريخ التعديل", log.Cell(1, 8).GetString());
+        Assert.Equal(2, log.Cell(2, 1).GetValue<int>());
+        Assert.Equal("أحمد محمد علي", log.Cell(2, 2).GetString());
+        Assert.Equal("الاسم", log.Cell(2, 4).GetString());
+        Assert.Equal("محمد", log.Cell(2, 5).GetString());
+        Assert.Equal("أحمد", log.Cell(2, 6).GetString());
+        Assert.Equal("test", log.Cell(2, 7).GetString());
+        Assert.Equal(new DateTime(2025, 12, 31), log.Cell(2, 8).GetDateTime().Date);
+        Assert.Equal("DD/MM/YYYY", log.Cell(2, 8).Style.DateFormat.Format);
+    }
+
+    [Fact]
+    public void Export_MarkEdits_HighlightsCellsOrangeWithRedFont()
+    {
+        var bytes = BuildSample(out _, out _, markEdits: true);
+        using var wb = Load(bytes);
+        var sheet = wb.Worksheets.First(w => w.Name == "ورقة البيانات");
+        // Edited cell A2: orange fill + red font (overrides source colors).
+        Assert.Equal("FFFFC000", sheet.Cell("A2").Style.Fill.BackgroundColor.Color.ToArgb().ToString("X8"));
+        Assert.Equal("FFFF0000", sheet.Cell("A2").Style.Font.FontColor.Color.ToArgb().ToString("X8"));
+        // Unedited cell keeps its source style.
+        Assert.Equal("FF0000FF", sheet.Cell("B2").Style.Font.FontColor.Color.ToArgb().ToString("X8"));
+    }
+
+    [Fact]
+    public void Export_WithoutMarkEdits_NoHighlight_NoHistorySheet()
+    {
+        var bytes = BuildSample(out _, out _);
+        using var wb = Load(bytes);
+        var sheet = wb.Worksheets.First(w => w.Name == "ورقة البيانات");
+        // Source fill preserved, no red font override.
+        Assert.Equal("FFFF0000", sheet.Cell("A2").Style.Fill.BackgroundColor.Color.ToArgb().ToString("X8"));
+        Assert.DoesNotContain(wb.Worksheets, w => w.Name == "سجل التعديلات");
+    }
+
+    [Fact]
+    public void Export_MarkEdits_ArchivedEdit_RendersDashes()
+    {
+        var records = new List<ExportRecord>
+        {
+            new(Guid.NewGuid(), 2, new Dictionary<string, string> { ["الاسم"] = "x" }, null, null, "فلان", "123"),
+        };
+        var edits = new List<ExportEdit>
+        {
+            new(null, "الاسم", "قديم", "جديد", "test", new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc)),
+        };
+        var bytes = FileExportBuilder.Build("S", ["الاسم"], records, edits, markEdits: true);
+        using var wb = Load(bytes);
+        var log = wb.Worksheets.First(w => w.Name == "سجل التعديلات");
+        Assert.Equal("—", log.Cell(2, 1).GetString());
+        Assert.Equal("—", log.Cell(2, 2).GetString());
     }
 
     [Fact]

@@ -32,7 +32,8 @@ public class SearchController(ISearchService search, IAuthService auth) : ApiCon
         [FromQuery] string? page = null,
         [FromQuery] string? pageSize = null,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = "asc")
+        [FromQuery] string? sortDirection = "asc",
+        [FromQuery] bool? similar = null)
     {
         // search.view is derived from groups.view / groups.viewScoped (see AuthService),
         // so scoped users can search within their files; scope is enforced in SQL.
@@ -71,7 +72,7 @@ public class SearchController(ISearchService search, IAuthService auth) : ApiCon
             }));
         var result = await search.SearchAsync(new SearchQuery(
             query, normalizedMode, normalizedField, scoped.Groups, scoped.Files,
-            scoped.Allowed, pageNum, sizeNum, normalizedSort, direction));
+            scoped.Allowed, pageNum, sizeNum, normalizedSort, direction, similar ?? true));
         return Ok(ApiResponse.Success(new
         {
             rows = result.Rows, total = result.Total, page = result.Page,

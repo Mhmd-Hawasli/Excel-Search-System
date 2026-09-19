@@ -18,7 +18,8 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
     public MergeSessionData Create(
         string leftSheet, List<string> leftHeaders, List<MergeRow> leftRows, MergeMapping leftMapping,
         string rightSheet, List<string> rightHeaders, List<MergeRow> rightRows, MergeMapping rightMapping,
-        bool ignoreConfirmation, IReadOnlyList<string>? ruleOrder = null)
+        bool ignoreConfirmation, IReadOnlyList<string>? ruleOrder = null,
+        IReadOnlyList<CustomMergeSpec>? customRules = null)
     {
         if (Keys.Count >= MaxEntries)
         {
@@ -32,6 +33,7 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
             UpdatedAt = DateTime.UtcNow,
             IgnoreConfirmation = ignoreConfirmation,
             RuleOrder = ruleOrder is null ? [] : [.. ruleOrder],
+            CustomRules = customRules is null ? [] : [.. customRules],
             LeftSheetName = leftSheet,
             LeftHeaders = leftHeaders,
             LeftRows = leftRows,
@@ -99,6 +101,17 @@ public class MergeSessionStore(IMemoryCache cache) : IMergeSessionStore
                     entry.Confirmed = false;
                 }
         var startKey = MergeEngine.NextKeyAfter([..session.LeftRows, ..session.RightRows]);
+        if (session.CustomRules.Count > 0)
+        {
+            var custom = MergeEngine.BuildCustomRules(session.CustomRules);
+            MergeEngine.RelinkUnmatchedCustom(
+                session.LeftRows, session.RightRows,
+                session.LeftMapping, session.RightMapping, custom, startKey);
+            session.UpdatedAt = DateTime.UtcNow;
+            return MergeEngine.SummarizeCustom(
+                session.LeftRows, session.RightRows,
+                session.LeftMapping, session.RightMapping, custom);
+        }
         var result = MergeEngine.RelinkUnmatched(
             session.LeftRows, session.RightRows,
             session.LeftMapping, session.RightMapping,

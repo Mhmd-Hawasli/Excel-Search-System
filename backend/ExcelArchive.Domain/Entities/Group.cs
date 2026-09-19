@@ -6,6 +6,9 @@ public class Group
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public int SortOrder { get; set; }
+    /// <summary>When true (default), the group is preselected in the general
+    /// search scope. Excluding heavy groups speeds up the default search.</summary>
+    public bool IncludeInDefaultSearch { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

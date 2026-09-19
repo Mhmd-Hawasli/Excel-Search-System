@@ -14,7 +14,8 @@ public interface IMergeSessionStore
     MergeSessionData Create(
         string leftSheet, List<string> leftHeaders, List<MergeRow> leftRows, MergeMapping leftMapping,
         string rightSheet, List<string> rightHeaders, List<MergeRow> rightRows, MergeMapping rightMapping,
-        bool ignoreConfirmation, IReadOnlyList<string>? ruleOrder = null);
+        bool ignoreConfirmation, IReadOnlyList<string>? ruleOrder = null,
+        IReadOnlyList<CustomMergeSpec>? customRules = null);
     MergeSessionData Get(Guid id);
     MergeResult DeletePairKeyAndRelink(Guid sessionId, string table, int rowNumber);
 }

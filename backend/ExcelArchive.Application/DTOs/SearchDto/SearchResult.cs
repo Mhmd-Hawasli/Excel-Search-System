@@ -23,7 +23,8 @@ public record SearchResultRow(
     string? SfOrganizationalLevel,
     string? MatchedField,
     string? MatchedValue,
-    int MatchRank);
+    int MatchRank,
+    int RowIndex = 0);
 
 public record SearchResultSet(
     IReadOnlyList<SearchResultRow> Rows,

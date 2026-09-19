@@ -258,6 +258,13 @@ public sealed class WorkerTests : IDisposable
             await TestHelpers.UploadProcessor(db, sp).RunAsync(first, CancellationToken.None);
             var target = await db.Files.FirstAsync(f => f.Name == "target");
             var oldRecordId = (await db.Records.FirstAsync()).Id;
+            // Manual edit on V1: must survive the update as an archived log row.
+            db.RecordEdits.Add(new RecordEdit
+            {
+                RecordId = oldRecordId, FileId = target.Id,
+                HeaderRaw = "الاسم", OldValue = "قديم", NewValue = "قديم معدل", EditedBy = "test",
+            });
+            await db.SaveChangesAsync();
 
             var nw = Book(("الاسم", ["جديد"]));
             _books.Add(nw);
@@ -269,9 +276,16 @@ public sealed class WorkerTests : IDisposable
             Assert.Equal(1, await db.Files.CountAsync());
             var kept = await db.Files.FirstAsync();
             Assert.Equal(target.Id, kept.Id);
-            Assert.Equal(1, kept.Version);
+            Assert.Equal(2, kept.Version);
             Assert.Equal("جديد", (await db.Records.FirstAsync()).Data.RootElement.GetProperty("الاسم").GetString());
             Assert.DoesNotContain(oldRecordId, await db.Records.Select(r => r.Id).ToListAsync());
+            var archived = Assert.Single(await db.RecordEdits.ToListAsync());
+            Assert.Equal(1, archived.FileVersion);
+            Assert.Null(archived.RecordId);
+            Assert.Equal(target.Id, archived.FileId);
+            Assert.Equal("قديم معدل", archived.NewValue);
+            // Archived rows are invisible to the record page (queried by record).
+            Assert.Empty(await db.RecordEdits.Where(e => e.RecordId == oldRecordId).ToListAsync());
             var reloaded = await db.UploadJobs.FirstAsync(j => j.Id == job.Id);
             Assert.Equal(UploadJobStatus.Done, reloaded.Status);
             Assert.Equal(target.Id, reloaded.FileId);
@@ -295,6 +309,13 @@ public sealed class WorkerTests : IDisposable
             var first = await AddJob(db, Payload(await store.SaveAsync("o.xlsx", Save(old)), group.Id, "target", cols));
             await TestHelpers.UploadProcessor(db, sp).RunAsync(first, CancellationToken.None);
             var targetId = (await db.Files.FirstAsync()).Id;
+            var oldRecordId = (await db.Records.FirstAsync()).Id;
+            db.RecordEdits.Add(new RecordEdit
+            {
+                RecordId = oldRecordId, FileId = targetId,
+                HeaderRaw = "الاسم", OldValue = "قديم", NewValue = "قديم معدل", EditedBy = "test",
+            });
+            await db.SaveChangesAsync();
 
             var nw = Book(("اللقب", ["جديد"]));
             _books.Add(nw);
@@ -307,6 +328,11 @@ public sealed class WorkerTests : IDisposable
             var kept = Assert.Single(await db.Files.ToListAsync());
             Assert.Equal("target", kept.Name);
             Assert.Equal(2, kept.Version);
+            var archived = Assert.Single(await db.RecordEdits.ToListAsync());
+            Assert.Equal(1, archived.FileVersion);
+            Assert.Null(archived.RecordId);
+            Assert.Null(archived.FileColumnId);
+            Assert.Equal(kept.Id, archived.FileId);
             Assert.Contains(activity.Writes, w => w.Action == ActivityAction.FileReplaced);
         }
     }

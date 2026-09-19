@@ -148,6 +148,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.Record)
                 .WithMany(r => r.Edits)
                 .HasForeignKey(x => x.RecordId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.File)
                 .WithMany(f => f.RecordEdits)

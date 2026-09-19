@@ -45,6 +45,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
             {
                 Id = Uuid(g, "id"), Name = ReqText(g, "name"), Description = OptText(g, "description") ?? "",
                 SortOrder = ReqInt(g, "sortOrder"), CreatedAt = ReqDate(g, "createdAt"), UpdatedAt = ReqDate(g, "updatedAt"),
+                IncludeInDefaultSearch = OptBool(g, "includeInDefaultSearch") ?? true,
             });
             var categories = Rows(data, "categories");
             if (categories.Count > ExcelArchive.Application.Services.CategoryService.MaxCustomCategories)
@@ -179,10 +180,11 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
             });
             foreach (var e in Rows(data, "recordEdits", optional: true)) plan.Edits.Add(new RecordEdit
             {
-                Id = Uuid(e, "id"), RecordId = Uuid(e, "recordId"), FileId = Uuid(e, "fileId"),
-                FileColumnId = OptUuid(e, "fileColumnId"), HeaderRaw = ReqText(e, "headerRaw"),
+                Id = Uuid(e, "id"), RecordId = OptUuid(e, "recordId"), FileId = Uuid(e, "fileId"),
+                FileColumnId = OptUuid(e, "fileColumnId"), FileVersion = OptInt(e, "fileVersion") ?? 1,
+                HeaderRaw = ReqText(e, "headerRaw"),
                 OldValue = ReqText(e, "oldValue"), NewValue = ReqText(e, "newValue"),
-                CreatedAt = ReqDate(e, "createdAt"),
+                CreatedAt = ReqDate(e, "createdAt"), EditedBy = OptText(e, "editedBy"),
             });
 
             plan.ValidateReferences();
@@ -253,7 +255,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 || Issues.Any(i => !files.Contains(i.FileId))
                 || Templates.Any(t => !groups.Contains(t.GroupId))
                 || Jobs.Any(j => j.FileId is not null && !files.Contains(j.FileId.Value))
-                || Edits.Any(e => !records.Contains(e.RecordId) || !files.Contains(e.FileId)))
+                || Edits.Any(e => (e.RecordId is not null && !records.Contains(e.RecordId.Value)) || !files.Contains(e.FileId)))
                 throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
             static void NoDuplicateIds<T>(IReadOnlyList<T> rows, Func<T, Guid> id)
             {
@@ -331,6 +333,13 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
         {
             if (!el.TryGetProperty(name, out var prop) || prop.ValueKind == JsonValueKind.Null) return null;
             if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out var value)) return value;
+            throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
+        }
+
+        public static bool? OptBool(JsonElement el, string name)
+        {
+            if (!el.TryGetProperty(name, out var prop) || prop.ValueKind == JsonValueKind.Null) return null;
+            if (prop.ValueKind is JsonValueKind.True or JsonValueKind.False) return prop.GetBoolean();
             throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
         }
 

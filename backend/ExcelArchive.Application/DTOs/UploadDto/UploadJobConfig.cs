@@ -21,7 +21,8 @@ public sealed record UploadJobConfig(
     string Mode,
     Guid? FileId,
     string? ReplaceMode,
-    LinkedJobSheets? Linked)
+    LinkedJobSheets? Linked,
+    IReadOnlyList<KeepOldCell> KeepOldCells)
 {
     public static UploadJobConfig Parse(JsonDocument payload)
     {
@@ -78,8 +79,23 @@ public sealed record UploadJobConfig(
                 || sheetIndex < 1 || total < 0
                 || columns.Count == 0)
                 throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة.");
+
+            var keepOld = new List<KeepOldCell>();
+            if (root.TryGetProperty("keepOldCells", out var ko) && ko.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in ko.EnumerateArray())
+                {
+                    var row = c.TryGetProperty("rowIndex", out var ri) && ri.TryGetInt32(out var rv) ? rv : 0;
+                    var header = c.TryGetProperty("headerRaw", out var h) ? h.GetString() ?? "" : "";
+                    string? key = c.TryGetProperty("matchKey", out var mk) && mk.ValueKind == JsonValueKind.String
+                        ? mk.GetString() : null;
+                    if (row >= 1 && header.Length > 0)
+                        keepOld.Add(new KeepOldCell(row, header, string.IsNullOrWhiteSpace(key) ? null : key));
+                }
+            }
+
             return new UploadJobConfig(tokenGuid, groupId, name, description, original, sheet,
-                sheetIndex, total, columns, mode, fileId, replaceMode, linked);
+                sheetIndex, total, columns, mode, fileId, replaceMode, linked, keepOld);
         }
         catch (InvalidDataException) { throw; }
         catch { throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة."); }
@@ -91,3 +107,7 @@ public sealed record UploadJobColumn(
     StandardField? StandardField, Guid? CategoryId);
 
 public sealed record LinkedJobSheets(IReadOnlyList<string> SheetNames, int NationalIdColumnIndex);
+
+/// <summary>One cell pinned to its current (old) value during a replace:
+/// the import takes the stored value instead of the workbook's.</summary>
+public sealed record KeepOldCell(int RowIndex, string HeaderRaw, string? MatchKey);

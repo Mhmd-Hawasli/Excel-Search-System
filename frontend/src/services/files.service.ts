@@ -1,5 +1,5 @@
 import type { ApiEnvelope } from "@/types/api";
-import type { FileColumn, FileItem } from "@/types/model";
+import type { FileColumn, FileItem, ReplacePreview } from "@/types/model";
 import type { MutationResult } from "@/lib/mutation";
 import { ApiError, apiDelete, apiGet, apiPost } from "./api-client";
 
@@ -110,5 +110,11 @@ export const filesService = {
   async listByGroup(groupId: string): Promise<FileItem[]> {
     const envelope = await apiGet<ApiEnvelope<{ files: FileItem[] }>>(`/api/groups/${groupId}/files`);
     return envelope.data?.files ?? [];
+  },
+
+  async previewReplace(fileId: string, body: Record<string, unknown>): Promise<ReplacePreview> {
+    const envelope = await apiPost<ApiEnvelope<ReplacePreview>>(`/api/files/${fileId}/replace-preview`, body);
+    if (!envelope.data) throw new Error("تعذر معاينة الفروقات.");
+    return envelope.data;
   },
 };
