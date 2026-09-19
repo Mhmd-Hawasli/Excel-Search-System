@@ -40,11 +40,15 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         }).ToList();
     }
 
-    public async Task<EditsResult> ListAsync(Guid? fileId, DataScopeDto scope, int page, int pageSize, CancellationToken ct = default)
+    public async Task<EditsResult> ListAsync(Guid? fileId, DataScopeDto scope, int page, int pageSize,
+        string? person = null, string? column = null, string? oldValue = null,
+        string? newValue = null, int? version = null, string? fromDate = null,
+        string? toDate = null, string? user = null, string? sortBy = null,
+        string? sortDir = "desc", CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, ct);
+        var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, ct);
         // Person full name for the history table (V1 UI-12): one lookup for
         // the page, mapped in memory so deleted records stay visible.
         // Archived (previous-version) edits carry a null record id and keep

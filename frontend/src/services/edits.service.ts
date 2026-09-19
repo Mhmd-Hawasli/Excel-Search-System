@@ -1,4 +1,4 @@
-import { apiGet } from "./api-client";
+import { apiGet, apiPost } from "./api-client";
 
 export interface EditedFileSummary {
   fileId: string;
@@ -11,11 +11,9 @@ export interface EditedFileSummary {
 
 export interface EditHistoryItem {
   id: string;
-  /** Null for edits archived from a previous file version (record replaced). */
   recordId: string | null;
   fileId: string;
   fileColumnId: string | null;
-  /** File version this edit was made on (1 = first version). */
   fileVersion: number;
   headerRaw: string;
   oldValue: string;
@@ -33,14 +31,37 @@ export interface EditHistoryPage {
   pageSize: number;
 }
 
+export interface EditsFilters {
+  person?: string;
+  column?: string;
+  oldValue?: string;
+  newValue?: string;
+  version?: number;
+  fromDate?: string;
+  toDate?: string;
+  user?: string;
+  sortBy?: string;
+  sortDir?: string;
+}
+
 export const editsService = {
   summary(): Promise<{ files: EditedFileSummary[] }> {
     return apiGet<{ files: EditedFileSummary[] }>("/api/edits", { view: "summary" });
   },
-  history(fileId?: string, page = 1, pageSize = 25): Promise<EditHistoryPage> {
-    return apiGet<EditHistoryPage>("/api/edits", { view: "history", fileId, page, pageSize });
+  history(fileId?: string, page = 1, pageSize = 25, filters?: EditsFilters): Promise<EditHistoryPage> {
+    return apiGet<EditHistoryPage>("/api/edits", {
+      view: "history",
+      fileId,
+      page,
+      pageSize,
+      ...filters,
+    });
   },
   exportUrl(fileId: string, markEdits = false): string {
     return `/api/files/${fileId}/export${markEdits ? "?markEdits=true" : ""}`;
+  },
+  async revertEdit(recordId: string, fileColumnId?: string, headerRaw?: string): Promise<{ ok: boolean; changed: boolean; oldValue?: string; newValue?: string }> {
+    const envelope = await apiPost("/api/edits/revert", { recordId, fileColumnId, headerRaw });
+    return (envelope as unknown as { data: { ok: boolean; changed: boolean; oldValue?: string; newValue?: string } }).data;
   },
 };

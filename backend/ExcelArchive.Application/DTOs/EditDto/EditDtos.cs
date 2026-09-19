@@ -3,7 +3,7 @@
 public record EditedFileSummary(Guid FileId, string FileName, Guid GroupId, string GroupName, int EditCount, DateTime LastEditAt);
 public record EditDto(Guid Id, Guid? RecordId, Guid FileId, Guid? FileColumnId, string HeaderRaw, string OldValue, string NewValue, DateTime CreatedAt, string? PersonName = null, int? RowIndex = null, string? EditedBy = null, int FileVersion = 1);
 public record EditsResult(IReadOnlyList<EditDto> Items, int Total, int Page, int PageSize);
-public record RevertEditRequest(Guid EditId, string NewValue);
+public record RevertEditRequest(Guid RecordId, Guid? FileColumnId, string? HeaderRaw);
 public record VisitRecordRequest(Guid RecordId);
 
 /// <summary>V1 lib/edits/service getRecordEdits shape: newest-first list plus

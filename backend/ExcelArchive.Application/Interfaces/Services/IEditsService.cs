@@ -6,7 +6,11 @@ namespace ExcelArchive.Application.Interfaces.Services;
 public interface IEditsService
 {
     Task<IReadOnlyList<EditedFileSummary>> SummaryAsync(DataScopeDto scope, CancellationToken ct = default);
-    Task<EditsResult> ListAsync(Guid? fileId, DataScopeDto scope, int page, int pageSize, CancellationToken ct = default);
+    Task<EditsResult> ListAsync(Guid? fileId, DataScopeDto scope, int page, int pageSize,
+        string? person = null, string? column = null, string? oldValue = null,
+        string? newValue = null, int? version = null, string? fromDate = null,
+        string? toDate = null, string? user = null, string? sortBy = null,
+        string? sortDir = "desc", CancellationToken ct = default);
     Task<RecordEditsResult> GetRecordEditsAsync(Guid recordId, CancellationToken ct = default);
     Task<EditResult> SaveAsync(Guid recordId, Guid? fileColumnId, string? headerRaw, string newValue, string actorUsername, DataScopeDto scope, CancellationToken ct = default);
     /// <summary>Server-derived revert: restores the previous effective value from
