@@ -279,11 +279,19 @@ public sealed class WorkerTests : IDisposable
             Assert.Equal(2, kept.Version);
             Assert.Equal("جديد", (await db.Records.FirstAsync()).Data.RootElement.GetProperty("الاسم").GetString());
             Assert.DoesNotContain(oldRecordId, await db.Records.Select(r => r.Id).ToListAsync());
-            var archived = Assert.Single(await db.RecordEdits.ToListAsync());
+            var allEdits = await db.RecordEdits.ToListAsync();
+            Assert.Equal(2, allEdits.Count);
+            var archived = Assert.Single(allEdits, e => e.RecordId == null);
             Assert.Equal(1, archived.FileVersion);
-            Assert.Null(archived.RecordId);
             Assert.Equal(target.Id, archived.FileId);
             Assert.Equal("قديم معدل", archived.NewValue);
+            // Bulk audit: the cell change قديم → جديد is logged as version N+1.
+            var bulk = Assert.Single(allEdits, e => e.RecordId != null);
+            Assert.Equal(2, bulk.FileVersion);
+            Assert.Equal(target.Id, bulk.FileId);
+            Assert.Equal("الاسم", bulk.HeaderRaw);
+            Assert.Equal("قديم", bulk.OldValue);
+            Assert.Equal("جديد", bulk.NewValue);
             // Archived rows are invisible to the record page (queried by record).
             Assert.Empty(await db.RecordEdits.Where(e => e.RecordId == oldRecordId).ToListAsync());
             var reloaded = await db.UploadJobs.FirstAsync(j => j.Id == job.Id);

@@ -52,12 +52,17 @@ public class BackupController(IBackupService backup, IAuthService auth) : ApiCon
 
     [HttpPost("backup/migration-import")]
     [DisableRequestSizeLimit]
-    public async Task<IActionResult> MigrationImport(IFormFile file)
+    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)]
+    public async Task<IActionResult> MigrationImport(IFormFile? file)
     {
         var user = await RequirePermissionAsync(Permissions.BackupRestore);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
         if (file is null || !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             return Bad("اختر ملف ترحيل الحسابات بصيغة JSON.");
+        // Previously unbounded (DisableRequestSizeLimit with no Length check):
+        // cap account-migration uploads to 50 MiB like other structured imports.
+        if (file.Length > 50 * 1024 * 1024)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, "حجم ملف الترحيل يتجاوز 50 ميغابايت.");
         try
         {
             await using var stream = file.OpenReadStream();

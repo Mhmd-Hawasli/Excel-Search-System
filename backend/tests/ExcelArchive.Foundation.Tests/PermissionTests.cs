@@ -103,18 +103,25 @@ public sealed class PermissionTests
     }
 
     [Fact]
-    public void GroupsManageAlias_WorksBothDirections()
+    public void GroupsManageAlias_ManageGrantKeepsViewPowerOnly()
     {
+        // One direction only: a legacy stored groups.manage grant still opens
+        // read paths, but a plain groups.view grant never satisfies a
+        // management check (read-only).
         Assert.True(Has(Permissions.GroupsView, TestHelpers.Perm(Permissions.GroupsManage)));
-        Assert.True(Has(Permissions.GroupsManage, TestHelpers.Perm(Permissions.GroupsView)));
+        Assert.False(Has(Permissions.GroupsManage, TestHelpers.Perm(Permissions.GroupsView)));
     }
 
     [Fact]
-    public void LegacyGroupsView_ImpliesCreateAndUpdate()
+    public void GroupsView_IsReadOnly_DoesNotImplyCreateOrUpdate()
     {
+        // Security: a plain groups.view grant is READ-ONLY and must never
+        // imply management power (previously any global viewer passed
+        // GroupsCreate/GroupsUpdate, letting read-only users manage groups
+        // and move/delete files). Only groups.manage keeps the alias.
         var view = TestHelpers.Perm(Permissions.GroupsView);
-        Assert.True(Has(Permissions.GroupsCreate, view));
-        Assert.True(Has(Permissions.GroupsUpdate, view));
+        Assert.False(Has(Permissions.GroupsCreate, view));
+        Assert.False(Has(Permissions.GroupsUpdate, view));
         var manage = TestHelpers.Perm(Permissions.GroupsManage);
         Assert.True(Has(Permissions.GroupsCreate, manage));
         Assert.True(Has(Permissions.GroupsUpdate, manage));

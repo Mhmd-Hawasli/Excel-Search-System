@@ -95,7 +95,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
             ) : null}
             {canViewHistory ? (
               <Button asChild variant="outline">
-                <Link href={`/edits?fileId=${file.id}`}>
+                <Link href={`/edits/${file.id}`}>
                   <PencilLine className="size-4" />
                   سجل التعديلات{editCount ? ` (${editCount})` : ""}
                 </Link>
@@ -138,7 +138,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
           </p>
           {canViewHistory ? (
             <Button asChild size="sm" variant="outline">
-              <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
+              <Link href={`/edits/${file.id}`}>عرض سجل التعديلات</Link>
             </Button>
           ) : null}
         </div>
@@ -163,7 +163,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
             ) : null}
             {canViewHistory ? (
               <Button asChild size="sm" variant="outline">
-                <Link href={`/edits?fileId=${file.id}`}>عرض سجل التعديلات</Link>
+                <Link href={`/edits/${file.id}`}>عرض سجل التعديلات</Link>
               </Button>
             ) : null}
             {canExport ? (

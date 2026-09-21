@@ -49,7 +49,9 @@ public sealed class ExportTests
         Assert.Equal("FFFFC000", sheet.Row(1).Cell(1).Style.Fill.BackgroundColor.Color.ToArgb().ToString("X8"));
 
         Assert.True(sheet.Tables.Any());
-        Assert.Equal(30, sheet.Row(2).Height);
+        // Perf: no forced row heights and no wrap-text on large exports —
+        // both make Excel hang while opening big files.
+        Assert.False(sheet.Cell("A2").Style.Alignment.WrapText);
     }
 
     [Fact]
@@ -150,11 +152,88 @@ public sealed class ExportTests
     [InlineData("31/02/2024", null)]
     [InlineData("hello", null)]
     [InlineData("", null)]
+    [InlineData("12/31/2025", "2025-12-31")] // US month-first source file
+    [InlineData("31.12.2025", "2025-12-31")] // dot separator
+    [InlineData("2025/12/31", "2025-12-31")] // ISO with slashes
+    [InlineData("05/09/2024 10:30", "2024-09-05")] // trailing time dropped
+    [InlineData("2024-09-05T10:30:00", "2024-09-05")] // ISO datetime
+    [InlineData("05/09/24", "2024-09-05")] // 2-digit year
+    [InlineData("45658", null)] // bare numbers are never dates (IDs/phones)
     public void ParseStoredDate_Validates(string input, string? expected)
     {
         var parsed = FileExportBuilder.ParseStoredDate(input);
         if (expected is null) Assert.Null(parsed);
         else Assert.Equal(DateTime.Parse(expected), parsed);
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    [InlineData("   ", "")]
+    [InlineData("﻿ ", "")] // BOM + space
+    [InlineData("​", "")] // zero-width space only
+    [InlineData("‏ ", "")] // RTL mark + space
+    [InlineData(" ", "")] // non-breaking space only
+    [InlineData("  أحمد  ", "أحمد")] // edge padding stripped
+    [InlineData("مي‌شود", "مي‌شود")] // interior ZWNJ preserved
+    public void CleanCellText_StripsInvisible(string? input, string expected)
+    {
+        Assert.Equal(expected, FileExportBuilder.CleanCellText(input));
+    }
+
+    [Fact]
+    public void Export_InvisibleOnlyCells_StayBlank()
+    {
+        var bytes = FileExportBuilder.Build("S", ["الاسم", "فارغ"],
+            [new ExportRecord(Guid.NewGuid(), 2,
+                new Dictionary<string, string> { ["الاسم"] = "أحمد", ["فارغ"] = " ﻿​‏ " },
+                null, null)],
+            []);
+        using var wb = Load(bytes);
+        var sheet = wb.Worksheets.First(w => w.Name == "S");
+        Assert.Equal("أحمد", sheet.Cell("A2").GetString());
+        Assert.True(sheet.Cell("B2").IsEmpty());
+    }
+
+    [Theory]
+    [InlineData("123456789", "00123456789")]
+    [InlineData("00123456789", "00123456789")]
+    [InlineData("12345678901", "12345678901")]
+    [InlineData("abc", "abc")]
+    [InlineData("", "")]
+    public void NormalizeNationalId_PadsTo11(string input, string expected)
+    {
+        Assert.Equal(expected, FileExportBuilder.NormalizeNationalId(input));
+    }
+
+    [Fact]
+    public void Export_NationalIdColumn_PaddedTo11DigitsAsText()
+    {
+        var bytes = FileExportBuilder.Build("S", ["الاسم", "الوطني"],
+            [new ExportRecord(Guid.NewGuid(), 2,
+                new Dictionary<string, string> { ["الاسم"] = "أحمد", ["الوطني"] = "123456789" },
+                null, null)],
+            [], nationalIdHeader: "الوطني");
+        using var wb = Load(bytes);
+        var sheet = wb.Worksheets.First(w => w.Name == "S");
+        var cell = sheet.Cell("B2");
+        Assert.Equal("00123456789", cell.GetString());
+        Assert.Equal(XLDataType.Text, cell.DataType);
+    }
+
+    [Fact]
+    public void Export_NationalLogCell_PaddedTo11Digits()
+    {
+        var record = new ExportRecord(Guid.NewGuid(), 2,
+            new Dictionary<string, string> { ["الاسم"] = "x" }, null, null, "فلان", "123456789");
+        var edits = new List<ExportEdit>
+        {
+            new(record.Id.ToString(), "الاسم", "قديم", "جديد", "test", new DateTime(2025, 12, 31, 0, 0, 0, DateTimeKind.Utc)),
+        };
+        var bytes = FileExportBuilder.Build("S", ["الاسم"], [record], edits, markEdits: true);
+        using var wb = Load(bytes);
+        var log = wb.Worksheets.First(w => w.Name == "سجل التعديلات");
+        Assert.Equal("00123456789", log.Cell(2, 3).GetString());
     }
 
     [Fact]

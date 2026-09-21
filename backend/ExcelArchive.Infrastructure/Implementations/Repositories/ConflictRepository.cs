@@ -74,7 +74,24 @@ public class ConflictRepository(AppDbContext db) : RepositoryBase<IgnoredConflic
     }
 
     public async Task<IReadOnlyList<IgnoredConflict>> IgnoredByRecordIdsAsync(IEnumerable<Guid> recordIds, CancellationToken ct = default)
-        => await Db.IgnoredConflicts.AsNoTracking()
-            .Where(i => recordIds.Contains(i.RecordId))
-            .ToListAsync(ct);
+    {
+        // Chunked: a 20k+ id IN-list explodes the parameter count and the
+        // query-plan cache (one plan per batch size). 2000 per batch is safe.
+        var result = new List<IgnoredConflict>();
+        var batch = new List<Guid>(2000);
+        foreach (var id in recordIds)
+        {
+            batch.Add(id);
+            if (batch.Count < 2000) continue;
+            result.AddRange(await Db.IgnoredConflicts.AsNoTracking()
+                .Where(i => batch.Contains(i.RecordId))
+                .ToListAsync(ct));
+            batch.Clear();
+        }
+        if (batch.Count > 0)
+            result.AddRange(await Db.IgnoredConflicts.AsNoTracking()
+                .Where(i => batch.Contains(i.RecordId))
+                .ToListAsync(ct));
+        return result;
+    }
 }

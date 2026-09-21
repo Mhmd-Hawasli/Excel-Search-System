@@ -9,7 +9,10 @@ public interface IRecordEditRepository : IRepositoryBase<RecordEdit>
     Task<(IReadOnlyList<RecordEdit> Rows, int Total)> ListPagedAsync(Guid? fileId, IReadOnlyList<Guid>? fileIds, int page, int pageSize,
         string? person, string? column, string? oldValue, string? newValue,
         int? version, string? fromDate, string? toDate, string? user,
-        string? sortBy, string? sortDir, CancellationToken ct = default);
+        string? sortBy, string? sortDir, IReadOnlyList<string>? columns,
+        IReadOnlyList<string>? users, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> DistinctHeadersAsync(Guid fileId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> DistinctEditorsAsync(Guid fileId, CancellationToken ct = default);
     Task<IReadOnlyList<RecordEdit>> ListByRecordAsync(Guid recordId, CancellationToken ct = default);
     Task<RecordEdit?> LatestByRecordAndHeaderAsync(Guid recordId, string headerRaw, CancellationToken ct = default);
     Task<int> CountByRecordAsync(Guid recordId, CancellationToken ct = default);

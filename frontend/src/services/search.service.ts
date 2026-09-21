@@ -49,7 +49,7 @@ export interface SearchResponse {
 }
 
 export const searchService = {
-  async search(params: SearchParams): Promise<SearchResponse> {
+  async search(params: SearchParams, init: RequestInit = {}): Promise<SearchResponse> {
     const envelope = await apiGet<ApiEnvelope<SearchResponse>>("/api/search", {
       q: params.q,
       mode: params.mode ?? "full",
@@ -63,7 +63,7 @@ export const searchService = {
       sortDirection: params.sortDirection ?? "asc",
       // Default true server-side: only send an explicit false.
       similar: params.similar === false ? false : undefined,
-    });
+    }, init);
     if (!envelope.data) throw new Error("تعذر تحميل نتائج البحث.");
     return envelope.data;
   },

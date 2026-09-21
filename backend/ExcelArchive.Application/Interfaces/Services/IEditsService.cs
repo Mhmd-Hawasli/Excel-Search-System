@@ -10,7 +10,12 @@ public interface IEditsService
         string? person = null, string? column = null, string? oldValue = null,
         string? newValue = null, int? version = null, string? fromDate = null,
         string? toDate = null, string? user = null, string? sortBy = null,
-        string? sortDir = "desc", CancellationToken ct = default);
+        string? sortDir = "desc", IReadOnlyList<string>? columns = null,
+        IReadOnlyList<string>? users = null, CancellationToken ct = default);
+    /// <summary>Exact-match candidates for one file's history filters:
+    /// distinct edited columns, editing users (merged with active system
+    /// users), and the file's current version.</summary>
+    Task<EditOptionsDto> OptionsAsync(Guid fileId, DataScopeDto scope, CancellationToken ct = default);
     Task<RecordEditsResult> GetRecordEditsAsync(Guid recordId, CancellationToken ct = default);
     Task<EditResult> SaveAsync(Guid recordId, Guid? fileColumnId, string? headerRaw, string newValue, string actorUsername, DataScopeDto scope, CancellationToken ct = default);
     /// <summary>Server-derived revert: restores the previous effective value from

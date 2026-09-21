@@ -182,13 +182,18 @@ public class UserService(IUnitOfWork uow, IAuthService auth, IActivityService ac
                 : [];
         var seen = new HashSet<string>();
         var result = new List<PermissionAssignmentDto>();
-        foreach (var row in rows.Where(r => r.Permission != Permissions.GroupsView
-            && !(r.Permission == Permissions.GroupsViewScoped && r.GroupId is not null)))
+        // Keep group-level grants as stored: ScopedArchiveQuery expands them
+        // dynamically, so files added to the group LATER stay visible.
+        // Previously group rows were replaced by per-file snapshots, which
+        // silently hid every file uploaded after the permission was saved.
+        foreach (var row in rows)
         {
             if (seen.Add($"{row.Permission}|{row.GroupId}|{row.FileId}")) result.Add(row);
         }
         // Explicit global view-all grant (users page checkbox): persist it so
         // future files are covered, not just the snapshot below.
+        // (Kept for clarity: the loop above already stored it; this is a no-op
+        // safeguard when the loop changes.)
         var globalView = rows.FirstOrDefault(r => r.Permission == Permissions.GroupsView
             && r.GroupId is null && r.FileId is null);
         if (globalView is not null && seen.Add($"{globalView.Permission}||")) result.Add(globalView);

@@ -174,6 +174,14 @@ public class BulkSearchController(IAuthService auth, IBulkSearchService bulk) : 
             }
             if (rows.Count == 0 && unmatched.Count == 0)
                 return Bad("لا توجد نتائج للتصدير.");
+            // Client-supplied payload: cap total sequences so a forged giant
+            // body cannot force an unbounded in-memory workbook build (DoS).
+            var totalSequences = rows.Select(r => r.Sequence)
+                .Concat(unmatched.Select(u => u.Sequence))
+                .Distinct().Count();
+            if (totalSequences > BulkSearchMatch.MaxExportSequences)
+                return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                    ApiResponse.Failure($"عدد القيم ({totalSequences}) يتجاوز حد التصدير ({BulkSearchMatch.MaxExportSequences})."));
             rows = rows
                 .OrderBy(r => r.Sequence)
                 .ThenByDescending(r => r.MatchPercent)

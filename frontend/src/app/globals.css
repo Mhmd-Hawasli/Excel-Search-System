@@ -562,6 +562,17 @@
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 7mm;
+  }
+  /* تصدير السجل: فئة واحدة متماسكة + بطاقات لا تنكسر لتبقى كل المعلومات في صفحة واحدة. */
+  .record-pdf section {
+    break-inside: avoid;
+  }
+  .record-pdf dl > div {
+    break-inside: avoid;
+  }
   :root {
     color-scheme: light;
     --background: 0 0% 100%;

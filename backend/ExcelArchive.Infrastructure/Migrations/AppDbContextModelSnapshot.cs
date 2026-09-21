@@ -647,6 +647,10 @@ namespace ExcelArchive.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("header_raw");
 
+                    b.Property<string>("NationalId")
+                        .HasColumnType("text")
+                        .HasColumnName("national_id");
+
                     b.Property<string>("NewValue")
                         .IsRequired()
                         .HasColumnType("text")

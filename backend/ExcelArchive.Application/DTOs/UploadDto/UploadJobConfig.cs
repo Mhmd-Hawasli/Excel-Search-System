@@ -22,7 +22,8 @@ public sealed record UploadJobConfig(
     Guid? FileId,
     string? ReplaceMode,
     LinkedJobSheets? Linked,
-    IReadOnlyList<KeepOldCell> KeepOldCells)
+    IReadOnlyList<KeepOldCell> KeepOldCells,
+    string? RequestedBy = null)
 {
     public static UploadJobConfig Parse(JsonDocument payload)
     {
@@ -94,8 +95,16 @@ public sealed record UploadJobConfig(
                 }
             }
 
+            string? requestedBy = null;
+            if (root.TryGetProperty("requestedBy", out var rb) && rb.ValueKind == JsonValueKind.String)
+            {
+                var v = rb.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(v) && v.Length <= 200)
+                    requestedBy = v;
+            }
+
             return new UploadJobConfig(tokenGuid, groupId, name, description, original, sheet,
-                sheetIndex, total, columns, mode, fileId, replaceMode, linked, keepOld);
+                sheetIndex, total, columns, mode, fileId, replaceMode, linked, keepOld, requestedBy);
         }
         catch (InvalidDataException) { throw; }
         catch { throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة."); }

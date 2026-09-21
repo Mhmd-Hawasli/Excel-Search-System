@@ -77,7 +77,7 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
         => await Db.Records.AsNoTracking()
             .Where(r => r.FileId == fileId)
             .Select(r => (int?)r.RowIndex)
-            .MaxAsync(ct) ?? 1;
+            .MaxAsync(ct) ?? 0;
 
     public Task<bool> ExistsNationalAsync(Guid fileId, string dNationalId, CancellationToken ct = default)
         => Db.Records.AsNoTracking()
@@ -99,6 +99,17 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
     {
         // Fallback for non-normalized duplicates (e.g. invalid sham-cash):
         // exact raw match on the same column inside the same file only.
+        // SQL-side jsonb lookup on PostgreSQL (previously the ENTIRE file's
+        // Data documents were loaded into memory and scanned in C# — OOM on
+        // large files); portable client-side scan only for non-relational
+        // providers (InMemory unit tests).
+        if (Db.Database.IsNpgsql())
+        {
+            var hit = await Db.Database.SqlQueryRaw<int>(
+                "SELECT 1 AS \"Value\" FROM \"records\" WHERE \"file_id\" = {0} AND (\"data\" ->> {1}) = {2} LIMIT 1",
+                fileId, headerRaw, value).ToListAsync(ct);
+            return hit.Count > 0;
+        }
         var rows = await Db.Records.AsNoTracking()
             .Where(r => r.FileId == fileId)
             .Select(r => r.Data)
@@ -118,12 +129,23 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
 
     public async Task<IReadOnlyList<string>> ListDistinctValuesAsync(Guid fileId, string headerRaw, int take, CancellationToken ct = default)
     {
-        var rows = await Db.Records.AsNoTracking()
+        var limit = Math.Clamp(take, 1, 200);
+        // SQL-side distinct+count over jsonb on PostgreSQL (previously: whole
+        // file materialized + grouped in memory). Ordered by frequency desc.
+        if (Db.Database.IsNpgsql())
+        {
+            return await Db.Database.SqlQueryRaw<string>(
+                "SELECT v AS \"Value\" FROM (SELECT TRIM(\"data\" ->> {1}) AS v, COUNT(*) AS c FROM \"records\" " +
+                "WHERE \"file_id\" = {0} AND NULLIF(TRIM(\"data\" ->> {1}), '') IS NOT NULL " +
+                "GROUP BY TRIM(\"data\" ->> {1})) s ORDER BY c DESC, v LIMIT {2}",
+                fileId, headerRaw, limit).ToListAsync(ct);
+        }
+        var docs = await Db.Records.AsNoTracking()
             .Where(r => r.FileId == fileId)
             .Select(r => r.Data)
             .ToListAsync(ct);
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var doc in rows)
+        foreach (var doc in docs)
         {
             if (doc is null || doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
             if (!doc.RootElement.TryGetProperty(headerRaw, out var prop)) continue;
@@ -135,7 +157,7 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
             counts[stored] = counts.TryGetValue(stored, out var c) ? c + 1 : 1;
         }
         return counts.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal)
-            .Take(Math.Clamp(take, 1, 200))
+            .Take(limit)
             .Select(kv => kv.Key)
             .ToList();
     }

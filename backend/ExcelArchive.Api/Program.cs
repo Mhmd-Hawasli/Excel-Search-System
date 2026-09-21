@@ -132,18 +132,36 @@ builder.Services.AddHealthChecks()
     .AddCheck<PostgresHealthCheck>("postgres", tags: ["ready"])
     .AddCheck<SearchSchemaHealthCheck>("search-schema", tags: ["ready"]);
 
-// Rate limiting: strict for login, permissive general API
+// Rate limiting: strict per-IP for login (brute-force), permissive per-IP
+// general API. MUST be partitioned by client IP: a single global window lets
+// one attacker exhaust everyone's quota (DoS) and the blanket endpoint policy
+// previously shadowed the login policy so brute force was never throttled.
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("login", o =>
-    {
-        o.PermitLimit = 20; o.Window = TimeSpan.FromMinutes(1); o.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("api", o =>
-    {
-        o.PermitLimit = 300; o.Window = TimeSpan.FromMinutes(1); o.QueueLimit = 50;
-    });
+    static string ClientIp(HttpContext ctx) =>
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        RateLimitPartition.GetFixedWindowLimiter(ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 300,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 50,
+        }));
+    options.AddPolicy("login", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter("login-" + ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
+    options.AddPolicy("api", ctx =>
+        RateLimitPartition.GetFixedWindowLimiter("api-" + ClientIp(ctx), _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 300,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 50,
+        }));
 });
 
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["http://localhost:3000"];
@@ -219,7 +237,10 @@ app.UseMiddleware<AuthMiddleware>();
 
 app.MapHealthChecks("/health/live").RequireRateLimiting("api");
 app.MapHealthChecks("/health/ready").RequireRateLimiting("api");
-app.MapControllers().RequireRateLimiting("api");
+// NOTE: no blanket RequireRateLimiting("api") on controllers: it shadows the
+// [EnableRateLimiting("login")] endpoint policy (first metadata wins, so the
+// login throttle never fired). The GlobalLimiter above covers every endpoint.
+app.MapControllers();
 
 await DbSeeder.SeedAsync(app.Services, app.Configuration);
 

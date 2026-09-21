@@ -36,7 +36,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         {
             var file = files.FirstOrDefault(f => f.Id == r.FileId);
             return new EditedFileSummary(r.FileId, file?.Name ?? "", file?.GroupId ?? Guid.Empty,
-                file?.Group.Name ?? "", r.Count, r.Last);
+                file?.Group.Name ?? "", r.Count, r.Last, file?.Version ?? 1);
         }).ToList();
     }
 
@@ -44,11 +44,12 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         string? person = null, string? column = null, string? oldValue = null,
         string? newValue = null, int? version = null, string? fromDate = null,
         string? toDate = null, string? user = null, string? sortBy = null,
-        string? sortDir = "desc", CancellationToken ct = default)
+        string? sortDir = "desc", IReadOnlyList<string>? columns = null,
+        IReadOnlyList<string>? users = null, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, ct);
+        var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users, ct);
         // Person full name for the history table (V1 UI-12): one lookup for
         // the page, mapped in memory so deleted records stay visible.
         // Archived (previous-version) edits carry a null record id and keep
@@ -56,13 +57,73 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         var recordIds = rows.Where(e => e.RecordId.HasValue).Select(e => e.RecordId!.Value).Distinct().ToList();
         var people = await uow.Records.ListPeopleByIdsAsync(recordIds, ct);
         var byRecord = people.Select(r => new EditPerson(r.Id, r.SfFullName, r.SfFirstName, r.SfFatherName, r.SfLastName, r.RowIndex)).ToDictionary(r => r.Id);
+        var liveById = people.ToDictionary(r => r.Id);
+        // Stable identity by national ID (not Excel row number, which shifts
+        // when rows are deleted): resolves the CURRENT record + current value
+        // for every edit, including archived ones whose record was replaced.
+        var nationalIds = rows
+            .Where(e => !string.IsNullOrWhiteSpace(e.NationalId))
+            .Select(e => e.NationalId!)
+            .Distinct()
+            .ToList();
+        var byNational = new Dictionary<(Guid FileId, string National), Record>(rows.Count);
+        if (nationalIds.Count > 0)
+        {
+            foreach (var fid in rows.Select(e => e.FileId).Distinct().ToList())
+            {
+                ct.ThrowIfCancellationRequested();
+                var matches = await uow.Records.ListAsync(
+                    r => r.FileId == fid && r.DNationalId != null && nationalIds.Contains(r.DNationalId), ct);
+                foreach (var m in matches)
+                    byNational.TryAdd((fid, m.DNationalId!), m);
+            }
+        }
         return new EditsResult(rows.Select(e =>
         {
             byRecord.TryGetValue(e.RecordId ?? Guid.Empty, out var person);
+            Record? target = null;
+            if (e.RecordId.HasValue)
+                liveById.TryGetValue(e.RecordId.Value, out target);
+            if (target is null && !string.IsNullOrWhiteSpace(e.NationalId))
+                byNational.TryGetValue((e.FileId, e.NationalId), out target);
+            string? currentValue = null;
+            if (target is not null)
+            {
+                var data = RowData(target.Data);
+                currentValue = data.TryGetValue(e.HeaderRaw, out var v) ? v ?? "" : "";
+            }
             return new EditDto(e.Id, e.RecordId, e.FileId, e.FileColumnId,
                 e.HeaderRaw, e.OldValue, e.NewValue, e.CreatedAt,
-                person?.DisplayName(), person?.RowIndex, e.EditedBy, e.FileVersion);
+                person?.DisplayName(), person?.RowIndex, e.EditedBy, e.FileVersion,
+                e.NationalId, currentValue, target?.Id);
         }).ToList(), total, page, pageSize);
+    }
+
+    public async Task<EditOptionsDto> OptionsAsync(Guid fileId, DataScopeDto scope, CancellationToken ct = default)
+    {
+        if (scope.FileIds is not null && !scope.FileIds.Contains(fileId))
+            throw new KeyNotFoundException("غير موجود.");
+        var file = await uow.Files.FindAsync(fileId, ct)
+            ?? throw new KeyNotFoundException("الملف غير موجود.");
+        var columns = await uow.RecordEdits.DistinctHeadersAsync(fileId, ct);
+        var editors = await uow.RecordEdits.DistinctEditorsAsync(fileId, ct);
+        // Column/user multi-select candidates: everyone who edited this file
+        // plus every active system user (a user with zero edits simply yields
+        // an empty result when selected).
+        var systemUsers = await uow.Users.ListWithPermissionsAsync(ct);
+        var displayByUser = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var u in systemUsers.Where(u => u.IsActive))
+            displayByUser.TryAdd(u.Username, u.DisplayName);
+        var names = editors
+            .Concat(displayByUser.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+        return new EditOptionsDto(
+            columns.ToList(),
+            names.Select(n => new EditUserOption(n,
+                displayByUser.TryGetValue(n, out var d) ? d : null)).ToList(),
+            file.Version);
     }
 
     public async Task<RecordEditsResult> GetRecordEditsAsync(Guid recordId, CancellationToken ct = default)
@@ -90,7 +151,8 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
     public async Task<EditResult> SaveAsync(Guid recordId, Guid? fileColumnId, string? headerRaw,
         string newValue, string actorUsername, DataScopeDto scope, CancellationToken ct = default)
     {
-        newValue ??= "";
+        // trim قبل الحفظ (طبقة الخادم هي المرجع): مسافات زائدة لا تُخزَّن ولا تُنشئ سجل تعديل.
+        newValue = (newValue ?? "").Trim();
         if (newValue.Length > 5000) throw new InvalidOperationException("القيمة الجديدة طويلة جدًا.");
 
         var record = await uow.Records.FindWithFileAsync(recordId, ct)
@@ -117,6 +179,17 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         var nextValidNum = ValidNationalNum(nextNationalRaw);
         var nationalChanged = !string.Equals(prevNationalRaw, nextNationalRaw, StringComparison.Ordinal);
 
+        // Stable person identity for the history (survives row deletions and
+        // file replacements, unlike Excel row numbers).
+        string? editNationalId = null;
+        var nationalCol = columns.FirstOrDefault(c => c.StandardField == StandardField.NationalId);
+        if (nationalCol is not null)
+        {
+            nextData.TryGetValue(nationalCol.HeaderRaw, out var nationalRaw);
+            var norm = ArabicNormalizer.NormalizeNationalId(nationalRaw ?? "");
+            editNationalId = string.IsNullOrEmpty(norm) ? null : norm;
+        }
+
         // Single SaveChanges is atomic on relational providers; the unit of
         // work additionally binds an explicit transaction on relational
         // providers only (InMemory has none).
@@ -138,6 +211,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
                 OldValue = oldValue,
                 NewValue = newValue,
                 EditedBy = actorUsername,
+                NationalId = editNationalId,
             });
 
             // Recompute sf_*/n_*/d_*/nationalIdNum via the shared mapper (V1 buildRecordFieldUpdates).
@@ -260,6 +334,12 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             ?? throw new KeyNotFoundException("غير موجود.");
         if (scope.FileIds is not null && !scope.FileIds.Contains(record.FileId))
             throw new KeyNotFoundException("غير موجود.");
+        // Audit de-duplication: repeated views of the same record by the same
+        // visitor within 5 minutes share one audit row instead of spamming
+        // activity_log (storage DoS + noisy audit trail).
+        if (await uow.ActivityLogs.ExistsRecentVisitAsync(
+                recordId, user.Username, DateTime.UtcNow.AddMinutes(-5), ct))
+            return;
         var name = record.SfFullName
             ?? string.Join(" ", new[] { record.SfFirstName, record.SfFatherName, record.SfLastName }
                 .Where(p => !string.IsNullOrWhiteSpace(p)));

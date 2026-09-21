@@ -45,16 +45,22 @@ public class ConflictService(
 
         var (engineRows, ignoredPairs, _) = await LoadEngineDataAsync(records, ct);
 
-        // Per-row invalid/missing.
-        var perRow = new Dictionary<Guid, List<ConflictEngine.EngineIssue>>();
-        foreach (var row in engineRows)
-        {
-            var list = ConflictEngine.EvaluateInvalidMissing(row, today, selected)
-                .Where(iss => !ignoredPairs.Contains($"{iss.Rule}|{row.Id}"))
-                .ToList();
-            if (list.Count > 0)
-                perRow[row.Id] = list;
-        }
+        // Per-row invalid/missing. CPU-bound over the whole archive scan:
+        // evaluated in parallel (pure static engine, concurrent reads only).
+        var perRow = new System.Collections.Concurrent.ConcurrentDictionary<Guid, List<ConflictEngine.EngineIssue>>();
+        System.Threading.Tasks.Parallel.ForEach(engineRows,
+            new System.Threading.Tasks.ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1),
+            },
+            row =>
+            {
+                var list = ConflictEngine.EvaluateInvalidMissing(row, today, selected)
+                    .Where(iss => !ignoredPairs.Contains($"{iss.Rule}|{row.Id}"))
+                    .ToList();
+                if (list.Count > 0)
+                    perRow[row.Id] = list;
+            });
 
         // Grouped similar2 (only when the category selects it).
         var similar = new Dictionary<Guid, IReadOnlyList<ConflictEngine.EngineIssue>>();
@@ -227,11 +233,17 @@ public class ConflictService(
                 Ignored = await conflicts.IgnoredCountAsync(ct),
             };
         var allRules = ConflictCatalog.Rules.Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
-        var perRow = new List<(Guid Id, string Rule)>();
-        foreach (var row in engineRows)
+        var perRow = new System.Collections.Concurrent.ConcurrentBag<(Guid Id, string Rule)>();
+        var parallelOptions = new System.Threading.Tasks.ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1),
+        };
+        System.Threading.Tasks.Parallel.ForEach(engineRows, parallelOptions, row =>
+        {
             foreach (var iss in ConflictEngine.EvaluateInvalidMissing(row, today, allRules))
                 if (!ignoredPairs.Contains($"{iss.Rule}|{row.Id}"))
                     perRow.Add((row.Id, iss.Rule));
+        });
         foreach (var kv in ConflictEngine.EvaluateSimilar(engineRows, allRules))
             foreach (var iss in kv.Value)
                 if (!ignoredPairs.Contains($"{iss.Rule}|{kv.Key}"))

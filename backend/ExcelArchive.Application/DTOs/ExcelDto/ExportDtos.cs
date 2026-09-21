@@ -14,4 +14,5 @@ public sealed record FileExportDataDto(
     string FileName,
     IReadOnlyList<string> Headers,
     IReadOnlyList<ExportRecordDto> Records,
-    IReadOnlyList<ExportEditDto> Edits);
+    IReadOnlyList<ExportEditDto> Edits,
+    string? NationalIdHeader = null);

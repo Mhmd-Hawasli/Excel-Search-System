@@ -22,6 +22,13 @@ public class RecordEdit
     /// legacy rows recorded before the field existed).</summary>
     public string? EditedBy { get; set; }
 
+    /// <summary>Normalized (11-char, zero-padded) national ID of the edited
+    /// person at edit time. Stable row identity: unlike Excel row numbers it
+    /// survives row deletions/insertions and file replacements, so archived
+    /// edits (null record id) can still resolve the CURRENT record and its
+    /// current value. Null when the file has no (valid) national-id column.</summary>
+    public string? NationalId { get; set; }
+
     public Record? Record { get; set; }
     public File File { get; set; } = null!;
     public FileColumn? FileColumn { get; set; }

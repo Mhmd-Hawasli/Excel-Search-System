@@ -89,9 +89,11 @@ public class RecordsController(
     [HttpPost("records/{id:guid}/visit")]
     public async Task<IActionResult> Visit(Guid id)
     {
-        var user = CurrentUser ?? await Auth.GetSessionUserAsync(Request.Cookies[SessionCookie.Name]);
+        // Visits write audit rows: require data-read power (previously ANY
+        // authenticated session could write unbounded activity_log rows).
+        var user = await RequirePermissionAsync(Permissions.SearchView);
         if (user is null)
-            return Unauthorized(ApiResponse.Failure("انتهت الجلسة."));
+            return IsAuthenticated ? HiddenNotFound() : Unauthorized(ApiResponse.Failure("انتهت الجلسة."));
         try
         {
             var scope = await Auth.ResolveDataScope(user);

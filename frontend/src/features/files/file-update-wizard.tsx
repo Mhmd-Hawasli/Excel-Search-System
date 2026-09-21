@@ -68,6 +68,7 @@ export function FileUpdateWizard({
   const [manualOnly, setManualOnly] = useState(false);
   const [filterText, setFilterText] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const autoPreviewKey = useRef<string | null>(null);
   // Per-cell choices: which changed cells keep their OLD value instead of the
   // new one. Default (absent from the map) is always the NEW value.
@@ -216,7 +217,7 @@ export function FileUpdateWizard({
   const filteredChanges = useMemo(() => {
     const rows = preview?.changes ?? [];
     const needle = filterText.trim();
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       if (manualOnly && !row.wasManuallyEdited) return false;
       if (!needle) return true;
       return (
@@ -226,9 +227,15 @@ export function FileUpdateWizard({
         String(row.rowIndex).includes(needle)
       );
     });
+    // المعدلة يدويًا أولًا دائمًا، ثم حسب الصف والعمود — حتى مع الفلاتر.
+    return [...filtered].sort((a, b) => {
+      const m = Number(b.wasManuallyEdited) - Number(a.wasManuallyEdited);
+      if (m !== 0) return m;
+      if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
+      return a.columnIndex - b.columnIndex;
+    });
   }, [preview, manualOnly, filterText]);
 
-  const pageSize = 50;
   const pageCount = Math.max(1, Math.ceil(filteredChanges.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pageRows = filteredChanges.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -527,7 +534,11 @@ export function FileUpdateWizard({
                   {preview?.summary ? (
                     <p className="text-xs text-muted-foreground">
                       {preview.summary.totalCellsCompared.toLocaleString("en-US")} خلية تمت مقارنتها
-                      خلال ثوانٍ — التقرير يعرض أول {Math.min(500, preview.summary.changedCells).toLocaleString("en-US")} خلية متغيرة.
+                      خلال ثوانٍ — التقرير يعرض{" "}
+                      {(preview.changes?.length ?? 0).toLocaleString("en-US")} من{" "}
+                      {preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة
+                      {preview.truncated ? " (مقتطع للحد الأقصى)" : " كاملة"}، مرتبةً بحيث تظهر
+                      القيم المعدلة يدويًا أولًا، مع ترقيم صفحات.
                     </p>
                   ) : previewBusy ? (
                     <p className="flex items-center gap-2 text-xs font-bold text-primary">
@@ -675,7 +686,9 @@ export function FileUpdateWizard({
                           <p className="text-xs text-muted-foreground sm:ms-auto">
                             {filteredChanges.length.toLocaleString("en-US")} من{" "}
                             {preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة
-                            {preview.truncated ? " (يُعرض أول 500)" : ""}
+                            {preview.truncated
+                              ? ` (يُعرض ${(preview.changes?.length ?? 0).toLocaleString("en-US")} — مقتطع)`
+                              : " (العرض الكامل)"}
                             {" — "}
                             {overrides.size > 0 ? (
                               <span className="font-bold text-amber-700 dark:text-amber-300">
@@ -685,6 +698,24 @@ export function FileUpdateWizard({
                               <span>الكل يعتمد القيمة الجديدة (افتراضي)</span>
                             )}
                           </p>
+                          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                            حجم الصفحة
+                            <select
+                              aria-label="حجم الصفحة"
+                              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                              value={pageSize}
+                              onChange={(e) => {
+                                setPageSize(Number(e.target.value));
+                                setPage(1);
+                              }}
+                            >
+                              {[50, 100, 200, 500].map((size) => (
+                                <option key={size} value={size}>
+                                  {size}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -693,16 +724,16 @@ export function FileUpdateWizard({
                             الكل: الجديدة
                           </Button>
                           <Button type="button" size="sm" variant="outline" onClick={keepAllOld}>
-                            الكل: القديمة
+                            الكل: القديمة ({(preview.changes?.length ?? 0).toLocaleString("en-US")})
                           </Button>
                           <Button type="button" size="sm" variant="outline" onClick={keepManualOld}>
-                            المعدلة يدويًا فقط: القديمة
+                            المعدلة يدويًا فقط: القديمة (
+                            {(preview.changes ?? []).filter((r) => r.wasManuallyEdited).length.toLocaleString("en-US")})
                           </Button>
-                          {preview.truncated ? (
-                            <span className="text-xs text-muted-foreground">
-                              الاختيار يشمل الخلايا المعروضة (أول 500) فقط.
-                            </span>
-                          ) : null}
+                          <span className="text-xs text-muted-foreground">
+                            الاختيار الجماعي يشمل كل القيم المعروضة أعلاه (المعدلة يدويًا تظهر أولًا)،
+                            وسيُحفظ الاستبدال كاملًا في سجل التعديلات تحت الإصدار {preview.currentVersion + 1}.
+                          </span>
                         </div>
 
                         {pageRows.length ? (
@@ -802,28 +833,52 @@ export function FileUpdateWizard({
                         )}
 
                         {pageCount > 1 ? (
-                          <div className="flex items-center justify-between text-sm">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={safePage <= 1}
-                              onClick={() => setPage((p) => Math.max(1, p - 1))}
-                            >
-                              السابق
-                            </Button>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={safePage <= 1}
+                                onClick={() => setPage(1)}
+                              >
+                                الأولى
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={safePage <= 1}
+                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                              >
+                                السابق
+                              </Button>
+                            </div>
                             <p className="text-muted-foreground">
                               صفحة {safePage.toLocaleString("en-US")} من {pageCount.toLocaleString("en-US")}
+                              {" — "}
+                              {filteredChanges.length.toLocaleString("en-US")} خلية ({pageSize} / صفحة)
                             </p>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={safePage >= pageCount}
-                              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                            >
-                              التالي
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={safePage >= pageCount}
+                                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                              >
+                                التالي
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={safePage >= pageCount}
+                                onClick={() => setPage(pageCount)}
+                              >
+                                الأخيرة
+                              </Button>
+                            </div>
                           </div>
                         ) : null}
                       </>
@@ -847,7 +902,7 @@ export function FileUpdateWizard({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {identical
-                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف إصدارًا جديدًا. تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.${
+                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف الإصدار ${preview ? preview.currentVersion + 1 : "الجديد"}. كل الخلايا المتغيرة (${preview?.summary?.changedCells.toLocaleString("en-US") ?? "—"}) ستُحفظ في سجل التعديلات تحت هذا الإصدار الجديد، وتعديلاتك اليدوية السابقة تُحفظ مؤرشفة ولا تُمسح.${
                         overrides.size > 0
                           ? ` وسيُحتفظ بـ ${overrides.size.toLocaleString("en-US")} خلية بقيمها القديمة حسب اختيارك أعلاه.`
                           : ""

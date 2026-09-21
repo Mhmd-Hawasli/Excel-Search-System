@@ -108,8 +108,8 @@ public sealed class KeepOldApplierTests
                 [new ReplaceColumnDto("a", "a", 1, null, null)], null, Guid.NewGuid(),
                 [new KeepOldCellDto(2, "a", null)]), "test"));
 
-        // Too many entries → rejected.
-        var huge = Enumerable.Range(2, 5001).Select(r => new KeepOldCellDto(r, "a", null)).ToList();
+        // Too many entries → rejected (limit 50k for 9k+ bulk cases).
+        var huge = Enumerable.Range(2, 50001).Select(r => new KeepOldCellDto(r, "a", null)).ToList();
         await Assert.ThrowsAsync<InvalidDataException>(() => svc.CreateReplaceJobAsync(file.Id,
             new ReplaceFileRequest("n.xlsx", "S", 1, 0, null, "same",
                 [new ReplaceColumnDto("a", "a", 1, null, null)], null, Guid.NewGuid(), huge), "test"));

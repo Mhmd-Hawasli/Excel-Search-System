@@ -1,4 +1,5 @@
 ﻿using ExcelArchive.Application.Common;
+using ExcelArchive.Api.Common.Http;
 using ExcelArchive.Application.DTOs.FileDto;
 using ExcelArchive.Application.Interfaces.Excel;
 using ExcelArchive.Application.Interfaces.Services;
@@ -36,8 +37,14 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     [HttpGet("files/{id:guid}")]
     public async Task<IActionResult> Get(Guid id, [FromQuery] Guid? groupId)
     {
-        var user = await RequirePermissionAsync(Permissions.GroupsView);
-        if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        // Read access: global groups.view OR a scoped grant covering this
+        // file. Previously this required the GLOBAL groups.view only, which
+        // locked every scoped (viewScoped) user out of their own files (404).
+        var user = CurrentUser ?? await Auth.GetSessionUserAsync(Request.Cookies[SessionCookie.Name]);
+        if (user is null) return UnauthorizedSession();
+        if (!Auth.HasPermission(user, Permissions.GroupsView)
+            && !Auth.HasPermission(user, Permissions.SearchView))
+            return HiddenNotFound();
         var scope = await Auth.ResolveDataScope(user);
         if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
         var detail = await files.GetDetailAsync(id, Auth.HasPermission(user, Permissions.EditsView));
@@ -49,8 +56,11 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     [HttpGet("files/{id:guid}/quality")]
     public async Task<IActionResult> Quality(Guid id, [FromQuery] Guid? groupId)
     {
-        var user = await RequirePermissionAsync(Permissions.GroupsView);
-        if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        var user = CurrentUser ?? await Auth.GetSessionUserAsync(Request.Cookies[SessionCookie.Name]);
+        if (user is null) return UnauthorizedSession();
+        if (!Auth.HasPermission(user, Permissions.GroupsView)
+            && !Auth.HasPermission(user, Permissions.SearchView))
+            return HiddenNotFound();
         var scope = await Auth.ResolveDataScope(user);
         if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
         var file = await files.GetAsync(id);
@@ -116,10 +126,16 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     }
 
     [HttpDelete("files/{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteFileRequest request)
+    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteFileRequest? request)
     {
-        var user = await RequirePermissionAsync(Permissions.GroupsView);
+        // Destructive: requires management power (previously groups.view, so
+        // ANY read-only user could delete any file) plus data-scope cover.
+        var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null || string.IsNullOrEmpty(request.ConfirmName))
+            return Bad("اسم التأكيد مطلوب لحذف الملف.");
+        var scope = await Auth.ResolveDataScope(user);
+        if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
         try
         {
             await files.DeleteAsync(id, request.ConfirmName, user.Username);
@@ -129,12 +145,18 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     }
 
     [HttpPost("files/{id:guid}/move")]
-    public async Task<IActionResult> Move(Guid id, [FromBody] MoveFileRequest request)
+    public async Task<IActionResult> Move(Guid id, [FromBody] MoveFileRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
         if (request is null || request.TargetGroupId == Guid.Empty)
             return Bad("حدد المجموعة الجديدة للملف.");
+        var scope = await Auth.ResolveDataScope(user);
+        // Scoped managers may only move files they can see, and only into
+        // groups they can see (global managers: scope lists are null).
+        if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
+        if (scope.GroupIds is not null && !scope.GroupIds.Contains(request.TargetGroupId))
+            return Bad("المجموعة الجديدة خارج نطاق صلاحياتك.");
         try
         {
             await files.MoveAsync(id, request.TargetGroupId, user.Username);
@@ -148,18 +170,27 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     {
         var user = await RequirePermissionAsync(Permissions.ExportRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
-        var data = await files.GetExportDataAsync(id);
-        if (data is null) return NotFound(ApiResponse.Failure("الملف غير موجود."));
         var scope = await Auth.ResolveDataScope(user);
         if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
+        try
+        {
+            var data = await files.GetExportDataAsync(id);
+            if (data is null) return NotFound(ApiResponse.Failure("الملف غير موجود."));
 
-        var bytes = exports.Build(data.SheetName, data.Headers, data.Records, data.Edits, markEdits);
+            var bytes = exports.Build(data.SheetName, data.Headers, data.Records, data.Edits, markEdits, data.NationalIdHeader);
 
-        var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
-        var encoded = Uri.EscapeDataString($"{data.FileName}-معدل-{date}.xlsx");
-        Response.Headers.ContentDisposition = $"attachment; filename*=UTF-8''{encoded}";
-        Response.Headers.CacheControl = "no-store";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
+            var encoded = Uri.EscapeDataString($"{data.FileName}-معدل-{date}.xlsx");
+            Response.Headers.ContentDisposition = $"attachment; filename*=UTF-8''{encoded}";
+            Response.Headers.CacheControl = "no-store";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        }
+        catch (InvalidDataException ex) { return Bad(ex.Message); }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge, ApiResponse.Failure(ex.Message));
+        }
+        catch (Exception ex) { return HandleError(ex); }
     }
 
     [HttpPost("files/{id:guid}/replace")]

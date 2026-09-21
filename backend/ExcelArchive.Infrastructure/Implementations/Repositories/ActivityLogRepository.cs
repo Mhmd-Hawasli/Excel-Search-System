@@ -16,6 +16,31 @@ public class ActivityLogRepository(AppDbContext db) : RepositoryBase<ActivityLog
             .Where(a => a.Action == action && a.TargetName == targetName)
             .ToListAsync(ct);
 
+    public async Task<bool> ExistsRecentVisitAsync(Guid recordId, string visitorUsername, DateTime cutoff, CancellationToken ct = default)
+    {
+        // Portable pre-filter on indexed/translatable columns (action + time
+        // + target), then exact JSON match client-side over a tiny window so
+        // both PostgreSQL and the InMemory test provider behave identically.
+        var rid = recordId.ToString();
+        var candidates = await Db.ActivityLogs.AsNoTracking()
+            .Where(a => a.Action == ActivityAction.RecordVisited && a.CreatedAt >= cutoff)
+            .Select(a => a.Details)
+            .ToListAsync(ct);
+        foreach (var doc in candidates)
+        {
+            if (doc is null || doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("recordId", out var idProp)) continue;
+            var storedId = idProp.ValueKind == System.Text.Json.JsonValueKind.String ? idProp.GetString() : null;
+            if (!string.Equals(storedId, rid, StringComparison.OrdinalIgnoreCase)) continue;
+            if (root.TryGetProperty("visitorUsername", out var userProp)
+                && userProp.ValueKind == System.Text.Json.JsonValueKind.String
+                && string.Equals(userProp.GetString(), visitorUsername, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
     public async Task<(IReadOnlyList<ActivityLog> Rows, int Total)> SearchAsync(
         ActivityAction? action, string? search, ActivityAction? searchedAction,
         int page, int pageSize, CancellationToken ct = default)

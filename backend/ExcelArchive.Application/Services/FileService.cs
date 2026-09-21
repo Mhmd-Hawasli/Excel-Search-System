@@ -226,8 +226,16 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
     {
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
         if (file is null) return null;
+        // Unbounded full-file materialization OOMs on very large files;
+        // refuse with a clear 413 instead of crashing the worker.
+        const int MaxExportRows = 100_000;
+        if (file.RowCount > MaxExportRows)
+            throw new InvalidOperationException(
+                $"حجم الملف ({file.RowCount} صف) يتجاوز حد التصدير المباشر ({MaxExportRows}). قسّم الملف ثم صدّر على دفعات.");
         var records = await uow.Records.ListExportRowsAsync(fileId, ct);
         var edits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
+        var nationalHeader = file.Columns
+            .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
         return new FileExportDataDto(
             file.SheetName,
             file.Name,
@@ -244,7 +252,8 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                 r.SfFullName, r.DNationalId ?? r.SfNationalId?.ToString())).ToList(),
             edits.Select(e => new ExportEditDto(
                 e.RecordId?.ToString(), e.HeaderRaw, e.OldValue, e.NewValue,
-                e.EditedBy, e.CreatedAt)).ToList());
+                e.EditedBy, e.CreatedAt)).ToList(),
+            nationalHeader);
     }
 
     private static Dictionary<string, string>? ToHeaderMap(JsonDocument? doc)
@@ -277,7 +286,7 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         var keepOld = (request.KeepOldCells ?? []).ToList();
         if (keepOld.Count > 0 && request.Mode != "same")
             throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
-        if (keepOld.Count > 5000
+        if (keepOld.Count > 50000
             || keepOld.Any(k => k.RowIndex < 1
                 || string.IsNullOrWhiteSpace(k.HeaderRaw) || k.HeaderRaw.Length > 500
                 || (k.MatchKey is not null && k.MatchKey.Length > 64)))
@@ -365,6 +374,7 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                 mode = "replace",
                 fileId = target.Id,
                 replaceMode = request.Mode,
+                requestedBy = actorUsername,
                 keepOldCells = keepOld.Select(k => new
                 {
                     rowIndex = k.RowIndex,

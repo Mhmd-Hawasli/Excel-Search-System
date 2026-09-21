@@ -44,13 +44,22 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE record_edits e SET file_version = f.version FROM files f WHERE f.id = e.file_id AND e.record_id IS NOT NULL AND e.file_version <> f.version");
 
+        // V2 addition: record_edits.national_id (stable person identity for
+        // the edit history). Row numbers shift when rows are deleted, so the
+        // history resolves records by national ID and shows the live current
+        // value instead.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS national_id text");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_record_edits_file_id_national_id ON record_edits (file_id, national_id)");
+
         // Install pg_trgm + trigram search indexes idempotently.
         // Required index/cache setup failure must be visible in readiness
         // (docs/04), not merely logged: seeder warns here, /health/ready must
         // still fail until extensions/indexes/triggers verify (P1.6 follow-up).
         try
         {
-            foreach (var file in new[] { "Data/SearchIndexes.sql", "Data/ConflictCache.sql" })
+            foreach (var file in new[] { "Data/SearchIndexes.sql", "Data/ConflictCache.sql", "Data/PerformanceIndexes.sql" })
             {
                 var sqlPath = Path.Combine(AppContext.BaseDirectory, file);
                 if (!File.Exists(sqlPath))
@@ -86,15 +95,17 @@ public static class DbSeeder
         // so existing data (display name, status, permissions, password) stays as-is.
 
         // System owner seed (V1 parity: prisma/seed-owner.ts).
-        // The password is only set on creation — re-running never reverts a
-        // password changed from the users page — while global permissions are
-        // always restored to the full owner set.
-        var ownerName = configuration["MHMD_USERNAME"] ?? "mhmd";
+        // STRICT: existing mhmd/admin rows are NEVER modified here — no
+        // UPDATE/DELETE/RESET of any kind (display name, active flag, password
+        // or permissions stay exactly as they are in the database). The seeder
+        // only creates the account when it is entirely missing (fresh install),
+        // using ADMIN_* (preferred) with MHMD_* fallback for the initial secret.
+        var ownerName = configuration["ADMIN_USERNAME"] ?? configuration["MHMD_USERNAME"] ?? "mhmd";
         var owner = await db.Users.Include(u => u.Permissions)
             .FirstOrDefaultAsync(u => u.Username == ownerName);
         if (owner is null)
         {
-            var ownerPassword = configuration["MHMD_PASSWORD"] ?? "mhmd123";
+            var ownerPassword = configuration["ADMIN_PASSWORD"] ?? configuration["MHMD_PASSWORD"] ?? "mhmd123";
             owner = new ExcelArchive.Domain.Entities.User
             {
                 Username = ownerName,
@@ -106,22 +117,11 @@ public static class DbSeeder
             await db.SaveChangesAsync();
             owner = await db.Users.Include(u => u.Permissions)
                 .FirstAsync(u => u.Username == ownerName);
-        }
-        else
-        {
-            owner.IsActive = true;
-            owner.DisplayName = "مالك النظام";
+            db.UserPermissions.AddRange(Permissions.OwnerGlobals
+                .Select(key => new ExcelArchive.Domain.Entities.UserPermission { UserId = owner.Id, Permission = key }));
             await db.SaveChangesAsync();
         }
-        var staleOwnerPermissions = owner.Permissions.ToList();
-        if (staleOwnerPermissions.Count > 0)
-        {
-            db.UserPermissions.RemoveRange(staleOwnerPermissions);
-            await db.SaveChangesAsync();
-        }
-        db.UserPermissions.AddRange(Permissions.OwnerGlobals
-            .Select(key => new ExcelArchive.Domain.Entities.UserPermission { UserId = owner.Id, Permission = key }));
-        await db.SaveChangesAsync();
+        // Existing owner account: intentionally left untouched.
 
         // Test account seed (dev/QA convenience: test / test123).
         // Unlike the owner account, the password IS enforced on every boot so

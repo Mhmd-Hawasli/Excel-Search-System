@@ -22,7 +22,8 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
     public async Task<(IReadOnlyList<RecordEdit> Rows, int Total)> ListPagedAsync(Guid? fileId, IReadOnlyList<Guid>? fileIds, int page, int pageSize,
         string? person, string? column, string? oldValue, string? newValue,
         int? version, string? fromDate, string? toDate, string? user,
-        string? sortBy, string? sortDir, CancellationToken ct = default)
+        string? sortBy, string? sortDir, IReadOnlyList<string>? columns,
+        IReadOnlyList<string>? users, CancellationToken ct = default)
     {
         var query = Db.RecordEdits.AsNoTracking().AsQueryable();
         if (fileId is not null) query = query.Where(e => e.FileId == fileId);
@@ -45,6 +46,15 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         {
             var colLower = column.ToLower();
             query = query.Where(e => e.HeaderRaw.ToLower().Contains(colLower));
+        }
+
+        // Multi-select: exact column match (new smart filter; the single
+        // contains-filter above stays for backward compatibility).
+        if (columns is not null && columns.Count > 0)
+        {
+            var set = columns.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+            if (set.Count > 0)
+                query = query.Where(e => set.Contains(e.HeaderRaw));
         }
 
         // Filter by old value
@@ -82,6 +92,14 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         {
             var userLower = user.ToLower();
             query = query.Where(e => e.EditedBy != null && e.EditedBy.ToLower().Contains(userLower));
+        }
+
+        // Multi-select: exact user match (new smart filter).
+        if (users is not null && users.Count > 0)
+        {
+            var set = users.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct().ToList();
+            if (set.Count > 0)
+                query = query.Where(e => e.EditedBy != null && set.Contains(e.EditedBy));
         }
 
         // Sorting
@@ -131,4 +149,20 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
     public async Task<IReadOnlyList<RecordEdit>> ListByFileAsync(Guid fileId, CancellationToken ct = default)
         => await Db.RecordEdits.AsNoTracking()
             .Where(e => e.FileId == fileId).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<string>> DistinctHeadersAsync(Guid fileId, CancellationToken ct = default)
+        => await Db.RecordEdits.AsNoTracking()
+            .Where(e => e.FileId == fileId)
+            .Select(e => e.HeaderRaw)
+            .Distinct()
+            .OrderBy(h => h)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<string>> DistinctEditorsAsync(Guid fileId, CancellationToken ct = default)
+        => await Db.RecordEdits.AsNoTracking()
+            .Where(e => e.FileId == fileId && e.EditedBy != null)
+            .Select(e => e.EditedBy!)
+            .Distinct()
+            .OrderBy(u => u)
+            .ToListAsync(ct);
 }

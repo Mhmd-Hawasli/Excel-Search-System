@@ -25,6 +25,7 @@
   <ItemGroup>
     <None Include="..\ExcelArchive.Infrastructure\Implementations\Persistence\Sql\SearchIndexes.sql" Link="Data\SearchIndexes.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\ExcelArchive.Infrastructure\Implementations\Persistence\Sql\ConflictCache.sql" Link="Data\ConflictCache.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\ExcelArchive.Infrastructure\Implementations\Persistence\Sql\PerformanceIndexes.sql" Link="Data\PerformanceIndexes.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -7,6 +7,7 @@ export interface EditedFileSummary {
   groupName: string;
   editCount: number;
   lastEditAt: string;
+  currentVersion: number;
 }
 
 export interface EditHistoryItem {
@@ -22,6 +23,9 @@ export interface EditHistoryItem {
   personName: string | null;
   rowIndex: number | null;
   editedBy: string | null;
+  nationalId: string | null;
+  currentValue: string | null;
+  currentRecordId: string | null;
 }
 
 export interface EditHistoryPage {
@@ -34,14 +38,27 @@ export interface EditHistoryPage {
 export interface EditsFilters {
   person?: string;
   column?: string;
+  columns?: string[];
   oldValue?: string;
   newValue?: string;
   version?: number;
   fromDate?: string;
   toDate?: string;
   user?: string;
+  users?: string[];
   sortBy?: string;
   sortDir?: string;
+}
+
+export interface EditUserOption {
+  username: string;
+  displayName: string | null;
+}
+
+export interface EditOptions {
+  columns: string[];
+  users: EditUserOption[];
+  currentVersion: number;
 }
 
 export const editsService = {
@@ -56,6 +73,9 @@ export const editsService = {
       pageSize,
       ...filters,
     });
+  },
+  options(fileId: string): Promise<EditOptions> {
+    return apiGet<EditOptions>("/api/edits/options", { fileId });
   },
   exportUrl(fileId: string, markEdits = false): string {
     return `/api/files/${fileId}/export${markEdits ? "?markEdits=true" : ""}`;

@@ -9,14 +9,19 @@ namespace ExcelArchive.Api.Controllers;
 public class UploadJobsController(IUploadService upload, IAuthService auth, IGroupService groups) : ApiControllerBase(auth)
 {
     [HttpPost("upload-jobs")]
-    public async Task<IActionResult> Create([FromBody] CreateUploadJobRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateUploadJobRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.UploadRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
-        var group = await groups.GetAsync(request.GroupId, new DataScopeDto());
-        if (group is null) return Bad("المجموعة المحددة غير موجودة.", StatusCodes.Status404NotFound);
+        if (request is null || request.GroupId == Guid.Empty)
+            return Bad("حدد المجموعة المستهدفة للاستيراد.");
+        // Resolve the caller's scope FIRST: group existence must not leak to
+        // scoped users via a null (unrestricted) scope probe.
         var scope = await Auth.ResolveDataScope(user);
-        if (scope.GroupIds is not null && !scope.GroupIds.Contains(group.Id)) return HiddenNotFound();
+        if (scope.GroupIds is not null && !scope.GroupIds.Contains(request.GroupId))
+            return HiddenNotFound();
+        var group = await groups.GetAsync(request.GroupId, scope);
+        if (group is null) return Bad("المجموعة المحددة غير موجودة.", StatusCodes.Status404NotFound);
         try
         {
             return StatusCode(StatusCodes.Status202Accepted,
@@ -52,10 +57,11 @@ public class UploadJobsController(IUploadService upload, IAuthService auth, IGro
     }
 
     [HttpPost("upload-jobs/{id:guid}/template")]
-    public async Task<IActionResult> SaveTemplate(Guid id, [FromBody] SaveTemplateRequest request)
+    public async Task<IActionResult> SaveTemplate(Guid id, [FromBody] SaveTemplateRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.UploadRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات القالب غير صالحة.");
         try
         {
             return Ok(ApiResponse.Success(await upload.SaveTemplateAsync(id, request, user.Username)));

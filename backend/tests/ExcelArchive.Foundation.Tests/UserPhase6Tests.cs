@@ -10,8 +10,9 @@ using FileEntity = ExcelArchive.Domain.Entities.File;
 namespace ExcelArchive.Foundation.Tests;
 
 /// <summary>P6.2: user validation (400 shapes, 409 duplicate, 422 targets),
-/// file-grant snapshot semantics (new files NOT auto-granted) and PATCH
-/// presence semantics. Mirrors V1 users/validation + users routes.</summary>
+/// group-grant persistence (group rows kept so future files stay covered,
+/// plus per-file snapshots) and PATCH presence semantics.
+/// Mirrors V1 users/validation + users routes.</summary>
 public sealed class UserPhase6Tests
 {
     private static (AppDbContext Db, UserService Svc) Setup()
@@ -138,13 +139,18 @@ public sealed class UserPhase6Tests
     }
 
     [Fact]
-    public async Task Create_GroupSelection_SnapshotsGroupFiles()
+    public async Task Create_GroupSelection_KeepsGroupGrantAndSnapshotsGroupFiles()
     {
         var (db, svc) = Setup();
         var (gid, fileA) = await SeedFile(db);
         var created = await svc.CreateAsync(
             Req("gsel", permissions: [new PermissionAssignmentDto("groups.viewScoped", gid, null)]), "admin");
-        Assert.DoesNotContain(created.Permissions, p => p.GroupId == gid);
+        // Group-level grant persists so files added to the group LATER stay
+        // visible (previously it was replaced by per-file snapshots, silently
+        // hiding every file uploaded after the permission was saved)...
+        Assert.Contains(created.Permissions,
+            p => p.Permission == "groups.viewScoped" && p.GroupId == gid && p.FileId is null);
+        // ...alongside explicit file grants snapshotted for current files.
         Assert.Contains(created.Permissions, p => p.FileId == fileA);
     }
 
@@ -186,7 +192,12 @@ public sealed class UserPhase6Tests
         var created = await svc.CreateAsync(Req("perms1"), "admin");
         var replaced = await svc.ReplacePermissionsAsync(created.Id,
             new ReplacePermissionsRequest([new PermissionAssignmentDto("groups.viewScoped", gid, null)]), "admin");
-        Assert.All(replaced.Permissions, p => Assert.Null(p.GroupId));
+        // Group-level grant persists (covers future files in the group)...
+        Assert.Contains(replaced.Permissions,
+            p => p.Permission == "groups.viewScoped" && p.GroupId == gid && p.FileId is null);
+        // ...alongside snapshots of the group's current files.
+        Assert.Contains(replaced.Permissions,
+            p => p.Permission == "groups.viewScoped" && p.FileId is not null);
         Assert.NotEmpty(replaced.Permissions);
         var bad = await Assert.ThrowsAsync<InvalidDataException>(() => svc.ReplacePermissionsAsync(created.Id,
             new ReplacePermissionsRequest([new PermissionAssignmentDto("bogus", null, null)]), "admin"));

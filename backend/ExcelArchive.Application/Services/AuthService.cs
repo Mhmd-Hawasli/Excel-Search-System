@@ -74,9 +74,10 @@ public class AuthService(
         // Normalize first so legacy files.viewScoped/search.* rows behave like V1
         // even when the caller passes a non-normalized DTO (tests, cached users).
         var perms = UnifyDataPermissions(user.Permissions);
-        // Legacy alias: groups.manage was an architecture-only extra; treat it as
-        // groups.view so pre-existing grants keep working and vice versa.
-        if (key == Permissions.GroupsManage) key = Permissions.GroupsView;
+        // Legacy stored groups.manage grants keep working as full management
+        // power (checked explicitly per branch below). The reverse direction
+        // is intentionally NOT aliased: a plain groups.view grant is
+        // read-only and must never satisfy a management check.
         if (key == Permissions.SearchView || key == "search.view")
         {
             return perms.Any(p =>
@@ -90,13 +91,16 @@ public class AuthService(
                 (p.Permission == Permissions.GroupsView && p.GroupId is null && p.FileId is null) ||
                 (p.Permission == Permissions.GroupsManage && p.GroupId is null && p.FileId is null));
         }
-        // Fine-grained group management: legacy groups.view / groups.manage
-        // grants keep full management power so existing admins lose nothing.
+        // Fine-grained group management: only explicit management grants
+        // satisfy create/update. A plain groups.view grant is READ-ONLY and
+        // must never imply write power (privilege escalation): previously
+        // any global viewer passed GroupsCreate/GroupsUpdate checks, which
+        // let read-only users manage groups and move files.
+        // groups.manage remains an alias for full management power.
         if (key == Permissions.GroupsCreate || key == Permissions.GroupsUpdate)
         {
             return perms.Any(p =>
                 (p.Permission == key && p.GroupId is null && p.FileId is null) ||
-                (p.Permission == Permissions.GroupsView && p.GroupId is null && p.FileId is null) ||
                 (p.Permission == Permissions.GroupsManage && p.GroupId is null && p.FileId is null));
         }
         return perms.Any(p =>

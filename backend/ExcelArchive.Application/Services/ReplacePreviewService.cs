@@ -11,14 +11,17 @@ using ExcelArchive.Domain.Text;
 namespace ExcelArchive.Application.Services;
 
 /// <summary>Cell-by-cell replace preview. Single Excel read + single DB
-/// round-trip, O(cells) ordinal compares, capped samples so even 7k×90
-/// files return in ~1-2s with a small payload.</summary>
+/// round-trip, O(cells) ordinal compares. Returns the FULL change list
+/// (up to MaxSamples) sorted manual-first so the UI can paginate locally
+/// without losing manually-edited rows beyond the first page.</summary>
 public class ReplacePreviewService(
     IUnitOfWork uow,
     IWorkbookReader reader,
     IWorkbookFileStore files) : IReplacePreviewService
 {
-    private const int MaxSamples = 500;
+    // 50k changed cells ≈ 10-15MB JSON max; covers the reported 9k case
+    // with headroom while still guarding against 10M-cell OOM blowups.
+    private const int MaxSamples = 50000;
     private const int MaxRowSample = 50;
     private const int MaxValueLength = 300;
 
@@ -290,6 +293,18 @@ public class ReplacePreviewService(
                 }
             }
         }
+
+        // Manually-edited cells first so the "manual only" filter and bulk
+        // "keep manual old" actions never lose rows beyond the first page.
+        // Stable secondary order: row, then column.
+        changes.Sort((a, b) =>
+        {
+            var m = b.WasManuallyEdited.CompareTo(a.WasManuallyEdited);
+            if (m != 0) return m;
+            var r = a.RowIndex.CompareTo(b.RowIndex);
+            if (r != 0) return r;
+            return a.ColumnIndex.CompareTo(b.ColumnIndex);
+        });
 
         var columnStats = commonPairs.Select(p => new ReplacePreviewColumnStat(
             p.TargetRaw, p.ColumnIndex,

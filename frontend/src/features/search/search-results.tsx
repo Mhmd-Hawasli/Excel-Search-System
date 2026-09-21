@@ -239,6 +239,10 @@ export function SearchResults() {
       return;
     }
     let active = true;
+    // Cancel the previous in-flight search: fast typing/sort/scope changes
+    // used to pile overlapping archive queries on the backend (responses were
+    // ignored but still consumed bandwidth + DB threads).
+    const controller = new AbortController();
     // Intentional request-status sync (same pattern as use-api-query).
     setLoading(true);
     setError(null);
@@ -254,11 +258,13 @@ export function SearchResults() {
         sortBy: filters.sortBy || undefined,
         sortDirection: filters.sortDir,
         similar: filters.similar,
-      })
+      }, { signal: controller.signal })
       .then((result) => {
         if (active) setData(result);
       })
       .catch((err) => {
+        // Aborted superseded requests are not errors.
+        if (err instanceof DOMException && err.name === "AbortError") return;
         if (active) setError(err instanceof ApiError ? err.message : "تعذر تحميل نتائج البحث.");
       })
       .finally(() => {
@@ -266,6 +272,7 @@ export function SearchResults() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [filters, scopeReady]);
 

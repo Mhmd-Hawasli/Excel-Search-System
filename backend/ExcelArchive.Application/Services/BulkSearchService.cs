@@ -68,6 +68,9 @@ public class BulkSearchService(
             args.ColumnIndex < r.Cells.Count ? r.Cells[args.ColumnIndex] : ""));
         if (queries.Count == 0)
             throw new InvalidDataException("لم يتم العثور على قيم للبحث في عمود الاكسيل المحدد.");
+        if (queries.Count > BulkSearchMatch.MaxValues)
+            throw new InvalidDataException(
+                $"عدد القيم ({queries.Count}) يتجاوز الحد المسموح ({BulkSearchMatch.MaxValues}). قلّل الصفوف أو وحّد القيم المكررة ثم أعد المحاولة.");
 
         var slots = new List<BulkSearchRow>?[queries.Count];
         var completed = 0;

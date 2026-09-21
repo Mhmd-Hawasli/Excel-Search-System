@@ -55,6 +55,16 @@ export interface RecordDetail {
   conflictByMother: { rows: RelatedRecord[]; truncated: boolean };
 }
 
+export interface RecordEditInfo {
+  id: string;
+  headerRaw: string;
+  fileColumnId: string | null;
+  oldValue: string;
+  newValue: string;
+  createdAt: string;
+  editedBy: string | null;
+}
+
 export interface SaveEditResult {
   ok: boolean;
   changed: boolean;
@@ -102,8 +112,8 @@ export const recordsService = {
     if (!envelope.data) throw new Error("غير موجود.");
     return envelope.data;
   },
-  async getEdits(id: string): Promise<{ edits: unknown[]; editedHeaders: Record<string, EditedHeaderInfo> }> {
-    const envelope = await apiGet<ApiEnvelope<{ edits: unknown[]; editedHeaders: Record<string, EditedHeaderInfo> }>>(
+  async getEdits(id: string): Promise<{ edits: RecordEditInfo[]; editedHeaders: Record<string, EditedHeaderInfo> }> {
+    const envelope = await apiGet<ApiEnvelope<{ edits: RecordEditInfo[]; editedHeaders: Record<string, EditedHeaderInfo> }>>(
       `/api/records/${id}/edits`,
     );
     if (!envelope.data) throw new Error("تعذر تحميل التعديلات.");

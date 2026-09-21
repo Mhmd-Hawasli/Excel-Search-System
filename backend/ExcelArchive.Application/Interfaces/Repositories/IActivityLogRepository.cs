@@ -16,4 +16,10 @@ public interface IActivityLogRepository : IRepositoryBase<ActivityLog>
     Task<(IReadOnlyList<ActivityLog> Rows, int Total)> SearchAsync(
         ActivityAction? action, string? search, ActivityAction? searchedAction,
         int page, int pageSize, CancellationToken ct = default);
+    /// <summary>
+    /// True when this visitor already logged a visit of this record since
+    /// <paramref name="cutoff"/> (visit de-duplication: one audit row per
+    /// visitor+record per window instead of one row per page view).
+    /// </summary>
+    Task<bool> ExistsRecentVisitAsync(Guid recordId, string visitorUsername, DateTime cutoff, CancellationToken ct = default);
 }

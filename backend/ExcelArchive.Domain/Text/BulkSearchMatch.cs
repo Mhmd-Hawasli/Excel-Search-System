@@ -21,6 +21,16 @@ public static class BulkSearchMatch
     /// <summary>Maximum exported matches kept per searched value (top-ranked first).</summary>
     public const int MaxMatchesPerValue = 10;
 
+    /// <summary>
+    /// Maximum distinct searched values per run. Without a cap, a sheet with
+    /// e.g. 100k rows fires 100k archive SELECTs (8-way parallel) and melts
+    /// the database. Runs above this must narrow their column first.
+    /// </summary>
+    public const int MaxValues = 2000;
+
+    /// <summary>Maximum sequences accepted by the export endpoint (DoS cap).</summary>
+    public const int MaxExportSequences = 20000;
+
     /// <summary>Maximum searched value length (mirrors the single-search limit).</summary>
     public const int MaxValueLength = 200;
 

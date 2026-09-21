@@ -62,10 +62,12 @@ public class ConflictsController(IConflictService conflicts, IAuthService auth) 
     }
 
     [HttpPost("conflicts/ignore")]
-    public async Task<IActionResult> Ignore([FromBody] IgnoreConflictRequest request)
+    public async Task<IActionResult> Ignore([FromBody] IgnoreConflictRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.ConflictsFilters);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null || string.IsNullOrWhiteSpace(request.Rule) || request.RecordId == Guid.Empty)
+            return Bad("بيانات التجاهل غير صالحة.");
         try
         {
             var scope = await Auth.ResolveDataScope(user);

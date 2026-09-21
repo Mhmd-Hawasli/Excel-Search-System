@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
+using ExcelArchive.Domain.Text;
 
 namespace ExcelArchive.Infrastructure.Implementations.Excel;
 
@@ -31,11 +33,40 @@ public static class FileExportBuilder
 
     public static string FitCellText(string? value)
     {
-        if (string.IsNullOrEmpty(value)) return "";
-        if (value.Length <= MaxCellTextLength) return value;
+        var clean = CleanCellText(value);
+        if (clean.Length <= MaxCellTextLength) return clean;
         var end = MaxCellTextLength;
-        if (char.IsHighSurrogate(value[end - 1])) end--;
-        return value[..end];
+        if (char.IsHighSurrogate(clean[end - 1])) end--;
+        return clean[..end];
+    }
+
+    /// <summary>Strips invisible characters (BOM, zero-width spaces/marks,
+    /// direction marks, NBSP padding) from both edges: a cell holding only
+    /// such characters becomes TRULY empty instead of carrying a "hidden
+    /// character" that breaks Excel emptiness checks. Interior marks (e.g.
+    /// ZWNJ inside Persian words) are preserved.</summary>
+    public static string CleanCellText(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "";
+        var start = 0;
+        var end = value.Length - 1;
+        while (start <= end && IsInvisible(value[start])) start++;
+        while (end >= start && IsInvisible(value[end])) end--;
+        return start > end ? "" : value.Substring(start, end - start + 1);
+    }
+
+    private static bool IsInvisible(char c)
+        => char.IsWhiteSpace(c) || (c >= '\u200B' && c <= '\u200F') || c == '\uFEFF';
+
+    /// <summary>National IDs always export as 11-digit text with leading
+    /// zeros restored (123456789 → 00123456789). Non-digit values are kept
+    /// verbatim so invalid entries are never silently erased.</summary>
+    public static string NormalizeNationalId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        var trimmed = value.Trim();
+        var digits = ArabicNormalizer.NationalIdDigits(trimmed);
+        return digits is null ? trimmed : digits.PadLeft(11, '0');
     }
 
     /// <summary>Makes table column names unique/single-line/non-blank (V1 table-columns).</summary>
@@ -84,6 +115,8 @@ public static class FileExportBuilder
     /// <summary>
     /// تطبيق التنسيق على النطاق كله دفعة واحدة (نفس أسلوب Merge/SheetMerge): التنسيق
     /// الخلوي المتكرر لكل خلية يضخّم ملف التصدير ويبطئ فتحه بشدة مع آلاف الصفوف.
+    /// ملاحظة أداء: ممنوع WrapText وارتفاعات أسطر صريحة على النطاق — Excel يعيد
+    /// حساب التخطيط عند الفتح لكل خلية ملفوفة/مُرتفعة فيعلق الملف الكبير.
     /// </summary>
     private static void StyleTableRange(IXLWorksheet sheet, int rowCount, int columnCount)
     {
@@ -98,26 +131,62 @@ public static class FileExportBuilder
         fullRange.Style.Border.RightBorderColor = XLColor.FromHtml("#BFBFBF");
         fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        fullRange.Style.Alignment.WrapText = true;
-        for (var r = 1; r <= rowCount + 1; r++)
-            sheet.Row(r).Height = 30;
+        fullRange.Style.Alignment.WrapText = false;
     }
 
-    /// <summary>Parses DD/MM/YYYY or YYYY-MM-DD (validated) like V1 parseStoredDate.
+    /// <summary>Parses stored date text into a real DateTime so the export
+    /// renders EVERY date as DD/MM/YYYY. Source workbooks store dates in
+    /// whatever display format they were saved with (US month-first, dots,
+    /// ISO, 2-digit years, trailing times, Arabic-Indic digits), so all of
+    /// those are recognized. Ambiguous day/month pairs prefer day-first
+    /// (system convention); month-first is accepted only when day-first is
+    /// an impossible month (e.g. 12/31/2025).
     /// Years before 1900 stay text: Excel serial dates start at 1900 and
     /// ClosedXML throws OverflowException ("Not a legal OleAut date") when
-    /// assigning earlier DateTimes to a cell (production merge/export 500).</summary>
+    /// assigning earlier DateTimes to a cell (production merge/export 500).
+    /// Bare numbers are NEVER dates (they may be IDs/phones).</summary>
     public static DateTime? ParseStoredDate(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        var text = value.Trim();
-        var m = Regex.Match(text, @"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$");
-        if (m.Success && ValidExportDate(int.Parse(m.Groups[3].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[1].Value)))
-            return new DateTime(int.Parse(m.Groups[3].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[1].Value));
-        m = Regex.Match(text, @"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$");
-        if (m.Success && ValidExportDate(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value)))
-            return new DateTime(int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value));
+        var text = ToLatinDigits(value.Trim());
+        // Drop an optional trailing time ("31/12/2025 10:30", "...T10:30:00").
+        text = Regex.Replace(text, @"[T\s]\d{1,2}:\d{2}(?::\d{2})?\s*$", "").Trim();
+        if (text.Length == 0) return null;
+
+        // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD (unambiguous first).
+        var m = Regex.Match(text, @"^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$");
+        if (m.Success)
+        {
+            var (y, a, b) = (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value));
+            return ValidExportDate(y, a, b) ? new DateTime(y, a, b) : null;
+        }
+        // D/M/YYYY (any of / - .), 4- or 2-digit year.
+        m = Regex.Match(text, @"^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2}|\d{4})$");
+        if (!m.Success) return null;
+        var first = int.Parse(m.Groups[1].Value);
+        var second = int.Parse(m.Groups[2].Value);
+        var yearRaw = m.Groups[3].Value;
+        var year = yearRaw.Length == 2 ? ExpandTwoDigitYear(int.Parse(yearRaw)) : int.Parse(yearRaw);
+        if (ValidExportDate(year, second, first)) return new DateTime(year, second, first);
+        if (ValidExportDate(year, first, second)) return new DateTime(year, first, second);
         return null;
+    }
+
+    /// <summary>Excel two-digit-year window: 00-29 → 2000s, 30-99 → 1900s.</summary>
+    private static int ExpandTwoDigitYear(int yy) => yy <= 29 ? 2000 + yy : 1900 + yy;
+
+    /// <summary>Arabic-Indic / Eastern Arabic-Indic digits → ASCII (dates
+    /// typed in Excel with an Arabic keyboard).</summary>
+    private static string ToLatinDigits(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var ch in text)
+        {
+            if (ch >= '٠' && ch <= '٩') sb.Append((char)('0' + (ch - '٠')));
+            else if (ch >= '۰' && ch <= '۹') sb.Append((char)('0' + (ch - '۰')));
+            else sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     private static bool ValidExportDate(int year, int month, int day)
@@ -136,7 +205,7 @@ public static class FileExportBuilder
         catch { return false; }
     }
 
-    public static byte[] Build(string sheetName, IReadOnlyList<string> headers, IReadOnlyList<ExportRecord> records, IReadOnlyList<ExportEdit> edits, bool markEdits = false)
+    public static byte[] Build(string sheetName, IReadOnlyList<string> headers, IReadOnlyList<ExportRecord> records, IReadOnlyList<ExportEdit> edits, bool markEdits = false, string? nationalIdHeader = null)
     {
         var editedHeaders = new HashSet<string>(edits.Select(e => e.HeaderRaw), StringComparer.Ordinal);
         var headerIndex = headers.Select((h, i) => (h, i)).ToDictionary(x => x.h, x => x.i, StringComparer.Ordinal);
@@ -157,12 +226,23 @@ public static class FileExportBuilder
 
         var rows = new List<IReadOnlyList<object>>(records.Count);
         var dateCells = new List<(int Row, int Col)>();
+        int? nationalCol = null;
         foreach (var record in records)
         {
             var rowIndex = rows.Count;
             var row = headers.Select((header, columnIndex) =>
             {
-                var raw = record.Data.TryGetValue(header, out var v) ? v ?? "" : "";
+                // Clean first: invisible-only cells become truly empty and
+                // edge marks (BOM/RLM) no longer break date recognition.
+                var raw = CleanCellText(record.Data.TryGetValue(header, out var v) ? v : null);
+                // National-ID column: always 11-digit text, never a date.
+                if (nationalIdHeader is not null
+                    && string.Equals(header, nationalIdHeader, StringComparison.Ordinal)
+                    && raw.Length > 0)
+                {
+                    nationalCol ??= columnIndex;
+                    return (object)NormalizeNationalId(raw);
+                }
                 var parsed = raw.Length > 0 ? ParseStoredDate(raw) : null;
                 if (parsed.HasValue)
                 {
@@ -183,9 +263,16 @@ public static class FileExportBuilder
         for (var r = 0; r < rows.Count; r++)
             for (var c = 0; c < headers.Count && c < rows[r].Count; c++)
             {
-                var cell = sheet.Cell(r + 2, c + 1);
-                if (rows[r][c] is DateTime dt) cell.Value = dt;
-                else cell.Value = FitCellText(rows[r][c]?.ToString());
+                if (rows[r][c] is DateTime dt)
+                {
+                    sheet.Cell(r + 2, c + 1).Value = dt;
+                    continue;
+                }
+                // Empty cells stay BLANK (never materialized): smaller file,
+                // faster open, and genuinely empty — no hidden shared-string residue.
+                var text = FitCellText(rows[r][c]?.ToString());
+                if (text.Length == 0) continue;
+                sheet.Cell(r + 2, c + 1).Value = text;
             }
         var table = sheet.Range(1, 1, rows.Count + 1, headers.Count).CreateTable("DataTable");
         table.Theme = XLTableTheme.TableStyleLight9;
@@ -197,6 +284,9 @@ public static class FileExportBuilder
         headerRow.Style.Font.FontColor = XLColor.White;
         foreach (var (row, col) in dateCells)
             sheet.Cell(row + 2, col + 1).Style.DateFormat.Format = DateNumberFormat;
+        // National IDs stay text so Excel never strips the leading zeros.
+        if (nationalCol.HasValue)
+            sheet.Column(nationalCol.Value + 1).Style.NumberFormat.Format = "@";
 
         foreach (var (record, index) in records.Select((r, i) => (r, i)))
         {
@@ -296,9 +386,10 @@ public static class FileExportBuilder
             hasLogSheet ? [safeName, "سجل التعديلات"] : [safeName]);
     }
 
-    /// <summary>National id stays text (leading zeros preserved).</summary>
+    /// <summary>National id stays text (leading zeros preserved), always
+    /// 11 digits in the edit-log sheet too.</summary>
     private static string FormatNational(string? value)
-        => string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+        => NormalizeNationalId(value);
 
     private static List<(string Header, string Argb)> FlattenFormats(
         Dictionary<string, string>? byHeader, Dictionary<string, int> headerIndex)

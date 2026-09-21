@@ -27,6 +27,9 @@ public class UploadJobProcessor(
     IWorkbookFileStore files) : IUploadJobProcessor
 {
     private const int BatchSize = 1000;
+    // Bulk-audit cap: 50k RecordEdit rows max per replace (≈ user 9k case
+    // with headroom). Guards against 10M-cell explosion OOMs.
+    private const int MaxAuditEdits = 50000;
 
     public async Task ProcessAsync(Guid jobId, CancellationToken ct = default)
     {
@@ -347,6 +350,13 @@ public class UploadJobProcessor(
             if (mode == "same")
             {
                 var tempRowCount = temporary.RowCount;
+                // Bulk-audit snapshot BEFORE deletion: every cell that actually
+                // changed (after keep-old choices were applied during import)
+                // becomes a RecordEdit row stamped with the NEW version (N+1),
+                // so the edits page shows the whole bulk update as "الإصدار N+1".
+                var auditEdits = await BuildReplaceAuditAsync(
+                    target.Id, temporary.Id, replace.Version + 1, target.Id,
+                    config.RequestedBy, ct);
                 uow.Records.RemoveRange(await uow.Records.ListAsync(r => r.FileId == target.Id, ct));
                 uow.DataQuality.RemoveRange(await uow.DataQuality.ListAsync(i => i.FileId == target.Id, ct));
                 uow.FileColumns.RemoveRange(await uow.FileColumns.ListAsync(c => c.FileId == target.Id, ct));
@@ -356,8 +366,12 @@ public class UploadJobProcessor(
                     r.FileId = target.Id;
                 foreach (var i in await uow.DataQuality.ListAsync(i => i.FileId == temporary.Id, ct))
                     i.FileId = target.Id;
+                var newColIds = new Dictionary<string, Guid>(StringComparer.Ordinal);
                 foreach (var c in await uow.FileColumns.ListAsync(c => c.FileId == temporary.Id, ct))
+                {
                     c.FileId = target.Id;
+                    newColIds[c.HeaderRaw] = c.Id;
+                }
                 await uow.SaveChangesAsync(ct);
                 uow.Files.Remove(temporary);
                 target.OriginalFilename = temporary.OriginalFilename;
@@ -377,18 +391,39 @@ public class UploadJobProcessor(
                     job.FinishedAt = DateTime.UtcNow;
                 }
                 await uow.SaveChangesAsync(ct);
+                // Re-bind audit rows to the re-pointed record/column ids (ids
+                // themselves are stable across the re-point; only the file
+                // link changed, which we already set to target.Id).
+                // FileColumnId was resolved from the temp columns snapshot;
+                // refresh from the re-pointed map in case of duplicates.
+                foreach (var e in auditEdits)
+                {
+                    if (newColIds.TryGetValue(e.HeaderRaw, out var cid))
+                        e.FileColumnId = cid;
+                    e.FileId = target.Id;
+                    e.FileVersion = target.Version;
+                }
+                if (auditEdits.Count > 0)
+                {
+                    uow.RecordEdits.AddRange(auditEdits);
+                    await uow.SaveChangesAsync(ct);
+                }
                 await activity.WriteAsync(ActivityAction.FileUpdated, target.Name,
-                    new { fileId = target.Id, version = target.Version, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count }, ct);
+                    new { fileId = target.Id, version = target.Version, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
             }
             else
             {
                 var previousRows = target.RowCount;
-                var newRows = temporary.RowCount;
+                var newRowsCount = temporary.RowCount;
+                var newVersion = target.Version + 1;
+                var auditEdits = await BuildReplaceAuditAsync(
+                    target.Id, temporaryFileId, newVersion, temporaryFileId,
+                    config.RequestedBy, ct);
                 uow.Files.Remove(target);
                 temporary.Name = target.Name;
                 temporary.Description = target.Description;
                 temporary.GroupId = target.GroupId;
-                temporary.Version = target.Version + 1;
+                temporary.Version = newVersion;
                 temporary.UploadedAt = DateTime.UtcNow;
                 if (job is not null)
                 {
@@ -397,9 +432,161 @@ public class UploadJobProcessor(
                     job.FinishedAt = DateTime.UtcNow;
                 }
                 await uow.SaveChangesAsync(ct);
+                foreach (var e in auditEdits)
+                {
+                    e.FileId = temporary.Id;
+                    e.FileVersion = newVersion;
+                }
+                if (auditEdits.Count > 0)
+                {
+                    uow.RecordEdits.AddRange(auditEdits);
+                    await uow.SaveChangesAsync(ct);
+                }
                 await activity.WriteAsync(ActivityAction.FileReplaced, target.Name,
-                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousRows, newRows, keptOldCells = config.KeepOldCells.Count }, ct);
+                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousRows, newRows = newRowsCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
             }
         }, ct);
+    }
+
+    /// <summary>Builds the V(N+1) bulk audit: every cell whose stored value
+    /// differs after the replace becomes a RecordEdit (old → new) stamped
+    /// with the new version. Row identity mirrors the preview (national-id
+    /// key when it covers ≥70% uniquely, else positional by RowIndex order).
+    /// Kept-old cells already carry the old value in the temp rows, so they
+    /// naturally produce no diff and are not logged.</summary>
+    private async Task<List<RecordEdit>> BuildReplaceAuditAsync(
+        Guid oldFileId, Guid newFileId, int newVersion, Guid auditFileId,
+        string? requestedBy, CancellationToken ct)
+    {
+        var oldRows = await uow.Records.ListExportRowsAsync(oldFileId, ct);
+        var newRows = await uow.Records.ListExportRowsAsync(newFileId, ct);
+        if (oldRows.Count == 0 || newRows.Count == 0) return [];
+        var oldCols = await uow.FileColumns.ListByFileAsync(oldFileId, ct);
+        var newCols = await uow.FileColumns.ListByFileAsync(newFileId, ct);
+        if (oldCols.Count == 0 || newCols.Count == 0) return [];
+
+        var newByNorm = new Dictionary<string, FileColumn>(StringComparer.Ordinal);
+        foreach (var c in newCols)
+            newByNorm.TryAdd(c.HeaderNormalized, c);
+        // Common columns as (old header, new column entity).
+        var common = new List<(string OldRaw, FileColumn NewCol)>();
+        foreach (var oc in oldCols.OrderBy(c => c.ColumnIndex))
+            if (newByNorm.TryGetValue(oc.HeaderNormalized, out var nc))
+                common.Add((oc.HeaderRaw, nc));
+        if (common.Count == 0) return [];
+
+        var oldMaps = oldRows.Select(r => (r.Id, r.RowIndex, Map: RowMap(r.Data))).ToList();
+        var newMaps = newRows.Select(r => (r.Id, r.RowIndex, Map: RowMap(r.Data))).ToList();
+
+        // National-id key matching when it covers most rows uniquely.
+        var oldNational = oldCols.FirstOrDefault(c => c.StandardField == StandardField.NationalId);
+        var newNational = newCols.FirstOrDefault(c => c.StandardField == StandardField.NationalId);
+        var useKey = false;
+        Dictionary<string, int>? oldKeyToIdx = null;
+        Dictionary<string, int>? newKeyToIdx = null;
+        if (oldNational is not null && newNational is not null)
+        {
+            var curMap = new Dictionary<string, int>(StringComparer.Ordinal);
+            var dup = false;
+            for (var i = 0; i < oldMaps.Count && !dup; i++)
+            {
+                oldMaps[i].Map.TryGetValue(oldNational.HeaderRaw, out var v);
+                var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                if (key is null) continue;
+                if (!curMap.TryAdd(key, i)) dup = true;
+            }
+            var nxtMap = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (!dup)
+            {
+                for (var i = 0; i < newMaps.Count && !dup; i++)
+                {
+                    newMaps[i].Map.TryGetValue(newNational.HeaderRaw, out var v);
+                    var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                    if (key is null) continue;
+                    if (!nxtMap.TryAdd(key, i)) dup = true;
+                }
+            }
+            if (!dup && oldMaps.Count > 0 && newMaps.Count > 0
+                && curMap.Count >= oldMaps.Count * 0.7
+                && nxtMap.Count >= newMaps.Count * 0.7)
+            {
+                useKey = true;
+                oldKeyToIdx = curMap;
+                newKeyToIdx = nxtMap;
+            }
+        }
+
+        var pairs = new List<(int NewIdx, int OldIdx)>();
+        if (useKey)
+        {
+            foreach (var kv in newKeyToIdx!)
+                if (oldKeyToIdx!.TryGetValue(kv.Key, out var oi))
+                    pairs.Add((kv.Value, oi));
+        }
+        else
+        {
+            var orderedOld = oldMaps
+                .Select((r, i) => (r, i))
+                .OrderBy(x => x.r.RowIndex)
+                .ToList();
+            var orderedNew = newMaps
+                .Select((r, i) => (r, i))
+                .OrderBy(x => x.r.RowIndex)
+                .ToList();
+            var matched = Math.Min(orderedOld.Count, orderedNew.Count);
+            for (var i = 0; i < matched; i++)
+                pairs.Add((orderedNew[i].i, orderedOld[i].i));
+        }
+
+        var editedBy = string.IsNullOrWhiteSpace(requestedBy) ? "system" : requestedBy.Trim();
+        var nationalHeader = newCols
+            .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
+        var result = new List<RecordEdit>(Math.Min(pairs.Count * common.Count, MaxAuditEdits));
+        foreach (var (ni, oi) in pairs)
+        {
+            ct.ThrowIfCancellationRequested();
+            var oldMap = oldMaps[oi].Map;
+            var newEntry = newMaps[ni];
+            string? nationalId = null;
+            if (nationalHeader is not null)
+            {
+                newEntry.Map.TryGetValue(nationalHeader, out var nationalRaw);
+                var norm = ArabicNormalizer.NormalizeNationalId(nationalRaw ?? "");
+                nationalId = string.IsNullOrEmpty(norm) ? null : norm;
+            }
+            foreach (var (oldRaw, newCol) in common)
+            {
+                oldMap.TryGetValue(oldRaw, out var ov);
+                newEntry.Map.TryGetValue(newCol.HeaderRaw, out var nv);
+                ov ??= "";
+                nv ??= "";
+                if (string.Equals(ov, nv, StringComparison.Ordinal)) continue;
+                if (result.Count >= MaxAuditEdits) return result;
+                result.Add(new RecordEdit
+                {
+                    RecordId = newEntry.Id,
+                    FileId = auditFileId,
+                    FileColumnId = newCol.Id,
+                    FileVersion = newVersion,
+                    HeaderRaw = newCol.HeaderRaw,
+                    OldValue = ov.Length <= 5000 ? ov : ov[..5000],
+                    NewValue = nv.Length <= 5000 ? nv : nv[..5000],
+                    EditedBy = editedBy,
+                    NationalId = nationalId,
+                });
+            }
+        }
+        return result;
+    }
+
+    private static Dictionary<string, string> RowMap(JsonDocument? doc)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return map;
+        foreach (var p in doc.RootElement.EnumerateObject())
+            map[p.Name] = p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? ""
+                : p.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? ""
+                : p.Value.GetRawText();
+        return map;
     }
 }

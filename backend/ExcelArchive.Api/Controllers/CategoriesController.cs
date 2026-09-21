@@ -27,37 +27,41 @@ public class CategoriesController(ICategoryService categories, IAuthService auth
     }
 
     [HttpPost("categories")]
-    public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
+    public async Task<IActionResult> Create([FromBody] CreateCategoryRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات الفئة غير صالحة.");
         try { return Ok(new { category = await categories.CreateAsync(request, user.Username) }); }
         catch (Exception ex) { return HandleError(ex); }
     }
 
     [HttpPatch("categories/{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategoryRequest request)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategoryRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات الفئة غير صالحة.");
         try { return Ok(new { category = await categories.UpdateAsync(id, request, user.Username) }); }
         catch (Exception ex) { return HandleError(ex); }
     }
 
     [HttpPost("categories/{id:guid}/reorder")]
-    public async Task<IActionResult> Reorder(Guid id, [FromBody] ReorderCategoryRequest request)
+    public async Task<IActionResult> Reorder(Guid id, [FromBody] ReorderCategoryRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات الترتيب غير صالحة.");
         try { await categories.ReorderAsync(id, request.Direction, user.Username); return Ok(new { ok = true }); }
         catch (Exception ex) { return HandleError(ex); }
     }
 
     [HttpPost("categories/columns/move")]
-    public async Task<IActionResult> MoveColumn([FromBody] MoveColumnRequest request)
+    public async Task<IActionResult> MoveColumn([FromBody] MoveColumnRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات النقل غير صالحة.");
         try { return Ok(new { ok = true, message = await categories.MoveColumnAsync(request.ColumnId, request.CategoryId, user.Username) }); }
         catch (Exception ex) { return HandleError(ex); }
     }
@@ -65,10 +69,11 @@ public class CategoriesController(ICategoryService categories, IAuthService auth
     /// <summary>Global standard-column ordering within one category board
     /// (V1 reorderCategoryColumnGroups): ordered normalized-header group keys.</summary>
     [HttpPost("categories/column-groups/reorder")]
-    public async Task<IActionResult> ReorderColumnGroups([FromBody] ReorderColumnGroupsRequest request)
+    public async Task<IActionResult> ReorderColumnGroups([FromBody] ReorderColumnGroupsRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات الترتيب غير صالحة.");
         try { await categories.ReorderColumnGroupsAsync(request.CategoryId, request.OrderedGroupKeys, user.Username); return Ok(new { ok = true }); }
         catch (Exception ex) { return HandleError(ex); }
     }
@@ -84,10 +89,11 @@ public class CategoriesController(ICategoryService categories, IAuthService auth
     }
 
     [HttpDelete("categories/{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteCategoryRequest request)
+    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteCategoryRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.CategoriesManage);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null) return Bad("بيانات الحذف غير صالحة.");
         if (request.Id != Guid.Empty && request.Id != id)
             return Bad("معرف الفئة في الجسم لا يطابق المسار.");
         try { await categories.DeleteAsync(id, request.ConfirmName, user.Username); return Ok(new { ok = true }); }

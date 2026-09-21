@@ -149,6 +149,59 @@ public sealed class ReplacePreviewTests
     }
 
     [Fact]
+    public async Task Preview_ManualFirst_WhenManyChanges()
+    {
+        using var db = TestHelpers.InMemoryDb();
+        var group = new Group { Name = "g" };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        var file = new FileEntity { GroupId = group.Id, Name = "f", SheetName = "S", RowCount = 600, Version = 1 };
+        db.Files.Add(file);
+        await db.SaveChangesAsync();
+        db.FileColumns.Add(new FileColumn
+        {
+            FileId = file.Id, HeaderRaw = "الاسم", HeaderNormalized = "الاسم",
+            ColumnIndex = 1, StandardField = Domain.Enums.StandardField.FullName,
+        });
+        await db.SaveChangesAsync();
+        const int N = 600;
+        var records = new List<RecordEntity>(N);
+        for (var i = 0; i < N; i++)
+            records.Add(new RecordEntity
+            {
+                FileId = file.Id, RowIndex = i + 2,
+                Data = System.Text.Json.JsonDocument.Parse($"{{\"الاسم\":\"قديم {i}\"}}"),
+            });
+        db.Records.AddRange(records);
+        await db.SaveChangesAsync();
+        // Manual edit on the LAST row only: it must surface first.
+        var last = records[^1];
+        db.RecordEdits.Add(new RecordEdit
+        {
+            RecordId = last.Id, FileId = file.Id, HeaderRaw = "الاسم",
+            OldValue = "x", NewValue = $"قديم {N - 1}", EditedBy = "test", FileVersion = 1,
+        });
+        await db.SaveChangesAsync();
+        var rows = Enumerable.Range(0, N)
+            .Select(i => new ImportRowDto(i + 2, [$"جديد {i}"], null))
+            .ToList();
+        var svc = new ReplacePreviewService(TestHelpers.Uow(db),
+            new StubReader(new WorkbookImportData("S", rows)), new StubStore());
+        var req = new ReplaceFileRequest("n.xlsx", "S", 1, N, null, "same",
+            [new ReplaceColumnDto("الاسم", "الاسم", 1, "full_name", null)],
+            null, Guid.NewGuid());
+        var res = await svc.PreviewAsync(file.Id, req);
+        Assert.True(res.Identical);
+        Assert.Equal(N, res.Summary!.ChangedCells);
+        Assert.Equal(N, res.Changes!.Count);
+        Assert.False(res.Truncated);
+        Assert.Equal(1, res.Summary.ManualOverwriteCount);
+        // Manual-first ordering: first change is the edited last row.
+        Assert.True(res.Changes[0].WasManuallyEdited);
+        Assert.Equal(N + 1, res.Changes[0].RowIndex);
+    }
+
+    [Fact]
     public async Task Preview_IdenticalData_ZeroChanges()
     {
         using var db = TestHelpers.InMemoryDb();

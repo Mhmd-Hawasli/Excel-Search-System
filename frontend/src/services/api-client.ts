@@ -140,8 +140,8 @@ export async function apiFetchNDJSON(
   if (tail) onEvent(JSON.parse(tail));
 }
 
-export async function apiGet<T>(path: string, query: QueryMap = {}): Promise<T> {
-  return apiFetch<T>(`${path}${buildQuery(query)}`);
+export async function apiGet<T>(path: string, query: QueryMap = {}, init: RequestInit = {}): Promise<T> {
+  return apiFetch<T>(`${path}${buildQuery(query)}`, init);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

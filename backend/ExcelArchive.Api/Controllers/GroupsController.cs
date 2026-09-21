@@ -71,10 +71,12 @@ public class GroupsController(IGroupService groups, IAuthService auth) : ApiCont
     }
 
     [HttpPost("groups/{id:guid}/reorder")]
-    public async Task<IActionResult> Reorder(Guid id, [FromBody] ReorderGroupRequest request)
+    public async Task<IActionResult> Reorder(Guid id, [FromBody] ReorderGroupRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null || (request.Direction != "up" && request.Direction != "down"))
+            return Bad("حدد اتجاه الترتيب.");
         try
         {
             await groups.ReorderAsync(id, request.Direction, user.Username);
@@ -84,10 +86,12 @@ public class GroupsController(IGroupService groups, IAuthService auth) : ApiCont
     }
 
     [HttpDelete("groups/{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteGroupRequest request)
+    public async Task<IActionResult> Delete(Guid id, [FromBody] DeleteGroupRequest? request)
     {
         var user = await RequirePermissionAsync(Permissions.GroupsUpdate);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (request is null || string.IsNullOrEmpty(request.ConfirmName))
+            return Bad("اسم التأكيد مطلوب لحذف المجموعة.");
         try
         {
             await groups.DeleteAsync(id, request.ConfirmName, user.Username);
