@@ -23,7 +23,7 @@ public sealed class PostgresHealthCheck(IConfiguration configuration) : IHealthC
     internal static string ConnectionString(IConfiguration configuration) =>
         configuration.GetConnectionString("Default")
         ?? configuration["DATABASE_URL"]
-        ?? "Host=localhost;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
+        ?? "Host=localhost;Port=5434;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
 }
 
 /// <summary>Search/cache schema readiness (extensions + 14 indexes + cache tables).</summary>

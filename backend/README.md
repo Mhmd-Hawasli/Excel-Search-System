@@ -7,7 +7,7 @@ business logic. The frontend never talks to PostgreSQL.
 
 ```bash
 dotnet restore
-dotnet run --project ExcelArchive.Api --urls http://0.0.0.0:5000
+dotnet run --project ExcelArchive.Api --urls http://0.0.0.0:5005
 ```
 
 > The database is created on first boot by `DbSeeder` (`EnsureCreated` +

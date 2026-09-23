@@ -8,7 +8,7 @@ service layer under `src/services`.
 
 ```bash
 npm install
-cp .env.example .env   # set BACKEND_URL if not http://localhost:5000
+cp .env.example .env   # set BACKEND_URL if not http://localhost:5005 (DEV docker: 3300/5005, see docker-compose.dev.yml)
 npm run dev
 ```
 

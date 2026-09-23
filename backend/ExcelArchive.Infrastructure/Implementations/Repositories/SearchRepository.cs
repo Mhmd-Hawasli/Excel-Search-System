@@ -309,5 +309,5 @@ public sealed class SearchRepository(IConfiguration config) : ISearchRepository
 
     private string ConnectionString =>
         config.GetConnectionString("Default") ?? config["DATABASE_URL"]
-        ?? "Host=localhost;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
+        ?? "Host=localhost;Port=5434;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
 }

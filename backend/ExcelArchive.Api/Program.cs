@@ -39,7 +39,7 @@ builder.Host.UseSerilog((context, cfg) => cfg
 // services and the background worker. Infrastructure exposes no Add* extension.
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? builder.Configuration["DATABASE_URL"]
-    ?? "Host=localhost;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
+     ?? "Host=localhost;Port=5434;Database=excel_archive_2;Username=excel_archive;Password=excel_archive";
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsql =>
@@ -164,7 +164,7 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 
-var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["http://localhost:3000"];
+var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["http://localhost:3300"];
 builder.Services.AddCors(options =>
     options.AddPolicy("frontend", policy => policy
         .WithOrigins(allowedOrigins)

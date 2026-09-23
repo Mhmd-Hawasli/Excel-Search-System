@@ -64,7 +64,7 @@ internal static class TestHelpers
     public static AppDbContext ModelOnlyDb()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql("Host=localhost;Port=5432;Database=unused;Username=unused;Password=unused")
+            .UseNpgsql("Host=localhost;Port=5434;Database=unused;Username=unused;Password=unused")
             .UseSnakeCaseNamingConvention()
             .Options;
         return new AppDbContext(options);

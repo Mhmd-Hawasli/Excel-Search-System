@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const SESSION_COOKIE = "excel_archive_session";
 
 function backendUrl(): string {
-  return process.env.BACKEND_URL ?? "http://localhost:5000";
+  return process.env.BACKEND_URL ?? "http://localhost:5005";
 }
 
 /**

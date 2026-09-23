@@ -1,0 +1,75 @@
+# =====================================================================
+# DEV / EXPERIMENTS compose — هذا هو ملف الدوكر المرتبط بالمشروع
+# THIS IS THE ONLY compose file AI agents may use. See AGENTS.md §0.
+#
+#   Frontend : http://localhost:3300  (container 3000)
+#   Backend  : http://localhost:5005  (container 5000)
+#   Postgres : localhost:5434         (container 5432, DB excel_archive_2)
+#
+# Usage (ALWAYS with -f + -p, NEVER plain `docker compose ...`):
+#   docker compose -f docker-compose.dev.yml -p v2-exp up -d --build
+#   docker compose -f docker-compose.dev.yml -p v2-exp ps
+#   docker compose -f docker-compose.dev.yml -p v2-exp logs -f backend
+#
+# PROD compose (docker-compose.yml → ports 3000/5000/5432,
+# containers excel-archive-2-*) is FORBIDDEN: do not start/stop/build/
+# restart/remove/exec/logs it, do not pg_dump INTO it, do not delete its
+# volume v2_excel_archive_2_data. Read AGENTS.md §0 before any docker cmd.
+# =====================================================================
+name: v2-exp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: excel-archive-exp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: excel_archive
+      POSTGRES_PASSWORD: excel_archive
+      POSTGRES_DB: excel_archive_2
+    ports:
+      - "5434:5432"
+    volumes:
+      - excel_archive_exp_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U excel_archive -d excel_archive_2"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: excel-archive-exp-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=excel_archive_2;Username=excel_archive;Password=excel_archive"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      TEST_USERNAME: ${TEST_USERNAME:-test}
+      TEST_PASSWORD: ${TEST_PASSWORD:-test123}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-characters}
+      AllowedOrigins__0: http://localhost:3300
+      AllowedOrigins__1: http://127.0.0.1:3300
+    ports:
+      - "5005:5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:5000
+    container_name: excel-archive-exp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:5000
+    ports:
+      - "3300:3000"
+
+volumes:
+  excel_archive_exp_data:
