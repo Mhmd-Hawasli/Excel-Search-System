@@ -147,6 +147,7 @@ export interface ReplacePreviewColumnStat {
   columnIndex: number;
   changedCells: number;
   manualOverwriteCells: number;
+  formattingOnlyCells?: number;
 }
 
 export interface ReplacePreviewNewColumn {
@@ -168,6 +169,7 @@ export interface ReplacePreviewSummary {
   manualOverwriteCount: number;
   matchMode: string;
   hasMoreChanges: boolean;
+  formattingOnlyCells?: number;
 }
 
 export interface ReplacePreview {

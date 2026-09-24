@@ -186,16 +186,20 @@ export function FileUpdateWizard({
   }
   function buildReplaceBody() {
     if (!inspection || !sheet) return null;
+    const mode = identical ? "same" : "different";
     return {
-      mode: identical ? "same" : "different",
+      mode,
       token: inspection.token,
       originalFilename: inspection.originalFilename,
       sheetName: sheet.sheetName,
       sheetIndex: sheet.sheetIndex,
       totalRows: sheet.rowCount,
       linkedSheets: sheet.linkedSheets ?? undefined,
+      // Per-cell keep-old is only meaningful for the direct update path.
+      // The alternate-version path (different) replaces the whole structure,
+      // so the preview there is read-only and no keep-old choices are sent.
       keepOldCells:
-        overrides.size > 0
+        mode === "same" && overrides.size > 0
           ? [...overrides.values()].map((row) => ({
               rowIndex: row.rowIndex,
               headerRaw: row.headerRaw,
@@ -249,8 +253,13 @@ export function FileUpdateWizard({
       setPreview(result);
       setPage(1);
       setOverrides(new Map());
-      if (result.identical && (result.summary?.changedCells ?? 0) === 0) {
-        toast.success("البيانات متطابقة تمامًا — لا توجد خلايا متغيرة.");
+      if ((result.summary?.changedCells ?? 0) === 0) {
+        const shaping = result.summary?.formattingOnlyCells ?? 0;
+        toast.success(
+          shaping > 0
+            ? `لا توجد تغييرات حقيقية — ${shaping.toLocaleString("en-US")} خلية شكلية فقط (نفس القيمة بتنسيق مختلف).`
+            : "البيانات متطابقة تمامًا — لا توجد خلايا متغيرة.",
+        );
       }
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : "تعذر معاينة الفروقات.");
@@ -259,16 +268,17 @@ export function FileUpdateWizard({
     }
   }
 
-  // مقارنة تلقائية خلية بخلية فور اختيار ورقة ببنية مطابقة —
-  // لا حاجة لضغط أي زر: كل خلية في الملف الجديد تُقارن مع قيمتها الحالية.
+  // مقارنة تلقائية خلية بخلية فور اختيار الورقة — للمسارين معًا:
+  // التحديث المباشر والإصدار البديل يعرضان القيم القديمة مقابل الجديدة.
+  // لا حاجة لضغط أي زر: كل خلية مشتركة بالاسم تُقارن مع قيمتها الحالية.
   useEffect(() => {
-    if (!identical || !sheet || !inspection || preview || previewBusy || busy || job) return;
+    if (!sheet || !inspection || preview || previewBusy || busy || job) return;
     const key = `${inspection.token}:${sheet.sheetName}:${sheet.sheetIndex}`;
     if (autoPreviewKey.current === key) return;
     autoPreviewKey.current = key;
     void runPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identical, sheet, inspection, preview, previewBusy, busy, job]);
+  }, [sheet, inspection, preview, previewBusy, busy, job]);
 
   async function start() {
     const body = buildReplaceBody();
@@ -501,19 +511,25 @@ export function FileUpdateWizard({
               </CardContent>
             </Card>
           ) : null}
-          {identical ? (
-            <Card className="border-primary/30">
+          {
+            <Card className={identical ? "border-primary/30" : "border-amber-500/40"}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Eye className="size-5 text-primary" />
-                  معاينة الفروقات خلية بخلية
+                  {identical
+                    ? "معاينة الفروقات خلية بخلية"
+                    : "معاينة فروقات الإصدار البديل — القديم مقابل الجديد"}
                 </CardTitle>
                 <CardDescription>
-                  يقارن كل خلية بين القيمة الحالية في النظام والقيمة في الملف الجديد،
-                  ويميز القيم التي تم تعديلها داخليًا وستُستبدل.
-                  {preview?.matchMode === "nationalId"
+                  {identical
+                    ? "يقارن كل خلية بين القيمة الحالية في النظام والقيمة في الملف الجديد، ويميز القيم التي تم تعديلها داخليًا وستُستبدل."
+                    : "يقارن الأعمدة المشتركة بالاسم بين القيمة الحالية في النظام والقيمة في الملف الجديد (قديم مقابل جديد)، مع توضيح الأعمدة التي ستُفقد والصفوف التي ستتغير قبل إنشاء الإصدار البديل."}
+                  {preview?.matchMode === "nationalId" || preview?.summary?.matchMode === "nationalId"
                     ? " المطابقة تمت عبر الرقم الوطني."
                     : " المطابقة تمت حسب ترتيب الصفوف."}
+                  {!identical
+                    ? " المعاينة هنا للمراجعة فقط — الإصدار البديل يستبدل البنية كاملة ولا يدعم الاحتفاظ بقيم قديمة خلية بخلية."
+                    : ""}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -536,9 +552,12 @@ export function FileUpdateWizard({
                       {preview.summary.totalCellsCompared.toLocaleString("en-US")} خلية تمت مقارنتها
                       خلال ثوانٍ — التقرير يعرض{" "}
                       {(preview.changes?.length ?? 0).toLocaleString("en-US")} من{" "}
-                      {preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة
+                      {preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة حقيقيًا
                       {preview.truncated ? " (مقتطع للحد الأقصى)" : " كاملة"}، مرتبةً بحيث تظهر
                       القيم المعدلة يدويًا أولًا، مع ترقيم صفحات.
+                      {(preview.summary.formattingOnlyCells ?? 0) > 0 ? (
+                        <> القيم الشكلية فقط ({(preview.summary.formattingOnlyCells ?? 0).toLocaleString("en-US")}) مستثناة — نفس القيمة بتنسيق مختلف.</>
+                      ) : null}
                     </p>
                   ) : previewBusy ? (
                     <p className="flex items-center gap-2 text-xs font-bold text-primary">
@@ -557,8 +576,14 @@ export function FileUpdateWizard({
                   <>
                     <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                       <div className="rounded-lg bg-muted p-3">
-                        <p className="text-xs text-muted-foreground">خلايا متغيرة</p>
+                        <p className="text-xs text-muted-foreground">خلايا متغيرة حقيقيًا</p>
                         <p className="mt-1 text-xl font-black">{preview.summary.changedCells.toLocaleString("en-US")}</p>
+                      </div>
+                      <div className="rounded-lg bg-sky-500/10 p-3" title="نفس القيمة منطقيًا بتنسيق مختلف: أصفار بادئة، ترتيب التاريخ، مسافات زائدة — لا تُحتسب تغييرًا ولا تُسجل في سجل التعديلات">
+                        <p className="text-xs text-muted-foreground">تغييرات شكلية فقط</p>
+                        <p className="mt-1 text-xl font-black text-sky-700 dark:text-sky-300">
+                          {(preview.summary.formattingOnlyCells ?? 0).toLocaleString("en-US")}
+                        </p>
                       </div>
                       <div className="rounded-lg bg-muted p-3">
                         <p className="text-xs text-muted-foreground">صفوف متغيرة</p>
@@ -597,6 +622,38 @@ export function FileUpdateWizard({
                       </div>
                     ) : null}
 
+                    {(preview.summary.formattingOnlyCells ?? 0) > 0 ? (
+                      <div className="flex gap-2 rounded-xl border border-sky-400/50 bg-sky-50 p-3 text-sm dark:bg-sky-950/20">
+                        <Eye className="size-5 shrink-0 text-sky-600" />
+                        <p>
+                          <span className="font-bold">
+                            {(preview.summary.formattingOnlyCells ?? 0).toLocaleString("en-US")} خلية تحمل نفس القيمة منطقيًا بتنسيق مختلف
+                          </span>{" "}
+                          (صفر بادئ ضائع مثل 0417 مقابل 417، ترتيب تاريخ مختلف مثل 13/08/2024 مقابل 8/13/2024، مسافات زائدة، محارف غير مرئية كعلامات اتجاه النص في الإيميل).
+                          هذه الخلايا <span className="font-bold">ليست تغييرًا حقيقيًا</span> — لن تُحتسب في العدّادات أعلاه ولن تُسجل في سجل التعديلات،
+                          وستُكتب بتنسيق الملف الجديد فقط.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {!identical && preview.removedColumns && preview.removedColumns.length ? (
+                      <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                        <p className="font-bold text-destructive">
+                          أعمدة ستُفقد نهائيًا مع كل قيمها ({preview.removedColumns.length.toLocaleString("en-US")}):
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {preview.removedColumns.map((item) => (
+                            <Badge key={item} variant="destructive">
+                              − {item}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          كل قيمة مخزنة تحت هذه الأعمدة ({currentRows.toLocaleString("en-US")} صف × {preview.removedColumns.length.toLocaleString("en-US")} عمود) ستُحذف عند إنشاء الإصدار البديل. الجدول أدناه يقارن فقط الأعمدة المشتركة المتبقية (قديم مقابل جديد).
+                        </p>
+                      </div>
+                    ) : null}
+
                     {preview.newColumns && preview.newColumns.length ? (
                       <div className="overflow-x-auto rounded-lg border border-primary/30">
                         <table className="w-full text-sm">
@@ -618,27 +675,38 @@ export function FileUpdateWizard({
                       </div>
                     ) : null}
 
+                    {preview.columnStats && preview.columnStats.length === 0 ? (
+                      <p className="rounded-lg bg-destructive/5 p-3 text-sm font-bold text-destructive">
+                        لا توجد أعمدة مشتركة بالاسم بين الملف الحالي والملف الجديد — كل البيانات الحالية ستُستبدل بالكامل، ولا توجد قيم قديمة قابلة للمقارنة خلية بخلية. راجع أعداد الصفوف أعلاه وقائمة الأعمدة المفقودة/المضافة قبل التأكيد.
+                      </p>
+                    ) : null}
+
                     {preview.summary.changedCells === 0 ? (
                       <p className="rounded-lg bg-primary/5 p-3 text-sm font-bold text-primary">
-                        {preview.newColumns && preview.newColumns.length
-                          ? "القيم في الأعمدة المشتركة متطابقة تمامًا — التحديث سيضيف الأعمدة الجديدة أعلاه فقط."
-                          : "البيانات متطابقة تمامًا — لا يوجد أي اختلاف بين النظام والملف الجديد."}
+                        {preview.columnStats && preview.columnStats.length === 0
+                          ? "لا توجد أعمدة مشتركة للمقارنة — التغيير هنا هو استبدال كامل للبنية والصفوف."
+                          : preview.newColumns && preview.newColumns.length
+                            ? "القيم في الأعمدة المشتركة متطابقة تمامًا — التحديث سيضيف الأعمدة الجديدة أعلاه فقط."
+                            : identical
+                              ? "البيانات متطابقة تمامًا — لا يوجد أي اختلاف بين النظام والملف الجديد."
+                              : "القيم في الأعمدة المشتركة متطابقة تمامًا — التغيير في الإصدار البديل هو فقدان الأعمدة المحذوفة وإضافة الجديدة أعلاه مع تغير أعداد الصفوف."}
                       </p>
                     ) : (
                       <>
-                        {preview.columnStats && preview.columnStats.some((c) => c.changedCells > 0) ? (
+                        {preview.columnStats && preview.columnStats.some((c) => c.changedCells > 0 || (c.formattingOnlyCells ?? 0) > 0) ? (
                           <div className="overflow-x-auto rounded-lg border">
                             <table className="w-full text-sm">
                               <thead className="bg-muted">
                                 <tr>
                                   <th className="p-2 text-right">العمود</th>
-                                  <th className="p-2 text-right">خلايا متغيرة</th>
+                                  <th className="p-2 text-right">خلايا متغيرة حقيقيًا</th>
                                   <th className="p-2 text-right">منها يدوية</th>
+                                  <th className="p-2 text-right">شكلية فقط</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {preview.columnStats
-                                  .filter((c) => c.changedCells > 0)
+                                  .filter((c) => c.changedCells > 0 || (c.formattingOnlyCells ?? 0) > 0)
                                   .sort((a, b) => b.changedCells - a.changedCells)
                                   .slice(0, 20)
                                   .map((c) => (
@@ -650,6 +718,15 @@ export function FileUpdateWizard({
                                           <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-200">
                                             {c.manualOverwriteCells.toLocaleString("en-US")} يدوية
                                           </Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      <td className="p-2">
+                                        {(c.formattingOnlyCells ?? 0) > 0 ? (
+                                          <span className="text-sky-700 dark:text-sky-300">
+                                            {(c.formattingOnlyCells ?? 0).toLocaleString("en-US")} شكلية
+                                          </span>
                                         ) : (
                                           <span className="text-muted-foreground">—</span>
                                         )}
@@ -690,7 +767,9 @@ export function FileUpdateWizard({
                               ? ` (يُعرض ${(preview.changes?.length ?? 0).toLocaleString("en-US")} — مقتطع)`
                               : " (العرض الكامل)"}
                             {" — "}
-                            {overrides.size > 0 ? (
+                            {!identical ? (
+                              <span>عرض للمراجعة فقط — الإصدار البديل يعتمد القيم الجديدة دائمًا</span>
+                            ) : overrides.size > 0 ? (
                               <span className="font-bold text-amber-700 dark:text-amber-300">
                                 {overrides.size.toLocaleString("en-US")} خلية ستبقى بقيمتها القديمة
                               </span>
@@ -718,26 +797,36 @@ export function FileUpdateWizard({
                           </label>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="font-bold">اعتماد جماعي:</span>
-                          <Button type="button" size="sm" variant="outline" onClick={keepAllNew}>
-                            الكل: الجديدة
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={keepAllOld}>
-                            الكل: القديمة ({(preview.changes?.length ?? 0).toLocaleString("en-US")})
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" onClick={keepManualOld}>
-                            المعدلة يدويًا فقط: القديمة (
-                            {(preview.changes ?? []).filter((r) => r.wasManuallyEdited).length.toLocaleString("en-US")})
-                          </Button>
-                          <span className="text-xs text-muted-foreground">
-                            الاختيار الجماعي يشمل كل القيم المعروضة أعلاه (المعدلة يدويًا تظهر أولًا)،
-                            وسيُحفظ الاستبدال كاملًا في سجل التعديلات تحت الإصدار {preview.nextVersion || preview.currentVersion + 1}.
+                        {identical ? (
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-bold">اعتماد جماعي:</span>
+                            <Button type="button" size="sm" variant="outline" onClick={keepAllNew}>
+                              الكل: الجديدة
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={keepAllOld}>
+                              الكل: القديمة ({(preview.changes?.length ?? 0).toLocaleString("en-US")})
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={keepManualOld}>
+                              المعدلة يدويًا فقط: القديمة (
+                              {(preview.changes ?? []).filter((r) => r.wasManuallyEdited).length.toLocaleString("en-US")})
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              الاختيار الجماعي يشمل كل القيم المعروضة أعلاه (المعدلة يدويًا تظهر أولًا)،
+                              وسيُحفظ الاستبدال كاملًا في سجل التعديلات تحت الإصدار {preview.nextVersion || preview.currentVersion + 1}.
+                              {(preview.pendingEditCount ?? 0) > 0 ? (
+                                <> تنبيه: لديك {preview.pendingEditCount} تعديل يدوي على الإصدار الحالي — ستُحفظ في إصدار منفصل ({preview.currentVersion + 1}) ويصبح هذا التحديث الإصدار {preview.nextVersion || preview.currentVersion + 2}.</>
+                              ) : null}
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                            المعاينة أعلاه للمراجعة فقط: الإصدار البديل يعتمد القيم الجديدة في الأعمدة المشتركة،
+                            ويفقد الأعمدة المحذوفة نهائيًا. سيُحفظ ما تغير في سجل التعديلات تحت الإصدار {preview.nextVersion || preview.currentVersion + 1}.
                             {(preview.pendingEditCount ?? 0) > 0 ? (
-                              <> تنبيه: لديك {preview.pendingEditCount} تعديل يدوي على الإصدار الحالي — ستُحفظ في إصدار منفصل ({preview.currentVersion + 1}) ويصبح هذا التحديث الإصدار {preview.nextVersion || preview.currentVersion + 2}.</>
+                              <> تنبيه: لديك {preview.pendingEditCount} تعديل يدوي على الإصدار الحالي — ستُحفظ في إصدار منفصل ({preview.currentVersion + 1}).</>
                             ) : null}
-                          </span>
-                        </div>
+                          </p>
+                        )}
 
                         {pageRows.length ? (
                           <div className="overflow-x-auto rounded-lg border">
@@ -746,15 +835,15 @@ export function FileUpdateWizard({
                                 <tr>
                                   <th className="p-2 text-right">صف</th>
                                   <th className="p-2 text-right">العمود</th>
-                                  <th className="p-2 text-right">القيمة الحالية</th>
+                                  <th className="p-2 text-right">القيمة الحالية (القديمة)</th>
                                   <th className="p-2 text-right">القيمة الجديدة</th>
                                   <th className="p-2 text-right">الحالة</th>
-                                  <th className="p-2 text-right">الاعتماد</th>
+                                  {identical ? <th className="p-2 text-right">الاعتماد</th> : null}
                                 </tr>
                               </thead>
                               <tbody>
                                 {pageRows.map((row, i) => {
-                                  const keepOld = overrides.has(overrideKey(row));
+                                  const keepOld = identical && overrides.has(overrideKey(row));
                                   return (
                                   <tr
                                     key={`${row.rowIndex}-${row.headerRaw}-${i}`}
@@ -793,38 +882,40 @@ export function FileUpdateWizard({
                                         <span className="text-muted-foreground">عادية</span>
                                       )}
                                     </td>
-                                    <td className="p-2">
-                                      <div
-                                        role="group"
-                                        aria-label={`اعتماد القيمة للصف ${row.rowIndex} عمود ${row.headerRaw}`}
-                                        className="flex w-fit overflow-hidden rounded-md border text-xs font-bold"
-                                      >
-                                        <button
-                                          type="button"
-                                          onClick={() => setCellChoice(row, false)}
-                                          aria-pressed={!keepOld}
-                                          className={
-                                            !keepOld
-                                              ? "bg-primary px-2.5 py-1.5 text-primary-foreground"
-                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
-                                          }
+                                    {identical ? (
+                                      <td className="p-2">
+                                        <div
+                                          role="group"
+                                          aria-label={`اعتماد القيمة للصف ${row.rowIndex} عمود ${row.headerRaw}`}
+                                          className="flex w-fit overflow-hidden rounded-md border text-xs font-bold"
                                         >
-                                          الجديدة
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setCellChoice(row, true)}
-                                          aria-pressed={keepOld}
-                                          className={
-                                            keepOld
-                                              ? "bg-amber-500 px-2.5 py-1.5 text-white"
-                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
-                                          }
-                                        >
-                                          القديمة
-                                        </button>
-                                      </div>
-                                    </td>
+                                          <button
+                                            type="button"
+                                            onClick={() => setCellChoice(row, false)}
+                                            aria-pressed={!keepOld}
+                                            className={
+                                              !keepOld
+                                                ? "bg-primary px-2.5 py-1.5 text-primary-foreground"
+                                                : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                            }
+                                          >
+                                            الجديدة
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setCellChoice(row, true)}
+                                            aria-pressed={keepOld}
+                                            className={
+                                              keepOld
+                                                ? "bg-amber-500 px-2.5 py-1.5 text-white"
+                                                : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                            }
+                                          >
+                                            القديمة
+                                          </button>
+                                        </div>
+                                      </td>
+                                    ) : null}
                                   </tr>
                                   );
                                 })}
@@ -890,7 +981,7 @@ export function FileUpdateWizard({
                 ) : null}
               </CardContent>
             </Card>
-          ) : null}
+          }
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button size="lg" variant={identical ? "default" : "destructive"} className="w-full">
@@ -910,7 +1001,7 @@ export function FileUpdateWizard({
                           ? ` وسيُحتفظ بـ ${overrides.size.toLocaleString("en-US")} خلية بقيمها القديمة حسب اختيارك أعلاه.`
                           : ""
                       }`
-                    : `سيُستورد إصدار جديد من ${sheet.rowCount.toLocaleString("en-US")} صف. بعد نجاحه فقط، سيُحذف الملف القديم وترتفع قيمة الإصدار. تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.`}
+                    : `سيُستورد إصدار بديل من ${sheet.rowCount.toLocaleString("en-US")} صف بدل ${currentRows.toLocaleString("en-US")} صف حالي. بعد نجاحه فقط، سيُحذف الملف القديم ويصبح الإصدار ${preview ? preview.nextVersion || preview.currentVersion + 1 : "الجديد"}.${preview?.summary ? ` الأعمدة المشتركة: ${preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة في ${preview.summary.changedRows.toLocaleString("en-US")} صف (قديم مقابل جديد كما في المعاينة أعلاه)، و${preview.summary.addedRows.toLocaleString("en-US")} صف مضاف و${preview.summary.removedRows.toLocaleString("en-US")} صف محذوف.` : ""}${preview?.removedColumns?.length ? ` الأعمدة المفقودة نهائيًا (${preview.removedColumns.length}): ${preview.removedColumns.join("، ")}.` : ""}${preview?.addedColumns?.length ? ` الأعمدة الجديدة: ${preview.addedColumns.join("، ")}.` : ""} تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

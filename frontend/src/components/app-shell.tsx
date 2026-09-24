@@ -313,12 +313,6 @@ export function AppShell({
                    placeholder="ابحث بالاسم الثلاثي، الرقم الوطني، الشام كاش أو الرقم الذاتي…"
                   autoComplete="off"
                 />
-                <kbd
-                  className="hidden shrink-0 rounded border bg-card px-1.5 py-0.5 text-xs text-muted-foreground sm:block"
-                  dir="ltr"
-                >
-                  Ctrl K
-                </kbd>
                 <button
                   type="submit"
                   className="search-submit"

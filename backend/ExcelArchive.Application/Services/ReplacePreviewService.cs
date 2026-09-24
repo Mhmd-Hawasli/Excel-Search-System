@@ -80,12 +80,11 @@ public class ReplacePreviewService(
             .Select(c => c.HeaderRaw).ToList();
         var identical = removedColumns.Count == 0;
 
-        if (!identical)
-            return new ReplacePreviewResponse(false, addedColumns, removedColumns,
-                null, null, null, null, null, false, null, null, target.Version,
-                null, pendingEditCount, nextVersion);
-
-        // Identical structure: compare data cell by cell.
+        // Logical review: even when the structure changed (alternate-version
+        // path), the user must still see old vs new values and what will
+        // change. Common columns (by normalized header name) are compared
+        // cell by cell; removed columns are reported as full data loss and
+        // added columns as new data. No early return here on purpose.
         LinkedSheetsConfig? linked = null;
         if (request.LinkedSheets is not null)
         {
@@ -258,11 +257,13 @@ public class ReplacePreviewService(
 
         var changedPerColumn = new Dictionary<string, long>(StringComparer.Ordinal);
         var manualPerColumn = new Dictionary<string, long>(StringComparer.Ordinal);
-        foreach (var (targetRaw, _, _) in commonPairs) { changedPerColumn[targetRaw] = 0; manualPerColumn[targetRaw] = 0; }
+        var formattingPerColumn = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var (targetRaw, _, _) in commonPairs) { changedPerColumn[targetRaw] = 0; manualPerColumn[targetRaw] = 0; formattingPerColumn[targetRaw] = 0; }
 
         var changes = new List<ReplacePreviewChange>();
         var changedRows = new HashSet<int>();
         long changedCells = 0;
+        long formattingCells = 0;
         var manualOverwrite = 0;
 
         foreach (var (displayRow, ci, ni, key) in pairs)
@@ -280,7 +281,17 @@ public class ReplacePreviewService(
                 nxt.TryGetValue(newRaw, out var nv);
                 cv ??= "";
                 nv ??= "";
-                if (string.Equals(cv, nv, StringComparison.Ordinal)) continue;
+                // Equivalence, not bytes: Excel re-exports the same logical value
+                // with different formatting (leading zeros, US date order, extra
+                // spaces...). Those are reported separately, never as changes.
+                var verdict = ValueEquivalence.Compare(cv, nv);
+                if (verdict == ValueEquivalence.Verdict.Same) continue;
+                if (verdict == ValueEquivalence.Verdict.FormattingOnly)
+                {
+                    formattingCells++;
+                    formattingPerColumn[targetRaw]++;
+                    continue;
+                }
                 changedCells++;
                 changedPerColumn[targetRaw]++;
                 changedRows.Add(displayRow);
@@ -317,7 +328,8 @@ public class ReplacePreviewService(
         var columnStats = commonPairs.Select(p => new ReplacePreviewColumnStat(
             p.TargetRaw, p.ColumnIndex,
             changedPerColumn[p.TargetRaw],
-            manualPerColumn[p.TargetRaw])).ToList();
+            manualPerColumn[p.TargetRaw],
+            formattingPerColumn[p.TargetRaw])).ToList();
 
         var summary = new ReplacePreviewSummary(
             currentRows.Count, newRows.Count, pairs.Count,
@@ -326,10 +338,11 @@ public class ReplacePreviewService(
             changedCells, changedRows.Count,
             pairs.Count - changedRows.Count,
             manualOverwrite, matchMode,
-            changedCells > changes.Count);
+            changedCells > changes.Count,
+            formattingCells);
 
         return new ReplacePreviewResponse(
-            true, addedColumns, removedColumns,
+            identical, addedColumns, removedColumns,
             summary, columnStats, changes,
             addedRowIndices.Take(MaxRowSample).ToList(),
             removedRowIndices.Take(MaxRowSample).ToList(),

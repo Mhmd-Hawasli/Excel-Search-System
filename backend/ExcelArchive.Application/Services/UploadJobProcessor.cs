@@ -611,7 +611,10 @@ public class UploadJobProcessor(
                 newEntry.Map.TryGetValue(newCol.HeaderRaw, out var nv);
                 ov ??= "";
                 nv ??= "";
-                if (string.Equals(ov, nv, StringComparison.Ordinal)) continue;
+                // Same equivalence as the preview: formatting-only differences
+                // (leading zeros, date order, spacing...) are the same logical
+                // value and must not pollute the audit log with phantom edits.
+                if (ValueEquivalence.AreEquivalent(ov, nv)) continue;
                 if (result.Count >= MaxAuditEdits) return result;
                 result.Add(new RecordEdit
                 {

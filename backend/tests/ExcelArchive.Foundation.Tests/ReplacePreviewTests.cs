@@ -107,7 +107,12 @@ public sealed class ReplacePreviewTests
         var res = await svc.PreviewAsync(file.Id, req);
         Assert.False(res.Identical);
         Assert.Contains("جديد", res.AddedColumns);
-        Assert.Null(res.Summary);
+        // Logical review: alternate-version path must still preview old vs new
+        // (common columns diff + row counts), not just column names.
+        Assert.NotNull(res.Summary);
+        Assert.Equal(2, res.Summary.TotalRowsCurrent);
+        Assert.Equal(0, res.Summary.TotalRowsNew);
+        Assert.Equal(0, res.Summary.TotalCellsCompared);
     }
 
     [Fact]
@@ -316,7 +321,59 @@ public sealed class ReplacePreviewTests
         var res = await svc.PreviewAsync(file.Id, req);
         Assert.False(res.Identical);
         Assert.Contains("الهاتف", res.RemovedColumns);
-        Assert.Null(res.Summary);
+        // Alternate-version path still previews common-column diff (old vs new).
+        Assert.NotNull(res.Summary);
+        Assert.Equal(2, res.Summary.TotalRowsCurrent);
+        Assert.Equal(1, res.Summary.TotalRowsNew);
+        Assert.Equal(1, res.Summary.MatchedRows);
+    }
+
+    [Fact]
+    public async Task Preview_NonIdentical_ShowsCommonColumnChanges()
+    {
+        using var db = TestHelpers.InMemoryDb();
+        var (file, _, _) = await SeedFileAsync(db);
+        var import = new WorkbookImportData("S", [
+            new ImportRowDto(2, ["أحمد-معدل"], null),
+            new ImportRowDto(3, ["سارة"], null),
+        ]);
+        var svc = new ReplacePreviewService(TestHelpers.Uow(db), new StubReader(import), new StubStore());
+        var req = new ReplaceFileRequest("n.xlsx", "S", 1, 2, null, "different",
+            [new ReplaceColumnDto("الاسم", "الاسم", 1, "full_name", null)],
+            null, Guid.NewGuid());
+        var res = await svc.PreviewAsync(file.Id, req);
+        Assert.False(res.Identical);
+        Assert.Contains("الهاتف", res.RemovedColumns);
+        Assert.NotNull(res.Summary);
+        Assert.Equal(1, res.Summary.ChangedCells);
+        Assert.Equal(1, res.Summary.ChangedRows);
+        var change = Assert.Single(res.Changes!);
+        Assert.Equal("الاسم", change.HeaderRaw);
+        Assert.Equal("أحمد", change.CurrentValue);
+        Assert.Equal("أحمد-معدل", change.NewValue);
+    }
+
+    [Fact]
+    public async Task Preview_FormattingOnly_NotCountedAsChange()
+    {
+        using var db = TestHelpers.InMemoryDb();
+        var (file, _, _) = await SeedFileAsync(db);
+        // Same logical values, different Excel bytes: trailing space +
+        // leading zero. Neither is a real change.
+        var import = new WorkbookImportData("S", [
+            new ImportRowDto(2, ["أحمد ", "0111"], null),
+            new ImportRowDto(3, ["سارة", "222"], null),
+        ]);
+        var svc = new ReplacePreviewService(TestHelpers.Uow(db), new StubReader(import), new StubStore());
+        var res = await svc.PreviewAsync(file.Id, Req(Guid.NewGuid()));
+        Assert.True(res.Identical);
+        Assert.Equal(0, res.Summary!.ChangedCells);
+        Assert.Equal(0, res.Summary.ChangedRows);
+        Assert.Equal(2, res.Summary.UnchangedRows);
+        Assert.Equal(2, res.Summary.FormattingOnlyCells);
+        Assert.Empty(res.Changes!);
+        Assert.Equal(1, res.ColumnStats!.First(c => c.HeaderRaw == "الاسم").FormattingOnlyCells);
+        Assert.Equal(1, res.ColumnStats!.First(c => c.HeaderRaw == "الهاتف").FormattingOnlyCells);
     }
 
     private sealed class StubActivity : IActivityService

@@ -7,7 +7,8 @@ public record ReplacePreviewColumnStat(
     string HeaderRaw,
     int ColumnIndex,
     long ChangedCells,
-    long ManualOverwriteCells);
+    long ManualOverwriteCells,
+    long FormattingOnlyCells = 0);
 
 /// <summary>A column present in the new workbook but not in the system:
 /// it will be added by the update, with this many non-empty values.</summary>
@@ -39,7 +40,10 @@ public record ReplacePreviewSummary(
     int UnchangedRows,
     int ManualOverwriteCount,
     string MatchMode,
-    bool HasMoreChanges);
+    bool HasMoreChanges,
+    // Same logical value in a different format (leading zeros, date order,
+    // spacing...): not counted as a change, not written to the audit log.
+    long FormattingOnlyCells = 0);
 
 public record ReplacePreviewResponse(
     bool Identical,
