@@ -348,4 +348,66 @@ public sealed class WorkerTests : IDisposable
             Assert.Contains(activity.Writes, w => w.Action == ActivityAction.FileReplaced);
         }
     }
+
+    [Fact]
+    public async Task ReplaceDifferent_Twice_PreservesArchivedEdits()
+    {
+        // Regression: the second structure-change replace used to wipe the
+        // whole preserved history (archived rows kept the old file id and
+        // were cascade-deleted with the old file row).
+        var (db, sp, activity, store) = Fresh();
+        using (db)
+        {
+            var group = new Group { Name = "g" };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+            var old = Book(("الاسم", ["قديم"]));
+            _books.Add(old);
+            var cols = new[] { ("الاسم", (string?)"full_name") };
+            var first = await AddJob(db, Payload(await store.SaveAsync("o.xlsx", Save(old)), group.Id, "target", cols));
+            await TestHelpers.UploadProcessor(db, sp).RunAsync(first, CancellationToken.None);
+            var targetId = (await db.Files.FirstAsync()).Id;
+            var oldRecordId = (await db.Records.FirstAsync()).Id;
+            db.RecordEdits.Add(new RecordEdit
+            {
+                RecordId = oldRecordId, FileId = targetId,
+                HeaderRaw = "الاسم", OldValue = "قديم", NewValue = "قديم معدل", EditedBy = "test",
+            });
+            await db.SaveChangesAsync();
+
+            // First structure-change replace: V1 -> V3, manual edit archived as V2.
+            var nw = Book(("اللقب", ["جديد"]));
+            _books.Add(nw);
+            var token = await store.SaveAsync("n.xlsx", Save(nw));
+            var newCols = new[] { ("اللقب", (string?)null) };
+            var job = await AddJob(db, Payload(token, group.Id, "مؤقت-y", newCols,
+                mode: "replace", fileId: targetId, replaceMode: "different"));
+            await TestHelpers.UploadProcessor(db, sp).RunAsync(job, CancellationToken.None);
+
+            var kept = Assert.Single(await db.Files.ToListAsync());
+            Assert.Equal(3, kept.Version);
+            var archived = Assert.Single(await db.RecordEdits.ToListAsync());
+            Assert.Equal(2, archived.FileVersion);
+            Assert.Null(archived.RecordId);
+            Assert.Equal(kept.Id, archived.FileId);
+
+            // Second structure-change replace: the archived row must survive
+            // with its original stamp and follow the new file id.
+            var nw2 = Book(("الكنية", ["أجدد"]));
+            _books.Add(nw2);
+            var token2 = await store.SaveAsync("n2.xlsx", Save(nw2));
+            var newCols2 = new[] { ("الكنية", (string?)null) };
+            var job2 = await AddJob(db, Payload(token2, group.Id, "مؤقت-z", newCols2,
+                mode: "replace", fileId: kept.Id, replaceMode: "different"));
+            await TestHelpers.UploadProcessor(db, sp).RunAsync(job2, CancellationToken.None);
+
+            var kept2 = Assert.Single(await db.Files.ToListAsync());
+            Assert.Equal("target", kept2.Name);
+            var survivor = Assert.Single(await db.RecordEdits.ToListAsync());
+            Assert.Equal("قديم معدل", survivor.NewValue);
+            Assert.Equal(2, survivor.FileVersion);
+            Assert.Null(survivor.RecordId);
+            Assert.Equal(kept2.Id, survivor.FileId);
+        }
+    }
 }

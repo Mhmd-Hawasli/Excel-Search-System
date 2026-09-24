@@ -356,6 +356,13 @@ public class UploadJobProcessor(
             var newVersion = pendingManualCount > 0 ? replace.Version + 2 : replace.Version + 1;
             foreach (var edit in previousEdits)
             {
+                // Remap FIRST (before the archived skip below): in
+                // "different" mode the old file row is deleted afterwards,
+                // which cascades to every edit still pointing at it. Archived
+                // rows must move to the new file id too, otherwise the second
+                // structure-change update wipes the whole preserved history.
+                if (mode != "same")
+                    edit.FileId = temporaryFileId;
                 if (edit.RecordId is null) continue; // archived: keep its stamp
                 // Live manual edits take their own separate version (N+1).
                 // Bulk-audit rows keep their stamp: they ARE that version's
@@ -364,8 +371,6 @@ public class UploadJobProcessor(
                     edit.FileVersion = pendingManualCount > 0 ? manualVersion : replace.Version;
                 edit.RecordId = null;
                 edit.FileColumnId = null;
-                if (mode != "same")
-                    edit.FileId = temporaryFileId;
             }
             await uow.SaveChangesAsync(ct);
 

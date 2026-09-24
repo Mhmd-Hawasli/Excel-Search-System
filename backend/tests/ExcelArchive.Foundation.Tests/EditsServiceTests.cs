@@ -218,6 +218,39 @@ public sealed class EditsServiceTests
     }
 
     [Fact]
+    public async Task History_ResolvesArchivedEditsByNationalId()
+    {
+        // Record page must keep showing a person's history after a replace
+        // archives their edits (record link nulled, new record id minted).
+        var (db, svc, recordId, nameCol, fileId) = SetupNational();
+        await svc.SaveAsync(recordId, nameCol, null, "B", "tester", OpenScope());
+
+        var edit = Assert.Single(db.RecordEdits.ToList());
+        edit.RecordId = null;
+        edit.FileVersion = 1;
+        db.SaveChanges();
+        var old = await db.Records.FindAsync(recordId);
+        db.Records.Remove(old!);
+        db.SaveChanges();
+        var successor = new RecordEntity
+        {
+            FileId = fileId,
+            RowIndex = 5,
+            Data = JsonDocument.Parse("{\"الاسم\":\"C\",\"الهاتف\":\"222\",\"الوطني\":\"12345678901\"}"),
+            SfFullName = "C",
+            DNationalId = "12345678901",
+        };
+        db.Records.Add(successor);
+        db.SaveChanges();
+
+        var history = await svc.GetRecordEditsAsync(successor.Id);
+        var item = Assert.Single(history.Edits);
+        Assert.Equal("B", item.NewValue);
+        Assert.Equal("A", history.EditedHeaders["الاسم"].OriginalValue);
+        Assert.Equal("B", history.EditedHeaders["الاسم"].LastValue);
+    }
+
+    [Fact]
     public async Task List_MultiSelectFilters_And_Options()
     {
         var (db, svc, recordId, nameCol, fileId) = SetupNational();

@@ -128,7 +128,19 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
 
     public async Task<RecordEditsResult> GetRecordEditsAsync(Guid recordId, CancellationToken ct = default)
     {
-        var edits = await uow.RecordEdits.ListByRecordAsync(recordId, ct);
+        var edits = (await uow.RecordEdits.ListByRecordAsync(recordId, ct)).ToList();
+        // History survives file replaces: archiving nulls the record link and
+        // replacement mints new record ids, so a current record would
+        // otherwise show zero history. Resolve archived edits back by stable
+        // national id within the same file (mirrors ListAsync above).
+        var record = await uow.Records.FindAsync(recordId, ct);
+        if (record is not null && !string.IsNullOrWhiteSpace(record.DNationalId))
+        {
+            var archived = await uow.RecordEdits.ListAsync(
+                e => e.FileId == record.FileId && e.RecordId == null && e.NationalId == record.DNationalId, ct);
+            var known = new HashSet<Guid>(edits.Select(e => e.Id));
+            edits.AddRange(archived.Where(e => known.Add(e.Id)));
+        }
         var headers = new Dictionary<string, EditedHeaderDto>(StringComparer.Ordinal);
         foreach (var edit in edits.OrderBy(e => e.CreatedAt))
         {
