@@ -42,6 +42,16 @@
 - هذه البيئة تعمل حاليًا وتخدم المستخدم — اتركها بحالها تمامًا (Up ولا تُلمس).
 - مجلد `test-artifacts/v1-reference/` أرشيف تاريخي — تجاهله ولا تعتبر بورتاته مرجعًا.
 
+### 0.3) Data synchronization / formal snapshot contract
+
+- The dev DB (`localhost:5434`, volume `excel_archive_exp_data`) must be a **formal, immutable backup/snapshot** of the system/production DB, not an ad-hoc copy. Snapshots are created only by an authorized operator, **never by AI agents**.
+- AI agents are forbidden to run `pg_dump`, `pg_restore`, `psql`, `docker exec`, `docker logs`, or any read/write command against the system/production environment (`docker-compose.yml`, port `5432`, containers `excel-archive-2-*`). The system environment must remain **Up and untouched** at all times.
+- The snapshot is stored outside the repo (private location) and includes a manifest: source DB identity, snapshot timestamp, per-table row counts, `MAX(updated_at)` watermarks, and checksum. The manifest is never committed or shared in chat.
+- Before any data-dependent development or testing, the dev DB must be **re-initialized from that snapshot** via a reversible procedure that never touches the system environment. If no approved snapshot is available, only seed/generated data tests are permitted and are considered **non-representative**; do not fabricate synchronization from the live system.
+- Restore targets only volume `excel_archive_exp_data`. Restore/overwrite/delete on the production volume `v2_excel_archive_2_data` or any system container is strictly forbidden.
+- All snapshot/restore operations run exclusively through the dev Docker:
+  `docker compose -f docker-compose.dev.yml -p v2-exp ...`
+
 ## 1) حسابات محظورة — يُمنع الاقتراب منها نهائيًا
 
 الحسابان `mhmd` و `admin` **خارج نطاق الاختبار تمامًا**:

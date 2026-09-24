@@ -39,6 +39,10 @@ public static class Permissions
     public const string GroupsCreate = "groups.create";
     public const string GroupsUpdate = "groups.update";
     public const string GroupsDefaultSearch = "groups.defaultSearch";
+    /// <summary>Maintenance: reveal other users' private groups (lists,
+    /// details, files, search and activity) for support and repairs.
+    /// Private-group owners always see their own groups without it.</summary>
+    public const string GroupsViewPrivate = "groups.viewPrivate";
 
     public const string RecordsView = "records.view";
     public const string RecordsCreate = "records.create";
@@ -46,19 +50,21 @@ public static class Permissions
 
     public const string BulkSearchView = "bulkSearch.view";
 
+    public const string VersionsBump = "versions.bump";
+
     // Architecture-only extras (not part of the 24 canonical V1 keys).
     // groups.manage was introduced during the ASP.NET split; search.view is a
     // legacy alias resolved at check time, not a stored global grant.
     public const string GroupsManage = "groups.manage";
     public const string SearchView = "search.view";
 
-    /// <summary>31 canonical V1 keys in twelve groups (docs/07.2 + groups create/update + records/bulk/default-search).</summary>
+    /// <summary>33 canonical keys in thirteen groups (docs/07.2 + groups create/update + records/bulk/default-search + versions + private-groups).</summary>
     public static readonly string[] Canonical = [UsersView, UsersCreate, UsersUpdate, UsersDelete,
         BackupView, BackupExport, BackupRestore, ActivityView, ActivityBrowse,
         MergeView, SheetMergeView, ExportView, ExportRun, EditsView, EditsBadge, EditsUpdate,
         UploadView, UploadRun, ConflictsView, ConflictsFilters, CategoriesView, CategoriesManage,
-        GroupsView, GroupsViewScoped, GroupsCreate, GroupsUpdate, GroupsDefaultSearch,
-        RecordsView, RecordsCreate, RecordsDelete, BulkSearchView];
+        GroupsView, GroupsViewScoped, GroupsCreate, GroupsUpdate, GroupsDefaultSearch, GroupsViewPrivate,
+        RecordsView, RecordsCreate, RecordsDelete, BulkSearchView, VersionsBump];
 
     /// <summary>Global owner grants: canonical minus the scoped key.</summary>
     public static readonly string[] OwnerGlobals = Canonical.Where(k => k != GroupsViewScoped).ToArray();

@@ -27,6 +27,21 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE groups ADD COLUMN IF NOT EXISTS include_in_default_search boolean NOT NULL DEFAULT true");
 
+        // V2 addition: private groups (is_private + owner_user_id +
+        // owner_username). Existing groups stay shared (is_private false,
+        // null owner), so old data behaves exactly as before; only new
+        // "private group" creations set these columns.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS is_private boolean NOT NULL DEFAULT false");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS owner_user_id uuid NULL");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE groups ADD COLUMN IF NOT EXISTS owner_username text NOT NULL DEFAULT ''");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_groups_is_private ON groups (is_private)");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_groups_owner_user_id ON groups (owner_user_id)");
+
         // V2 addition: versioned edit archive. File updates used to
         // cascade-delete the whole edit log; instead old edits are re-pointed
         // to the surviving file with their original version stamped, so the
@@ -52,6 +67,28 @@ public static class DbSeeder
             "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS national_id text");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS ix_record_edits_file_id_national_id ON record_edits (file_id, national_id)");
+
+        // Bulk-audit marker: update-generated rows are version content, never
+        // pending manual work (pending counts, preview flags, N+1/N+2 rule).
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS is_bulk boolean NOT NULL DEFAULT false");
+
+        // Version history: every N → N+1 bump (manual bump button or file
+        // update) stores WHAT changed here, so version numbers carry a note.
+        // Idempotent DDL for existing databases (EnsureCreated covers fresh).
+        await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS pgcrypto");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE TABLE IF NOT EXISTS file_versions (id uuid NOT NULL PRIMARY KEY, file_id uuid NOT NULL REFERENCES files (id) ON DELETE CASCADE, version integer NOT NULL, note text NOT NULL, kind text NOT NULL DEFAULT 'manual', created_by text NULL, created_at timestamptz(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_file_versions_file_id_version ON file_versions (file_id, version)");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_file_versions_file_id ON file_versions (file_id)");
+        // Backfill: V1 entry for files created before version history existed,
+        // plus one entry per bump already visible in files.version.
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO file_versions (id, file_id, version, note, kind, created_at) SELECT gen_random_uuid(), f.id, 1, 'الإصدار الأول عند رفع الملف.', 'seed', f.uploaded_at FROM files f WHERE NOT EXISTS (SELECT 1 FROM file_versions v WHERE v.file_id = f.id AND v.version = 1)");
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO file_versions (id, file_id, version, note, kind, created_at) SELECT gen_random_uuid(), f.id, gs.v, 'إصدار سابق محفوظ قبل تفعيل سجل الإصدارات.', 'seed', f.updated_at FROM files f CROSS JOIN LATERAL generate_series(2, f.version) AS gs(v) WHERE f.version >= 2 AND NOT EXISTS (SELECT 1 FROM file_versions v WHERE v.file_id = f.id AND v.version = gs.v)");
 
         // Install pg_trgm + trigram search indexes idempotently.
         // Required index/cache setup failure must be visible in readiness

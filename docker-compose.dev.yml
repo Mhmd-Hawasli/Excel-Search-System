@@ -71,5 +71,61 @@ services:
     ports:
       - "3300:3000"
 
+  # ---------------------------------------------------------------------------
+  # Formal snapshot / data-synchronization contract (AGENTS.md §0.3)
+  # ---------------------------------------------------------------------------
+  # The dev database (excel_archive_exp_data) must be a formal, immutable
+  # backup/snapshot of the system database, created only by an authorized
+  # operator. AI agents never touch the system environment (docker-compose.yml,
+  # port 5432, containers excel-archive-2-*).
+  #
+  # Snapshot restore flow (operator-provided snapshot only):
+  #   1. Place the approved snapshot file (custom-format pg_dump) at
+  #      ./snapshots/<name>.dump and record its manifest (source DB identity,
+  #      timestamp, per-table row counts, MAX(updated_at) watermarks, checksum).
+  #   2. Stop the dev stack:
+  #        docker compose -f docker-compose.dev.yml -p v2-exp down
+  #   3. Restore into the isolated dev volume only (never the production volume
+  #      v2_excel_archive_2_data):
+  #        docker compose -f docker-compose.dev.yml -p v2-exp \
+  #            --profile snapshot run --rm db-snapshot-restore
+  #   4. Restart the dev stack and verify /health/ready.
+  # ---------------------------------------------------------------------------
+  db-snapshot-restore:
+    image: postgres:16-alpine
+    profiles: ["snapshot"]
+    container_name: excel-archive-exp-db-snapshot-restore
+    environment:
+      POSTGRES_USER: excel_archive
+      POSTGRES_PASSWORD: excel_archive
+      POSTGRES_DB: excel_archive_2
+    volumes:
+      - excel_archive_exp_data:/var/lib/postgresql/data
+      - ./snapshots:/snapshots:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ -z "$$SNAPSHOT_FILE" ]; then
+          echo "Set SNAPSHOT_FILE to the snapshot filename located in ./snapshots"
+          exit 1
+        fi
+        test -f "/snapshots/$$SNAPSHOT_FILE"
+        pg_restore --clean --if-exists --no-owner --no-privileges --dbname=excel_archive_2 "/snapshots/$$SNAPSHOT_FILE"
+
+  backend-test:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    profiles: ["test"]
+    container_name: excel-archive-exp-backend-test
+    working_dir: /src
+    volumes:
+      - ./backend:/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["dotnet","test","ExcelArchive.Api.sln"]
+
 volumes:
   excel_archive_exp_data:
+  excel_archive_exp_snapshot:

@@ -732,7 +732,10 @@ export function FileUpdateWizard({
                           </Button>
                           <span className="text-xs text-muted-foreground">
                             الاختيار الجماعي يشمل كل القيم المعروضة أعلاه (المعدلة يدويًا تظهر أولًا)،
-                            وسيُحفظ الاستبدال كاملًا في سجل التعديلات تحت الإصدار {preview.currentVersion + 1}.
+                            وسيُحفظ الاستبدال كاملًا في سجل التعديلات تحت الإصدار {preview.nextVersion || preview.currentVersion + 1}.
+                            {(preview.pendingEditCount ?? 0) > 0 ? (
+                              <> تنبيه: لديك {preview.pendingEditCount} تعديل يدوي على الإصدار الحالي — ستُحفظ في إصدار منفصل ({preview.currentVersion + 1}) ويصبح هذا التحديث الإصدار {preview.nextVersion || preview.currentVersion + 2}.</>
+                            ) : null}
                           </span>
                         </div>
 
@@ -902,7 +905,7 @@ export function FileUpdateWizard({
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {identical
-                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف الإصدار ${preview ? preview.currentVersion + 1 : "الجديد"}. كل الخلايا المتغيرة (${preview?.summary?.changedCells.toLocaleString("en-US") ?? "—"}) ستُحفظ في سجل التعديلات تحت هذا الإصدار الجديد، وتعديلاتك اليدوية السابقة تُحفظ مؤرشفة ولا تُمسح.${
+                    ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف الإصدار ${preview ? preview.nextVersion || preview.currentVersion + 1 : "الجديد"}. كل الخلايا المتغيرة (${preview?.summary?.changedCells.toLocaleString("en-US") ?? "—"}) ستُحفظ في سجل التعديلات تحت هذا الإصدار الجديد، وتعديلاتك اليدوية السابقة تُحفظ مؤرشفة ولا تُمسح.${(preview && (preview.pendingEditCount ?? 0) > 0) ? ` تنبيه: تعديلاتك اليدوية (${preview.pendingEditCount}) ستُحفظ في إصدار منفصل (${preview.currentVersion + 1}).` : ""}${
                         overrides.size > 0
                           ? ` وسيُحتفظ بـ ${overrides.size.toLocaleString("en-US")} خلية بقيمها القديمة حسب اختيارك أعلاه.`
                           : ""

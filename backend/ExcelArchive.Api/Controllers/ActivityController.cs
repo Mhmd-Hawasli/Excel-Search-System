@@ -12,8 +12,12 @@ public class ActivityController(IActivityService activity, IAuthService auth) : 
     {
         // V1 logs page: activity.view opens the page shell, activity.browse
         // gates the rows. Direct data access without browse stays hidden 404.
+        // Foreign private groups are additionally gated per reader (owners
+        // and groups.viewPrivate holders keep seeing their rows).
         var user = await RequirePermissionAsync(Permissions.ActivityBrowse);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
-        return Ok(await activity.ListAsync(new ActivityFilterRequest(page, pageSize, action, search)));
+        var visibility = new ActivityVisibility(user.Id,
+            Auth.HasPermission(user, Permissions.GroupsViewPrivate));
+        return Ok(await activity.ListAsync(new ActivityFilterRequest(page, pageSize, action, search, visibility)));
     }
 }

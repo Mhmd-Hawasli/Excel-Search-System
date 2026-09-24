@@ -5,6 +5,7 @@ public enum ActivityAction
     FileUploaded,
     FileUpdated,
     FileReplaced,
+    FileVersionBumped,
     FileDeleted,
     GroupCreated,
     GroupUpdated,

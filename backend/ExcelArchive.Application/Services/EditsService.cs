@@ -302,8 +302,12 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             ?? string.Join(" ", new[] { record.SfFirstName, record.SfFatherName, record.SfLastName }
                 .Where(p => !string.IsNullOrWhiteSpace(p)));
         if (string.IsNullOrWhiteSpace(personName)) personName = "سجل بلا اسم";
+        // fileName/fileVersion are new additive keys: old RECORD_EDITED rows
+        // carry only fileId, and the read path resolves their file context
+        // from it — old readers simply ignore unknown keys.
         await activity.WriteAsync(Domain.Enums.ActivityAction.RecordEdited, personName,
-            new { fileId = record.FileId, recordId = record.Id, rowIndex = record.RowIndex,
+            new { fileId = record.FileId, fileName = record.File?.Name, fileVersion = record.File?.Version ?? 1,
+                recordId = record.Id, rowIndex = record.RowIndex,
                 headerRaw = target.HeaderRaw, oldValue, newValue, editedBy = actorUsername,
                 personName }, ct);
         return new EditResult(true, oldValue, newValue);

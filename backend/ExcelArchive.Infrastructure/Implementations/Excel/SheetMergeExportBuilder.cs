@@ -8,12 +8,13 @@ namespace ExcelArchive.Infrastructure.Implementations.Excel;
 /// Sheet-merge workbook exporter (P5.3). Port of V1
 /// lib/sheet-merge/exporter.ts onto ClosedXML: الدمج sheet plus one
 /// غير مرتبط sheet per source sheet with unlinked rows (all rows, not
-/// just the 300 preview). Source fills/fonts travel with their rows;
-/// unlinked prefix columns stay unformatted.
+/// just the 300 preview). Source fills/fonts travel with their rows
+/// (a green source cell stays green); unlinked prefix columns stay
+/// unformatted. Lightweight styling only: no WrapText, no fixed row
+/// heights, empty cells never materialized (FileExportBuilder perf rule).
 /// </summary>
 public static class SheetMergeExportBuilder
 {
-    private const int RowHeightPoints = 30;
     private const double MaxColumnWidth = 200.0 / 7;
     private const double MinColumnWidth = 10;
     private const string DateNumberFormat = "DD/MM/YYYY";
@@ -60,6 +61,10 @@ public static class SheetMergeExportBuilder
         }
     }
 
+    /// <summary>Range-wide styling only (one shared style): per-cell
+    /// styling would bloat the file, and WrapText / fixed row heights make
+    /// Excel recalculate layout per wrapped cell and hang on big files —
+    /// both are banned here (same rule as FileExportBuilder).</summary>
     private static void StyleTableRange(IXLWorksheet sheet, int rowCount, int columnCount)
     {
         var fullRange = sheet.Range(1, 1, rowCount + 1, columnCount);
@@ -69,9 +74,7 @@ public static class SheetMergeExportBuilder
         fullRange.Style.Border.RightBorder = XLBorderStyleValues.Thin;
         fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        fullRange.Style.Alignment.WrapText = true;
-        for (var r = 1; r <= rowCount + 1; r++)
-            sheet.Row(r).Height = RowHeightPoints;
+        fullRange.Style.Alignment.WrapText = false;
     }
 
     private static void ApplyRowFormats(IXLWorksheet sheet, int excelRow, SheetRowFormats? formats, int columnCount)
@@ -110,7 +113,11 @@ public static class SheetMergeExportBuilder
             for (var c = 0; c < exportHeaders.Count && c < stringRows[r].Count; c++)
             {
                 var text = FileExportBuilder.FitCellText(stringRows[r][c]);
-                var parsed = text.Length > 0 ? FileExportBuilder.ParseStoredDate(text) : null;
+                // Empty cells stay BLANK (never materialized): invisible-only
+                // content becomes truly empty, the file shrinks, and Excel
+                // opens big exports without hanging (FileExportBuilder rule).
+                if (text.Length == 0) continue;
+                var parsed = FileExportBuilder.ParseStoredDate(text);
                 var cell = sheet.Cell(r + 2, c + 1);
                 if (parsed.HasValue)
                 {

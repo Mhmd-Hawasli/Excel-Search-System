@@ -8,14 +8,14 @@ namespace ExcelArchive.Infrastructure.Implementations.Excel;
 /// Two-file merge workbook exporter (P5.2). Port of V1 lib/merge/exporter.ts
 /// onto ClosedXML. Three sheets (الدمج الكامل, الجدول A, الجدول B), two
 /// scopes (confirmed/all). Source fills/fonts are deliberately ignored —
-/// only structural styling (table theme, header, borders, widths, row
-/// heights) is applied. First sheet is a strict inner join: only pairs with
-/// the same link key in both tables, ordered by key. Table A/B sheets keep
-/// their scope filter unchanged. No row truncation.
-/// </summary>
+/// only structural styling (table theme, header, borders, widths) is applied.
+/// Lightweight styling only: no WrapText, no fixed row heights, and empty
+/// cells are never materialized — otherwise Excel hangs opening big files
+/// (same perf rules as FileExportBuilder). First sheet is a strict inner
+/// join: only pairs with the same link key in both tables, ordered by key.
+/// Table A/B sheets keep their scope filter unchanged. No row truncation.
 public static class MergeExportBuilder
 {
-    private const int RowHeightPoints = 30;
     private const double MaxColumnWidth = 200.0 / 7;
     private const double MinColumnWidth = 10;
     private const string DateNumberFormat = "DD/MM/YYYY";
@@ -115,7 +115,10 @@ public static class MergeExportBuilder
             for (var c = 0; c < exportHeaders.Count && c < grid.Rows[r].Count; c++)
             {
                 var text = FileExportBuilder.FitCellText(grid.Rows[r][c]);
-                var parsed = text.Length > 0 ? FileExportBuilder.ParseStoredDate(text) : null;
+                // Empty cells stay BLANK (never materialized): invisible-only
+                // content becomes truly empty and big exports stay fast.
+                if (text.Length == 0) continue;
+                var parsed = FileExportBuilder.ParseStoredDate(text);
                 var cell = sheet.Cell(r + 2, c + 1);
                 if (parsed.HasValue)
                 {
@@ -162,6 +165,8 @@ public static class MergeExportBuilder
         }
         // تنسيق النطاق دفعة واحدة بدل تنسيق كل خلية على حدة:
         // مع آلاف الصفوف كان التنسيق الخلوي يسبب بطئاً حاداً وفشل التصدير.
+        // بلا WrapText وبلا ارتفاعات ثابتة: الالتفاف والارتفاعات الصريحة
+        // تجعل Excel يعيد حساب التخطيط عند الفتح فيعلق الملف الكبير.
         var fullRange = sheet.Range(1, 1, grid.Rows.Count + 1, exportHeaders.Count);
         fullRange.Style.Border.TopBorder = XLBorderStyleValues.Thin;
         fullRange.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
@@ -169,9 +174,7 @@ public static class MergeExportBuilder
         fullRange.Style.Border.RightBorder = XLBorderStyleValues.Thin;
         fullRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         fullRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        fullRange.Style.Alignment.WrapText = true;
-        for (var rowIndex = 1; rowIndex <= grid.Rows.Count + 1; rowIndex++)
-            sheet.Row(rowIndex).Height = RowHeightPoints;
+        fullRange.Style.Alignment.WrapText = false;
     }
 
     public static byte[] Build(

@@ -21,4 +21,5 @@ public class File
     public ICollection<DataQualityIssue> DataQualityIssues { get; set; } = new List<DataQualityIssue>();
     public ICollection<RecordEdit> RecordEdits { get; set; } = new List<RecordEdit>();
     public ICollection<UserPermission> ScopedPermissions { get; set; } = new List<UserPermission>();
+    public ICollection<FileVersion> Versions { get; set; } = new List<FileVersion>();
 }

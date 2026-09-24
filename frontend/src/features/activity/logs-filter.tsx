@@ -203,9 +203,9 @@ function SearchableSelect({
 }
 
 /**
- * Activity table filter panel: free-text search, action type, person
- * (target only — actor names belong to the actor filter), and a date range — mirroring V1's URL-committed
- * action filter and extending it with client-side column filters.
+ * Activity table filter panel: free-text search, action type, target
+ * (entity/file names plus virtual record-kind entries — person names are
+ * excluded by design), actor, and a date range.
  */
 export function LogsFilter({
   filters,
@@ -215,7 +215,8 @@ export function LogsFilter({
   onReset,
 }: {
   filters: LogsFilters;
-  persons: string[];
+  /** Target options as value/label pairs (virtual entries + names). */
+  persons: SearchableOption[];
   actors: string[];
   onChange: (next: Partial<LogsFilters>) => void;
   onReset: () => void;
@@ -232,10 +233,7 @@ export function LogsFilter({
     () => actors.map((actor) => ({ value: actor, label: actor })),
     [actors],
   );
-  const personOptions: SearchableOption[] = useMemo(
-    () => persons.map((person) => ({ value: person, label: person })),
-    [persons],
-  );
+  const personOptions: SearchableOption[] = useMemo(() => persons, [persons]);
   return (
     <Card>
       <CardContent className="space-y-4 p-4">

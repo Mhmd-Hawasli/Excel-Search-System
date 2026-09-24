@@ -20,7 +20,8 @@ public sealed class UnitOfWork(
     IFileColumnRepository fileColumns,
     IRecordEditRepository recordEdits,
     IDataQualityRepository dataQuality,
-    IMappingTemplateRepository mappingTemplates) : IUnitOfWork
+    IMappingTemplateRepository mappingTemplates,
+    IFileVersionRepository fileVersions) : IUnitOfWork
 {
     public IUserRepository Users => users;
     public IGroupRepository Groups => groups;
@@ -33,6 +34,7 @@ public sealed class UnitOfWork(
     public IRecordEditRepository RecordEdits => recordEdits;
     public IDataQualityRepository DataQuality => dataQuality;
     public IMappingTemplateRepository MappingTemplates => mappingTemplates;
+    public IFileVersionRepository FileVersions => fileVersions;
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => db.SaveChangesAsync(ct);

@@ -126,7 +126,9 @@ public class UploadJobProcessor(
         var import = await reader.ReadForImportAsync(bytes, config.Token.ToString(), spec, ct);
 
         // For replacements the payload name already IS the temporary staging name.
-        var file = await CreateFileAsync(config, config.Name, import.WorksheetName, jobId, ct);
+        // Only real (non-replacement) uploads record a V1 history row here;
+        // replacement versions are recorded at promotion (N+1 / N+2).
+        var file = await CreateFileAsync(config, config.Name, import.WorksheetName, jobId, replace is null, ct);
 
         var fileColumns = await uow.FileColumns.ListByFileAsync(file.Id, ct);
         // Per-cell keep-old choices (preview toggles): swap the workbook's value
@@ -203,7 +205,7 @@ public class UploadJobProcessor(
     }
 
     private async Task<FileEntity> CreateFileAsync(
-        UploadJobConfig config, string fileName, string sheetName, Guid jobId, CancellationToken ct)
+        UploadJobConfig config, string fileName, string sheetName, Guid jobId, bool recordVersionRow, CancellationToken ct)
     {
         FileEntity? file = null;
         await uow.ExecuteInTransactionAsync(async () =>
@@ -232,6 +234,13 @@ public class UploadJobProcessor(
                 });
             }
             await uow.SaveChangesAsync(ct);
+            if (recordVersionRow)
+                uow.FileVersions.Add(new FileVersion
+                {
+                    FileId = file.Id, Version = 1,
+                    Note = "الإصدار الأول عند رفع الملف.",
+                    Kind = "upload", CreatedBy = config.RequestedBy,
+                });
             var j = await uow.UploadJobs.FindAsync(jobId, ct);
             if (j is not null) j.FileId = file.Id;
             await uow.SaveChangesAsync(ct);
@@ -330,16 +339,29 @@ public class UploadJobProcessor(
                 ?? throw new KeyNotFoundException("تعذر العثور على أحد إصداري الملف لإتمام الاستبدال.");
             var job = await uow.UploadJobs.FindAsync(jobId, ct);
 
-            // Versioned edit archive: manual edits of the old version are
-            // preserved (stamped with it) instead of cascade-deleted. They
-            // stay visible in the edit history, while record pages only ever
-            // show current-version edits (archived rows carry no record id).
-            // Must run before any record/file deletion below. ListAsync (not
-            // ListByFileAsync) returns tracked entities so the changes save.
+            // Versioned edit archive: LIVE manual edits of the old version are
+            // preserved (stamped) instead of cascade-deleted. They stay
+            // visible in the edit history, while record pages only ever show
+            // current-version edits (archived rows carry no record id).
+            // Already-archived rows keep their ORIGINAL version stamp and are
+            // never re-stamped. Must run before any record/file deletion
+            // below. ListAsync (not ListByFileAsync) returns tracked entities
+            // so the changes save.
+            // Version rule: clean update bumps N → N+1, but an update over
+            // pending manual edits bumps N → N+2 so those edits keep their own
+            // separate version (N+1) and the bulk update lands on N+2.
             var previousEdits = await uow.RecordEdits.ListAsync(e => e.FileId == replace.Id, ct);
+            var pendingManualCount = previousEdits.Count(e => e.RecordId is not null && !e.IsBulk);
+            var manualVersion = replace.Version + 1;
+            var newVersion = pendingManualCount > 0 ? replace.Version + 2 : replace.Version + 1;
             foreach (var edit in previousEdits)
             {
-                edit.FileVersion = replace.Version;
+                if (edit.RecordId is null) continue; // archived: keep its stamp
+                // Live manual edits take their own separate version (N+1).
+                // Bulk-audit rows keep their stamp: they ARE that version's
+                // content, not pending work.
+                if (!edit.IsBulk)
+                    edit.FileVersion = pendingManualCount > 0 ? manualVersion : replace.Version;
                 edit.RecordId = null;
                 edit.FileColumnId = null;
                 if (mode != "same")
@@ -352,10 +374,11 @@ public class UploadJobProcessor(
                 var tempRowCount = temporary.RowCount;
                 // Bulk-audit snapshot BEFORE deletion: every cell that actually
                 // changed (after keep-old choices were applied during import)
-                // becomes a RecordEdit row stamped with the NEW version (N+1),
-                // so the edits page shows the whole bulk update as "الإصدار N+1".
+                // becomes a RecordEdit row stamped with the NEW version
+                // (N+1, or N+2 when pending manual edits took N+1), so the
+                // edits page shows the whole bulk update as one version.
                 var auditEdits = await BuildReplaceAuditAsync(
-                    target.Id, temporary.Id, replace.Version + 1, target.Id,
+                    target.Id, temporary.Id, newVersion, target.Id,
                     config.RequestedBy, ct);
                 uow.Records.RemoveRange(await uow.Records.ListAsync(r => r.FileId == target.Id, ct));
                 uow.DataQuality.RemoveRange(await uow.DataQuality.ListAsync(i => i.FileId == target.Id, ct));
@@ -381,9 +404,10 @@ public class UploadJobProcessor(
                 target.UploadedAt = DateTime.UtcNow;
                 target.UpdatedAt = DateTime.UtcNow;
                 // Replacing all rows is a new version even when the structure
-                // is identical, so the UI can label it V+1 and the archived
-                // edits above stay attributed to the previous version.
-                target.Version = replace.Version + 1;
+                // is identical, so the UI can label it V+1 (or V+2 with
+                // pending manual edits) and the archived edits above stay
+                // attributed to their own version.
+                target.Version = newVersion;
                 if (job is not null)
                 {
                     job.FileId = target.Id;
@@ -408,14 +432,27 @@ public class UploadJobProcessor(
                     uow.RecordEdits.AddRange(auditEdits);
                     await uow.SaveChangesAsync(ct);
                 }
+                if (pendingManualCount > 0)
+                    uow.FileVersions.Add(new FileVersion
+                    {
+                        FileId = target.Id, Version = manualVersion,
+                        Note = $"تعديلات يدوية على الإصدار {replace.Version} ({pendingManualCount}) حُفظت في إصدار منفصل عند التحديث.",
+                        Kind = "manual", CreatedBy = config.RequestedBy,
+                    });
+                uow.FileVersions.Add(new FileVersion
+                {
+                    FileId = target.Id, Version = newVersion,
+                    Note = $"تحديث الملف: {replace.RowCount} ← {tempRowCount} سجل ({auditEdits.Count} خلية متغيرة).",
+                    Kind = "update", CreatedBy = config.RequestedBy,
+                });
+                await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileUpdated, target.Name,
-                    new { fileId = target.Id, version = target.Version, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
+                    new { fileId = target.Id, version = target.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
             }
             else
             {
                 var previousRows = target.RowCount;
                 var newRowsCount = temporary.RowCount;
-                var newVersion = target.Version + 1;
                 var auditEdits = await BuildReplaceAuditAsync(
                     target.Id, temporaryFileId, newVersion, temporaryFileId,
                     config.RequestedBy, ct);
@@ -442,8 +479,22 @@ public class UploadJobProcessor(
                     uow.RecordEdits.AddRange(auditEdits);
                     await uow.SaveChangesAsync(ct);
                 }
+                if (pendingManualCount > 0)
+                    uow.FileVersions.Add(new FileVersion
+                    {
+                        FileId = temporary.Id, Version = manualVersion,
+                        Note = $"تعديلات يدوية على الإصدار {replace.Version} ({pendingManualCount}) حُفظت في إصدار منفصل عند التحديث.",
+                        Kind = "manual", CreatedBy = config.RequestedBy,
+                    });
+                uow.FileVersions.Add(new FileVersion
+                {
+                    FileId = temporary.Id, Version = newVersion,
+                    Note = $"تحديث الملف ببنية بديلة: {previousRows} ← {newRowsCount} سجل ({auditEdits.Count} خلية متغيرة).",
+                    Kind = "update", CreatedBy = config.RequestedBy,
+                });
+                await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileReplaced, target.Name,
-                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousRows, newRows = newRowsCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
+                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows, newRows = newRowsCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
             }
         }, ct);
     }
@@ -573,6 +624,7 @@ public class UploadJobProcessor(
                     NewValue = nv.Length <= 5000 ? nv : nv[..5000],
                     EditedBy = editedBy,
                     NationalId = nationalId,
+                    IsBulk = true,
                 });
             }
         }

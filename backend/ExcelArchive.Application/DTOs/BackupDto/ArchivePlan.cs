@@ -22,6 +22,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
         public List<UploadJob> Jobs { get; } = [];
         public List<ActivityLog> Logs { get; } = [];
         public List<RecordEdit> Edits { get; } = [];
+        public List<FileVersion> Versions { get; } = [];
 
         public static ArchivePlan Parse(JsonElement root)
         {
@@ -46,6 +47,11 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 Id = Uuid(g, "id"), Name = ReqText(g, "name"), Description = OptText(g, "description") ?? "",
                 SortOrder = ReqInt(g, "sortOrder"), CreatedAt = ReqDate(g, "createdAt"), UpdatedAt = ReqDate(g, "updatedAt"),
                 IncludeInDefaultSearch = OptBool(g, "includeInDefaultSearch") ?? true,
+                // Pre-privacy backups carry none of these keys: defaults keep
+                // every restored group shared, exactly as before.
+                IsPrivate = OptBool(g, "isPrivate") ?? false,
+                OwnerUserId = OptUuid(g, "ownerUserId"),
+                OwnerUsername = OptText(g, "ownerUsername") ?? "",
             });
             var categories = Rows(data, "categories");
             if (categories.Count > ExcelArchive.Application.Services.CategoryService.MaxCustomCategories)
@@ -185,6 +191,15 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 HeaderRaw = ReqText(e, "headerRaw"),
                 OldValue = ReqText(e, "oldValue"), NewValue = ReqText(e, "newValue"),
                 CreatedAt = ReqDate(e, "createdAt"), EditedBy = OptText(e, "editedBy"),
+                IsBulk = OptBool(e, "isBulk") ?? false,
+            });
+            // Version history is optional so backups predating it still restore;
+            // missing rows are backfilled as seed entries on read.
+            foreach (var v in Rows(data, "fileVersions", optional: true)) plan.Versions.Add(new FileVersion
+            {
+                Id = Uuid(v, "id"), FileId = Uuid(v, "fileId"), Version = ReqInt(v, "version"),
+                Note = ReqText(v, "note"), Kind = OptText(v, "kind") ?? "manual",
+                CreatedBy = OptText(v, "createdBy"), CreatedAt = ReqDate(v, "createdAt"),
             });
 
             plan.ValidateReferences();
@@ -255,7 +270,8 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 || Issues.Any(i => !files.Contains(i.FileId))
                 || Templates.Any(t => !groups.Contains(t.GroupId))
                 || Jobs.Any(j => j.FileId is not null && !files.Contains(j.FileId.Value))
-                || Edits.Any(e => (e.RecordId is not null && !records.Contains(e.RecordId.Value)) || !files.Contains(e.FileId)))
+                || Edits.Any(e => (e.RecordId is not null && !records.Contains(e.RecordId.Value)) || !files.Contains(e.FileId))
+                || Versions.Any(v => !files.Contains(v.FileId)))
                 throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
             static void NoDuplicateIds<T>(IReadOnlyList<T> rows, Func<T, Guid> id)
             {
@@ -274,6 +290,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
             NoDuplicateIds(Jobs, j => j.Id);
             NoDuplicateIds(Logs, a => a.Id);
             NoDuplicateIds(Edits, e => e.Id);
+            NoDuplicateIds(Versions, v => v.Id);
         }
 
         public static List<JsonElement> Rows(JsonElement data, string name, bool optional = false)

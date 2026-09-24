@@ -60,6 +60,7 @@ builder.Services.AddScoped<IFileColumnRepository, FileColumnRepository>();
 builder.Services.AddScoped<IRecordEditRepository, RecordEditRepository>();
 builder.Services.AddScoped<IDataQualityRepository, DataQualityRepository>();
 builder.Services.AddScoped<IMappingTemplateRepository, MappingTemplateRepository>();
+builder.Services.AddScoped<IFileVersionRepository, FileVersionRepository>();
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 builder.Services.AddScoped<IConflictRepository, ConflictRepository>();
 builder.Services.AddScoped<IBackupRepository, BackupRepository>();

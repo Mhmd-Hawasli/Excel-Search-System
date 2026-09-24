@@ -30,6 +30,7 @@ export const groupsService = {
         name: String(formData.get("name") ?? ""),
         description: String(formData.get("description") ?? ""),
         includeInDefaultSearch: formData.get("includeInDefaultSearch") !== null,
+        isPrivate: formData.get("isPrivate") !== null,
       });
       if (!envelope.data) return { ok: false, error: "تعذر إنشاء المجموعة." };
       return toMutationResult(envelope, "تم إنشاء المجموعة.");

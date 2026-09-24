@@ -244,6 +244,132 @@ public sealed class GroupsTests
     }
 
     [Fact]
+    public async Task Create_Private_BindsOwner_ExcludesFromDefaultSearch()
+    {
+        var (db, groups, activity) = Fresh();
+        using (db)
+        {
+            db.Users.Add(new User { Username = "owner1", PasswordHash = "x", DisplayName = "o" });
+            await db.SaveChangesAsync();
+            var created = await groups.CreateAsync(
+                new CreateGroupRequest("priv-1", "secret", true, true), "owner1");
+            Assert.True(created.IsPrivate);
+            Assert.False(created.IncludeInDefaultSearch);
+            Assert.Equal("owner1", created.OwnerUsername);
+            Assert.NotNull(created.OwnerUserId);
+            var row = await db.Groups.SingleAsync(g => g.Id == created.Id);
+            Assert.True(row.IsPrivate);
+            Assert.Equal("owner1", row.OwnerUsername);
+            Assert.Contains(activity.Writes, w => w.Action == ActivityAction.GroupCreated);
+        }
+    }
+
+    [Fact]
+    public async Task Create_Private_UnknownActor_Throws()
+    {
+        var (db, groups, _) = Fresh();
+        using (db)
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => groups.CreateAsync(new CreateGroupRequest("priv-x", "", true, true), "ghost"));
+            Assert.Equal("تعذر تحديد مالك المجموعة الخاصة.", ex.Message);
+        }
+    }
+
+    [Fact]
+    public async Task Scope_Private_HiddenFromGlobalViewer_VisibleToOwnerAndMaintainer()
+    {
+        using var db = TestHelpers.InMemoryDb();
+        using (db)
+        {
+            var owner = new User { Username = "owner1", PasswordHash = "x" };
+            db.Users.Add(owner);
+            var shared = new Group { Name = "shared" };
+            var priv = new Group { Name = "priv", IsPrivate = true, OwnerUserId = owner.Id, OwnerUsername = "owner1" };
+            db.Groups.AddRange(shared, priv);
+            await db.SaveChangesAsync();
+            // Owner id is database-generated: reload for the scope checks below.
+            owner = await db.Users.SingleAsync(u => u.Username == "owner1");
+            priv.OwnerUserId = owner.Id;
+            await db.SaveChangesAsync();
+            var privFile = SeedFile(db, priv.Id, "pf", rows: 3);
+            var sharedFile = SeedFile(db, shared.Id, "sf", rows: 5);
+            var auth = TestHelpers.Auth(db);
+
+            // Global viewer without the maintenance grant: explicit scope
+            // without the foreign private group or its files.
+            var viewer = new CurrentUserDto(Guid.NewGuid(), "viewer", null,
+                [TestHelpers.Perm(Permissions.GroupsView)]);
+            var viewerScope = await auth.ResolveDataScope(viewer);
+            Assert.NotNull(viewerScope.GroupIds);
+            Assert.Contains(shared.Id, viewerScope.GroupIds!);
+            Assert.DoesNotContain(priv.Id, viewerScope.GroupIds!);
+            Assert.Contains(sharedFile.Id, viewerScope.FileIds!);
+            Assert.DoesNotContain(privFile.Id, viewerScope.FileIds!);
+            Assert.Null(await groupsScoped(db).GetAsync(priv.Id, viewerScope));
+
+            // Owner with no grants at all still keeps their own group.
+            var ownerUser = new CurrentUserDto(owner.Id, "owner1", null, []);
+            var ownerScope = await auth.ResolveDataScope(ownerUser);
+            Assert.Contains(priv.Id, ownerScope.GroupIds!);
+            Assert.Contains(privFile.Id, ownerScope.FileIds!);
+
+            // Maintenance grant restores the legacy unrestricted scope.
+            var maintainer = new CurrentUserDto(Guid.NewGuid(), "maint", null,
+                [TestHelpers.Perm(Permissions.GroupsView), TestHelpers.Perm(Permissions.GroupsViewPrivate)]);
+            var maintScope = await auth.ResolveDataScope(maintainer);
+            Assert.Null(maintScope.GroupIds);
+            Assert.Null(maintScope.FileIds);
+        }
+
+        static GroupService groupsScoped(AppDbContext ctx)
+            => new(TestHelpers.Uow(ctx), new StubActivity(), TestHelpers.Auth(ctx));
+    }
+
+    [Fact]
+    public async Task Activity_PrivateRows_HiddenFromStrangers()
+    {
+        using var db = TestHelpers.InMemoryDb();
+        using (db)
+        {
+            var owner = new User { Username = "owner1", PasswordHash = "x" };
+            var stranger = new User { Username = "stranger", PasswordHash = "x" };
+            db.Users.AddRange(owner, stranger);
+            var priv = new Group { Name = "priv-act", IsPrivate = true, OwnerUsername = "owner1" };
+            db.Groups.Add(priv);
+            await db.SaveChangesAsync();
+            owner = await db.Users.SingleAsync(u => u.Username == "owner1");
+            stranger = await db.Users.SingleAsync(u => u.Username == "stranger");
+            priv.OwnerUserId = owner.Id;
+            await db.SaveChangesAsync();
+            var file = SeedFile(db, priv.Id, "paf", rows: 2);
+
+            var uow = TestHelpers.Uow(db);
+            var activity = new ActivityService(uow);
+            await activity.WriteAsync(ActivityAction.FileUploaded, file.Name,
+                new { fileId = file.Id, rows = 2 });
+            await activity.WriteAsync(ActivityAction.GroupCreated, priv.Name,
+                new { by = "owner1", isPrivate = true });
+            await activity.WriteAsync(ActivityAction.UserCreated, "someone", new { by = "owner1" });
+
+            // Stranger: private file + group rows dropped, unrelated rows stay.
+            var hidden = await activity.ListAsync(new ActivityFilterRequest(1, 50, null, null,
+                new ActivityVisibility(stranger.Id, false)));
+            Assert.DoesNotContain(hidden.Items, i => i.TargetName == file.Name);
+            Assert.DoesNotContain(hidden.Items, i => i.TargetName == priv.Name);
+            Assert.Contains(hidden.Items, i => i.TargetName == "someone");
+
+            // Owner and maintenance keep the full history.
+            var own = await activity.ListAsync(new ActivityFilterRequest(1, 50, null, null,
+                new ActivityVisibility(owner.Id, false)));
+            Assert.Equal(3, own.Items.Count);
+            var maint = await activity.ListAsync(new ActivityFilterRequest(1, 50, null, null,
+                new ActivityVisibility(Guid.NewGuid(), true)));
+            Assert.Equal(3, maint.Items.Count);
+        }
+    }
+
+    [Fact]
     public async Task GetDetail_Unknown_Invisible_VisibleWithEdits()
     {
         using var db = TestHelpers.InMemoryDb();

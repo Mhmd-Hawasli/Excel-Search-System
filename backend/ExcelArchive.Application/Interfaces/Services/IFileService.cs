@@ -17,4 +17,7 @@ public interface IFileService
     Task<bool> ExistsAsync(Guid fileId, CancellationToken ct = default);
     Task<FileExportDataDto?> GetExportDataAsync(Guid fileId, CancellationToken ct = default);
     Task<Guid> CreateReplaceJobAsync(Guid fileId, ReplaceFileRequest request, string actorUsername, CancellationToken ct = default);
+    Task<BumpVersionResponse> BumpVersionAsync(Guid fileId, string? note, string actorUsername, CancellationToken ct = default);
+    Task<FileVersionsResponse?> GetVersionsAsync(Guid fileId, CancellationToken ct = default);
+    Task<FileExportDataDto?> GetVersionExportDataAsync(Guid fileId, int version, CancellationToken ct = default);
 }

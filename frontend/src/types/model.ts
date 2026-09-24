@@ -8,6 +8,10 @@ export interface Group {
   fileCount: number;
   recordCount: number;
   includeInDefaultSearch: boolean;
+  /** Private group: visible only to its owner + groups.viewPrivate holders. */
+  isPrivate?: boolean | null;
+  ownerUsername?: string | null;
+  ownerUserId?: string | null;
 }
 
 export interface GroupFile {
@@ -180,6 +184,8 @@ export interface ReplacePreview {
   nationalIdHeader: string | null;
   currentVersion: number;
   newColumns: ReplacePreviewNewColumn[] | null;
+  pendingEditCount: number;
+  nextVersion: number;
 }
 
 export interface CategoryOption {

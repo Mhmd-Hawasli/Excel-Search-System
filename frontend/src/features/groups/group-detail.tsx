@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Upload } from "lucide-react";
+import { ArrowRight, Lock, Upload } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { FileCard } from "@/components/file-card";
 import { FlashMessage } from "@/components/flash-message";
 import { MoveFileButton } from "@/components/move-file-button";
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApiQuery } from "@/hooks/use-api-query";
@@ -74,6 +75,13 @@ export function GroupDetail({ groupId }: { groupId: string }) {
         }
       />
       <FlashMessage error={error} success={success} />
+      {group.isPrivate ? (
+        <p>
+          <Badge className="gap-1"><Lock className="size-3" />مجموعة خاصة
+            {group.ownerUsername && group.ownerUsername !== user?.username ? ` — المالك: ${group.ownerUsername}` : " — لا يراها باقي المستخدمين"}
+          </Badge>
+        </p>
+      ) : null}
       {files.length === 0 ? (
         <EmptyState
           title="لا توجد ملفات في هذه المجموعة"

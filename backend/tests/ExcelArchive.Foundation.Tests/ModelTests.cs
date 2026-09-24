@@ -16,14 +16,14 @@ public sealed class ModelTests
     }
 
     [Fact]
-    public void HasAllFifteenDomainSets()
+    public void HasAllSixteenDomainSets()
     {
         var tables = Model().GetEntityTypes()
             .Select(e => e.GetTableName()).OrderBy(t => t).ToList();
         Assert.Equal(
         [
             "activity_log", "categories", "conflict_cache_state", "conflict_query_cache",
-            "data_quality_issues", "file_columns", "files", "groups", "ignored_conflicts",
+            "data_quality_issues", "file_columns", "file_versions", "files", "groups", "ignored_conflicts",
             "mapping_templates", "record_edits", "records", "upload_jobs", "user_permissions", "users",
         ], tables);
     }
@@ -56,6 +56,7 @@ public sealed class ModelTests
         { typeof(Category), ["Name"] },
         { typeof(Domain.Entities.User), ["Username"] },
         { typeof(FileColumn), ["FileId", "ColumnIndex"] },
+        { typeof(FileVersion), ["FileId", "Version"] },
         { typeof(RecordEntity), ["FileId", "RowIndex"] },
         { typeof(MappingTemplate), ["GroupId", "Name"] },
         { typeof(IgnoredConflict), ["Rule", "RecordId"] },

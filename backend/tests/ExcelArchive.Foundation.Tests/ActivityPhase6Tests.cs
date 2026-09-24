@@ -6,7 +6,7 @@ using ExcelArchive.Infrastructure.Implementations.Repositories;
 
 namespace ExcelArchive.Foundation.Tests;
 
-/// <summary>P6.5: latest-500 newest-first ordering, known/unknown action
+/// <summary>P6.5: newest-first ordering, known/unknown action
 /// filter parity (unknown falls back to all rows, V1 ACTION_KEYS check) and
 /// free-text search.</summary>
 public sealed class ActivityPhase6Tests
@@ -49,11 +49,11 @@ public sealed class ActivityPhase6Tests
     }
 
     [Fact]
-    public async Task List_PageSize_CappedAt500()
+    public async Task List_PageSize_CappedAt1000()
     {
         var svc = await Setup();
         var result = await svc.ListAsync(new ActivityFilterRequest(1, 5000, null, null));
-        Assert.Equal(500, result.PageSize);
+        Assert.Equal(1000, result.PageSize);
         Assert.Equal(3, result.Total);
     }
 

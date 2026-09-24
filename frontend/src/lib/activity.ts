@@ -1,5 +1,5 @@
 export type ActivityAction =
-  | "FILE_UPLOADED" | "FILE_UPDATED" | "FILE_REPLACED" | "FILE_DELETED"
+  | "FILE_UPLOADED" | "FILE_UPDATED" | "FILE_REPLACED" | "FILE_DELETED" | "FILE_VERSION_BUMPED"
   | "GROUP_CREATED" | "GROUP_UPDATED" | "GROUP_REORDERED" | "GROUP_DELETED"
   | "CATEGORY_CREATED" | "CATEGORY_UPDATED" | "CATEGORY_REORDERED" | "CATEGORY_DELETED"
   | "COLUMN_REORDERED" | "COLUMN_RECATEGORIZED" | "TEMPLATE_CREATED" | "BACKUP_RESTORED"
@@ -11,6 +11,7 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   FILE_UPDATED: "تحديث ملف",
   FILE_REPLACED: "استبدال إصدار ملف",
   FILE_DELETED: "حذف ملف",
+  FILE_VERSION_BUMPED: "تثبيت إصدار ملف",
   GROUP_CREATED: "إنشاء مجموعة",
   GROUP_UPDATED: "تحديث مجموعة",
   GROUP_REORDERED: "ترتيب مجموعة",
@@ -61,6 +62,7 @@ export type EditDetails = {
   recordId?: string;
   fileId?: string;
   fileName?: string;
+  fileVersion?: number;
   personName?: string;
   rowIndex?: number;
   headerRaw?: string;
@@ -69,7 +71,10 @@ export type EditDetails = {
   editedBy?: string;
 };
 
-/** Typed reader for RECORD_EDITED activity details; null when absent. */
+/** Typed reader for RECORD_EDITED activity details; null when absent.
+ *  fileName/fileVersion are present only on rows written after the
+ *  file-context enrichment; older rows resolve them via the top-level
+ *  `fileName`/`fileVersion` fields the backend fills in from fileId. */
 export function parseEditDetails(value: unknown): EditDetails | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const details = value as Record<string, unknown>;
@@ -80,10 +85,18 @@ export function parseEditDetails(value: unknown): EditDetails | null {
       : typeof rowIndex === "string" && rowIndex.trim() !== ""
         ? Number(rowIndex)
         : undefined;
+  const versionRaw = details.fileVersion ?? details.version ?? details.newVersion;
+  const parsedVersion =
+    typeof versionRaw === "number"
+      ? versionRaw
+      : typeof versionRaw === "string" && versionRaw.trim() !== ""
+        ? Number(versionRaw)
+        : undefined;
   return {
     recordId: typeof details.recordId === "string" ? details.recordId : undefined,
     fileId: typeof details.fileId === "string" ? details.fileId : undefined,
     fileName: typeof details.fileName === "string" ? details.fileName : undefined,
+    fileVersion: Number.isFinite(parsedVersion) ? (parsedVersion as number) : undefined,
     personName: typeof details.personName === "string" ? details.personName : undefined,
     rowIndex: Number.isFinite(parsedRow) ? parsedRow : undefined,
     headerRaw: typeof details.headerRaw === "string" ? details.headerRaw : undefined,
@@ -100,4 +113,81 @@ export function relativeArabic(date: Date) {
   if (Math.abs(seconds) < 3600) return formatter.format(Math.round(seconds / 60), "minute");
   if (Math.abs(seconds) < 86400) return formatter.format(Math.round(seconds / 3600), "hour");
   return formatter.format(Math.round(seconds / 86400), "day");
+}
+
+/** Minimal structural view of an activity row (mirrors ActivityLogItem). */
+export type ActivityRowLike = {
+  action: string;
+  targetName: string;
+  details?: Record<string, string | number | null> | null;
+  fileName?: string | null;
+  fileVersion?: number | null;
+};
+
+function toActionKeySafe(action: string): ActivityAction | null {
+  const upper = action.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase();
+  const keys = new Set<string>(Object.keys(ACTIVITY_LABELS));
+  return keys.has(upper) ? (upper as ActivityAction) : null;
+}
+
+/** Record-person actions whose targetName is a person's name. */
+export function isPersonRecordAction(action: string): boolean {
+  const key = toActionKeySafe(action);
+  return key === "RECORD_EDITED" || key === "RECORD_VISITED" || key === "RECORD_DELETED";
+}
+
+/**
+ * Virtual target-filter entries that stand in for the thousands of
+ * person names inside record logs. Selecting one filters by action kind
+ * instead of by person.
+ */
+export const VIRTUAL_TARGET_OPTIONS: { value: string; label: string }[] = [
+  { value: "__RECORD_EDITED__", label: "تعديل سجل ضمن أي ملف" },
+  { value: "__RECORD_VISITED__", label: "زيارة سجل ضمن أي ملف" },
+  { value: "__RECORD_DELETED__", label: "حذف سجل ضمن أي ملف" },
+];
+
+export function virtualTargetAction(value: string): ActivityAction | null {
+  if (value === "__RECORD_EDITED__") return "RECORD_EDITED";
+  if (value === "__RECORD_VISITED__") return "RECORD_VISITED";
+  if (value === "__RECORD_DELETED__") return "RECORD_DELETED";
+  return null;
+}
+
+/** File name for a row: enriched top-level field first (works for old
+ *  rows resolved via fileId), then historical details keys. */
+export function resolveFileName(log: ActivityRowLike): string | null {
+  if (log.fileName) return log.fileName;
+  const details = (log.details ?? {}) as Record<string, unknown>;
+  if (typeof details.fileName === "string" && details.fileName.trim() !== "") return details.fileName;
+  return null;
+}
+
+/** File version for a row: enriched field first, then stored details
+ *  keys (fileVersion/version/newVersion). Null when unknown (e.g. old
+ *  rows whose file was deleted). */
+export function resolveFileVersion(log: ActivityRowLike): number | null {
+  if (typeof log.fileVersion === "number" && Number.isFinite(log.fileVersion)) return log.fileVersion;
+  const details = (log.details ?? {}) as Record<string, unknown>;
+  for (const key of ["fileVersion", "version", "newVersion"] as const) {
+    const raw = details[key];
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string" && raw.trim() !== "") {
+      const parsed = Number(raw);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+/** Target-filter predicate shared by the logs page: virtual entries
+ *  match by action kind, file names match the row's file context,
+ *  everything else matches targetName. Person names never appear as
+ *  options, so they can never be selected here. */
+export function matchesTargetFilter(log: ActivityRowLike, person: string): boolean {
+  if (!person) return true;
+  const virtual = virtualTargetAction(person);
+  if (virtual) return toActionKeySafe(log.action) === virtual;
+  if (resolveFileName(log) === person) return true;
+  return log.targetName === person;
 }

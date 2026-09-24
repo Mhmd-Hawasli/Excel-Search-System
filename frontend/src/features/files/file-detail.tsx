@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, ChevronsUp, Download, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { MoveFileButton } from "@/components/move-file-button";
 import { TypedDeleteButton } from "@/components/typed-delete-button";
@@ -16,14 +16,19 @@ import { formatUploadDateTime } from "@/lib/format/date";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
 import { filesService } from "@/services/files.service";
+import { VersionBumpDialog } from "@/features/files/version-bump-dialog";
+import { VersionHistoryCard } from "@/features/files/version-history-card";
 
 export function FileDetail({ groupId, fileId }: { groupId: string; fileId: string }) {
   const { data: user } = useApiQuery(() => authService.me(), []);
-  const { data, loading, error } = useApiQuery(() => filesService.detail(fileId, groupId), [fileId, groupId]);
+  const { data, loading, error, refetch } = useApiQuery(() => filesService.detail(fileId, groupId), [fileId, groupId]);
+  const { data: versions, refetch: refetchVersions } = useApiQuery(() => filesService.listVersions(fileId), [fileId]);
   const [markEdits, setMarkEdits] = useState(false);
+  const [bumpOpen, setBumpOpen] = useState(false);
 
   const permissions = user?.permissions ?? [];
   const canEditMapping = hasPermission(permissions, "upload.view");
+  const canBumpVersion = hasPermission(permissions, "versions.bump");
   const canViewHistory = hasPermission(permissions, "edits.view");
   const canExport = hasPermission(permissions, "export.run");
   const canManageFiles = hasPermission(permissions, "groups.view");
@@ -91,6 +96,12 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
                   <RefreshCw className="size-4" />
                   تحديث الملف
                 </Link>
+              </Button>
+            ) : null}
+            {canBumpVersion ? (
+              <Button variant="secondary" onClick={() => setBumpOpen(true)} title="رفع الإصدار N إلى N+1 مع رسالة تصف التغيرات">
+                <ChevronsUp className="size-4" />
+                رفع إصدار الملف
               </Button>
             ) : null}
             {canViewHistory ? (
@@ -189,8 +200,14 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
           <li>
             <span className="font-semibold text-foreground">تعديل الأعمدة والفئات:</span> تعديل شامل دون إعادة رفع — اختيار الأعمدة المرجعية (حقول البحث) وتوزيع الفئات كما في معالج الرفع، ثم إعادة حساب كل السجلات المحفوظة فورًا.
           </li>
+          <li>
+            <span className="font-semibold text-foreground">رفع إصدار الملف:</span> تثبيت نسخة جديدة (N إلى N+1) مع رسالة تصف التغيرات، دون تغيير البيانات. التعديلات اليدوية المعلقة تُؤرشف ضمن الإصدار الحالي.
+            أما تحديث الملف فوق تعديلات يدوية معلقة فيرفع الإصدار N إلى N+2: التعديلات في إصدار منفصل (N+1) والتحديث في (N+2).
+          </li>
         </ul>
       </div>
+
+      <VersionHistoryCard fileId={file.id} canExport={canExport} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Card>
@@ -257,6 +274,21 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
           </table>
         </CardContent>
       </Card>
+
+      {canBumpVersion ? (
+        <VersionBumpDialog
+          fileId={file.id}
+          fileName={file.name}
+          currentVersion={file.version}
+          pendingEditCount={versions?.pendingEditCount ?? 0}
+          open={bumpOpen}
+          onOpenChange={setBumpOpen}
+          onDone={() => {
+            refetch();
+            refetchVersions();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

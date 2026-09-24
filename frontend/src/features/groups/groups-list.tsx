@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, FolderOpen, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, FolderOpen, Lock, Plus } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { MutationForm } from "@/components/mutation-form";
 import { PageHeader } from "@/components/page-header";
@@ -51,6 +51,24 @@ export function GroupsList() {
           </CardContent>
         </Card>
       ) : null}
+      {canCreate ? (
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Lock className="size-5 text-primary" />إضافة مجموعة خاصة</CardTitle>
+            <CardDescription>مجموعة مرتبطة بحسابك فقط: لا يراها باقي المستخدمين ولا تظهر ملفاتها في البحث أو التصفية. تبقى ظاهرة لمالك النظام (صلاحية المجموعات الخاصة) لأغراض الصيانة والأعطال.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MutationForm action={groupsService.create} resetOnSuccess onSuccess={refetch} pendingMessage="جارٍ إنشاء المجموعة الخاصة…" className="grid gap-4 md:grid-cols-[1fr_2fr_auto] md:items-end">
+              <input type="hidden" name="isPrivate" value="true" />
+              <div className="space-y-2"><Label htmlFor="new-private-group-name">اسم المجموعة الخاصة</Label><Input id="new-private-group-name" name="name" required /></div>
+              <div className="space-y-2"><Label htmlFor="new-private-group-description">الوصف</Label><Input id="new-private-group-description" name="description" /></div>
+              <div className="flex items-center gap-2 pb-2">
+                <Button type="submit"><Lock className="size-4" />إنشاء مجموعة خاصة</Button>
+              </div>
+            </MutationForm>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
@@ -60,7 +78,7 @@ export function GroupsList() {
       ) : (
         <div className="grid gap-4">
           {groups.map((group, index) => (
-            <Card key={group.id}>
+            <Card key={group.id} className={group.isPrivate ? "border-primary/30" : undefined}>
               <CardContent className="p-5">
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                   <div className="min-w-0">
@@ -68,28 +86,42 @@ export function GroupsList() {
                       <CardTitle><Link href={`/groups/${group.id}`} className="hover:underline">{group.name}</Link></CardTitle>
                       <Badge variant="secondary">{group.fileCount} ملف</Badge>
                       <Badge variant="outline">{group.recordCount.toLocaleString("en-US")} سجل</Badge>
-                      {group.includeInDefaultSearch === false ? (
+                      {group.isPrivate ? (
+                        <Badge variant="default" className="gap-1"><Lock className="size-3" />خاصة</Badge>
+                      ) : null}
+                      {group.includeInDefaultSearch === false && !group.isPrivate ? (
                         <Badge variant="outline" className="border-amber-400 text-amber-700">مستبعدة من البحث الافتراضي</Badge>
                       ) : null}
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">{group.description || "لا يوجد وصف لهذه المجموعة."}</p>
+                    {group.isPrivate ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {group.ownerUsername && group.ownerUsername !== user?.username
+                          ? `مجموعة خاصة بالمستخدم ${group.ownerUsername} — ظاهرة لك للصيانة.`
+                          : "مجموعتك الخاصة — لا يراها باقي المستخدمين."}
+                      </p>
+                    ) : null}
                   </div>
-                  {canUpdate ? (
+                  {(canUpdate || (group.isPrivate && group.ownerUserId === user?.id)) ? (
                     <div className="flex flex-wrap gap-2">
                       <Button asChild size="sm"><Link href={`/groups/${group.id}`}><FolderOpen className="size-4" />فتح</Link></Button>
-                      <MutationForm action={groupsService.reorder} onSuccess={refetch} pendingMessage="جارٍ حفظ الترتيب…">
-                        <input type="hidden" name="id" value={group.id} /><input type="hidden" name="direction" value="up" />
-                        <Button type="submit" size="icon" variant="outline" disabled={index === 0} aria-label="نقل المجموعة إلى الأعلى"><ArrowUp className="size-4" /></Button>
-                      </MutationForm>
-                      <MutationForm action={groupsService.reorder} onSuccess={refetch} pendingMessage="جارٍ حفظ الترتيب…">
-                        <input type="hidden" name="id" value={group.id} /><input type="hidden" name="direction" value="down" />
-                        <Button type="submit" size="icon" variant="outline" disabled={index === groups.length - 1} aria-label="نقل المجموعة إلى الأسفل"><ArrowDown className="size-4" /></Button>
-                      </MutationForm>
+                      {canUpdate ? (
+                        <>
+                          <MutationForm action={groupsService.reorder} onSuccess={refetch} pendingMessage="جارٍ حفظ الترتيب…">
+                            <input type="hidden" name="id" value={group.id} /><input type="hidden" name="direction" value="up" />
+                            <Button type="submit" size="icon" variant="outline" disabled={index === 0} aria-label="نقل المجموعة إلى الأعلى"><ArrowUp className="size-4" /></Button>
+                          </MutationForm>
+                          <MutationForm action={groupsService.reorder} onSuccess={refetch} pendingMessage="جارٍ حفظ الترتيب…">
+                            <input type="hidden" name="id" value={group.id} /><input type="hidden" name="direction" value="down" />
+                            <Button type="submit" size="icon" variant="outline" disabled={index === groups.length - 1} aria-label="نقل المجموعة إلى الأسفل"><ArrowDown className="size-4" /></Button>
+                          </MutationForm>
+                        </>
+                      ) : null}
                       <TypedDeleteButton id={group.id} entityName={group.name} description={`سيُحذف ${group.fileCount} ملف و${group.recordCount.toLocaleString("en-US")} سجل نهائيًا. لا يمكن التراجع عن هذا الإجراء.`} action={groupsService.remove} onSuccess={refetch} />
                     </div>
                   ) : null}
                 </div>
-                {canUpdate ? (
+                {(canUpdate || (group.isPrivate && group.ownerUserId === user?.id)) ? (
                   <details className="mt-4 border-t pt-4">
                     <summary className="cursor-pointer text-sm font-bold text-primary">تعديل الاسم والوصف</summary>
                     <MutationForm action={groupsService.update} onSuccess={refetch} className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr_auto] md:items-end">

@@ -30,9 +30,9 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
     public async Task<byte[]> ExportAsync(CancellationToken ct = default)
     {
         var snap = await backups.ReadArchiveAsync(ct);
-        var (groups, categories, files, columns, records, issues, templates, jobs, logs, edits) = (
+        var (groups, categories, files, columns, records, issues, templates, jobs, logs, edits, versions) = (
             snap.Groups, snap.Categories, snap.Files, snap.Columns, snap.Records,
-            snap.Issues, snap.Templates, snap.Jobs, snap.Logs, snap.Edits);
+            snap.Issues, snap.Templates, snap.Jobs, snap.Logs, snap.Edits, snap.Versions);
 
         var payload = new
         {
@@ -46,6 +46,7 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
                     id = g.Id, name = g.Name, description = g.Description,
                     sortOrder = g.SortOrder, createdAt = g.CreatedAt, updatedAt = g.UpdatedAt,
                     includeInDefaultSearch = g.IncludeInDefaultSearch,
+                    isPrivate = g.IsPrivate, ownerUserId = g.OwnerUserId, ownerUsername = g.OwnerUsername,
                 }).ToList(),
                 categories = categories.Select(c => new
                 {
@@ -114,7 +115,13 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
                     id = e.Id, recordId = e.RecordId, fileId = e.FileId, fileColumnId = e.FileColumnId,
                     fileVersion = e.FileVersion,
                     headerRaw = e.HeaderRaw, oldValue = e.OldValue, newValue = e.NewValue,
-                    createdAt = e.CreatedAt, editedBy = e.EditedBy,
+                    createdAt = e.CreatedAt, editedBy = e.EditedBy, isBulk = e.IsBulk,
+                }).ToList(),
+                fileVersions = versions.Select(v => new
+                {
+                    id = v.Id, fileId = v.FileId, version = v.Version,
+                    note = v.Note, kind = v.Kind, createdBy = v.CreatedBy,
+                    createdAt = v.CreatedAt,
                 }).ToList(),
             },
         };

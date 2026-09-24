@@ -55,6 +55,11 @@ pnpm-debug.log*
 **/uploads/
 **/generated/
 
+# Formal snapshot artifacts (operator-supplied, never committed)
+snapshots/*.dump
+snapshots/*.manifest
+snapshots/*.json
+
 # Local package artifacts
 *.nupkg
 *.snupkg

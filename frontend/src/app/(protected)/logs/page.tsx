@@ -3,32 +3,56 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronsUpDown, History } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { LogsFilter, type LogsFilters } from "@/features/activity/logs-filter";
-import { ACTIVITY_LABELS, parseEditDetails, parseVisitDetails, relativeArabic, type ActivityAction } from "@/lib/activity";
+import {
+  ACTIVITY_LABELS,
+  VIRTUAL_TARGET_OPTIONS,
+  isPersonRecordAction,
+  matchesTargetFilter,
+  parseEditDetails,
+  parseVisitDetails,
+  relativeArabic,
+  resolveFileName,
+  resolveFileVersion,
+  type ActivityAction,
+} from "@/lib/activity";
 import { formatUploadDateTime } from "@/lib/format/date";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/cn";
 import { ApiError } from "@/services/api-client";
-import { activityService, type ActivityLogItem } from "@/services/activity.service";
+import { ACTIVITY_PAGE_SIZE, activityService, type ActivityLogItem } from "@/services/activity.service";
 import { authService } from "@/services/auth.service";
 
-// Full UI-19 port (P6.5): exact action selector with URL behavior, newest 500
-// ordered from the backend, action badges, visit details with record links,
-// relative Arabic time, activity.view page gate with the browse notice, and
-// empty/filtered-empty/failure/loading states. Extended with per-column
-// sorting (asc → desc → backend order) and per-column filters: free-text
-// search, action type, person (target or visit visitor), and a date range.
+// Full history port: the backend keeps every activity row (no retention
+// cap — the old 500 was a read window only). The page loads the whole
+// history via paged listAll, filters client-side, and paginates 100 rows
+// per page. Target cells always show the file name + version for
+// file-linked events (resolved from fileId for old rows that stored only
+// the id); the target filter lists entity/file names plus virtual
+// record-kind entries and never individual person names.
 
 const ACTION_KEYS = new Set<string>(Object.keys(ACTIVITY_LABELS));
 
 function toActionKey(action: string): ActivityAction | null {
   const upper = action.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase();
   return ACTION_KEYS.has(upper) ? (upper as ActivityAction) : null;
+}
+
+function isFileAction(log: ActivityLogItem): boolean {
+  const key = toActionKey(log.action);
+  return (
+    key === "FILE_UPLOADED" ||
+    key === "FILE_UPDATED" ||
+    key === "FILE_REPLACED" ||
+    key === "FILE_DELETED" ||
+    key === "FILE_VERSION_BUMPED"
+  );
 }
 
 type SortKey = "action" | "target" | "actor" | "details" | "date";
@@ -95,6 +119,7 @@ export default function LogsPage() {
   const param = searchParams.get("action") ?? "";
   const activeAction = ACTION_KEYS.has(param) ? param : "";
   const [items, setItems] = useState<ActivityLogItem[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [canBrowse, setCanBrowse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +129,7 @@ export default function LogsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -114,8 +140,12 @@ export default function LogsPage() {
         const browse = hasPermission(me?.permissions ?? [], "activity.browse");
         setCanBrowse(browse);
         if (!browse) return;
-        const page = await activityService.list(activeAction || undefined);
-        if (active) setItems(page.items);
+        // Full history (not just the first window): walk server pages.
+        const full = await activityService.listAll(activeAction || undefined);
+        if (!active) return;
+        setItems(full.items);
+        setTotal(full.total);
+        setPage(1);
       } catch (err) {
         if (active) setError(err instanceof ApiError ? err.message : "تعذر تحميل سجل النشاط.");
       } finally {
@@ -129,11 +159,16 @@ export default function LogsPage() {
   }, [param]);
 
   function changeAction(next: string) {
+    setPage(1);
     router.replace(next ? `/logs?action=${next}` : "/logs", { scroll: false });
   }
 
   function changeFilters(next: Partial<LogsFilters>) {
-    if (next.action !== undefined) changeAction(next.action);
+    if (next.action !== undefined) {
+      changeAction(next.action);
+      return;
+    }
+    setPage(1);
     if (next.person !== undefined) setPerson(next.person);
     if (next.actor !== undefined) setActor(next.actor);
     if (next.query !== undefined) setQuery(next.query);
@@ -148,6 +183,7 @@ export default function LogsPage() {
     setQuery("");
     setDateFrom("");
     setDateTo("");
+    setPage(1);
   }
 
   /** Tri-state header sort: asc → desc → backend order (newest first). */
@@ -159,19 +195,26 @@ export default function LogsPage() {
     });
   }
 
-  // Distinct targets only (actor display names like visitor/editedBy are excluded —
-  // they belong to the actor filter), Arabic collation order.
+  // Target options exclude individual person names by design: record
+  // edits/visits/deletes carry a person per row (thousands of entries).
+  // Instead the dropdown offers virtual record-kind entries
+  // ("تعديل سجل ضمن أي ملف" …) plus distinct entity names (files, users,
+  // groups, categories…) and distinct file names for file-linked rows.
   const personOptions = useMemo(() => {
-    if (!items) return [];
-    const names = new Set<string>();
+    if (!items) return VIRTUAL_TARGET_OPTIONS.map((option) => ({ ...option }));
+    const names = new Map<string, string>();
     for (const log of items) {
-      if (log.targetName) names.add(log.targetName);
-      if (toActionKey(log.action) === "RECORD_EDITED") {
-        const edit = parseEditDetails(log.details);
-        if (edit?.personName) names.add(edit.personName);
+      if (!isPersonRecordAction(log.action) && log.targetName) {
+        if (!names.has(log.targetName)) names.set(log.targetName, log.targetName);
       }
+      const fileName = resolveFileName(log);
+      if (fileName && !names.has(fileName)) names.set(fileName, fileName);
     }
-    return [...names].sort((a, b) => a.localeCompare(b, "ar"));
+    const sorted = [...names.values()].sort((a, b) => a.localeCompare(b, "ar"));
+    return [
+      ...VIRTUAL_TARGET_OPTIONS.map((option) => ({ ...option })),
+      ...sorted.map((name) => ({ value: name, label: name })),
+    ];
   }, [items]);
 
   // Distinct acting users across all activity events (server-resolved actor).
@@ -182,8 +225,8 @@ export default function LogsPage() {
     return [...names].sort((a, b) => a.localeCompare(b, "ar"));
   }, [items]);
 
-  // Client-side filter + sort over the newest-500 page loaded from the backend.
-  const visibleItems = useMemo(() => {
+  // Client-side filter + sort over the FULL history loaded from the backend.
+  const filteredItems = useMemo(() => {
     if (!items) return [];
     const needle = query.trim().toLowerCase();
     const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
@@ -192,13 +235,20 @@ export default function LogsPage() {
       const created = new Date(log.createdAt);
       if (from && created < from) return false;
       if (to && created > to) return false;
-      if (person) {
-        const edit = toActionKey(log.action) === "RECORD_EDITED" ? parseEditDetails(log.details) : null;
-        if (log.targetName !== person && edit?.personName !== person) return false;
-      }
+      if (!matchesTargetFilter(log, person)) return false;
       if (actor && log.actor !== actor) return false;
       if (needle) {
-        const haystack = [log.targetName, log.actor ?? "", actionLabel(log), detailsText(log), formatUploadDateTime(created)]
+        const fileName = resolveFileName(log) ?? "";
+        const fileVersion = resolveFileVersion(log);
+        const haystack = [
+          log.targetName,
+          fileName,
+          fileVersion != null ? `v${fileVersion} الإصدار ${fileVersion}` : "",
+          log.actor ?? "",
+          actionLabel(log),
+          detailsText(log),
+          formatUploadDateTime(created),
+        ]
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(needle)) return false;
@@ -218,12 +268,31 @@ export default function LogsPage() {
     });
   }, [items, person, actor, query, dateFrom, dateTo, sort]);
 
+  // Client-side pagination: 100 rows per page with navigation.
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / ACTIVITY_PAGE_SIZE));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const pageStart = (safePage - 1) * ACTIVITY_PAGE_SIZE;
+  const visibleItems = filteredItems.slice(pageStart, pageStart + ACTIVITY_PAGE_SIZE);
+  const rangeFrom = filteredItems.length === 0 ? 0 : pageStart + 1;
+  const rangeTo = Math.min(pageStart + ACTIVITY_PAGE_SIZE, filteredItems.length);
+
+  // Numbered page window (up to 5 buttons around the current page).
+  const pageWindow = useMemo(() => {
+    const size = 5;
+    let start = Math.max(1, safePage - Math.floor(size / 2));
+    const end = Math.min(totalPages, start + size - 1);
+    start = Math.max(1, end - size + 1);
+    const window: number[] = [];
+    for (let p = start; p <= end; p += 1) window.push(p);
+    return window;
+  }, [safePage, totalPages]);
+
   return (
     <div className="space-y-7">
       <PageHeader
         eyebrow="أثر تشغيلي"
         title="سجل النشاط"
-        description="آخر العمليات التي جرت في النظام، مرتبة من الأحدث إلى الأقدم — بما فيها زيارات صفحات السجلات: اسم العامل الذي زيرت صفحته واسم الحساب الزائر مع التاريخ."
+        description="كل العمليات المحفوظة في النظام، مرتبة من الأحدث إلى الأقدم — بما فيها زيارات صفحات السجلات وتعديلاتها: اسم الشخص واسم الملف وإصداره واسم الحساب الذي نفّذ العملية مع التاريخ."
       />
       {!loading && !canBrowse ? (
         <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
@@ -240,7 +309,10 @@ export default function LogsPage() {
           />
           {items ? (
             <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-              عرض {visibleItems.length.toLocaleString("en-US")} من {items.length.toLocaleString("en-US")} عملية
+              عرض {rangeFrom.toLocaleString("en-US")}–{rangeTo.toLocaleString("en-US")} من{" "}
+              {filteredItems.length.toLocaleString("en-US")} عملية (المجموع المحفوظ:{" "}
+              {total.toLocaleString("en-US")}) — الصفحة {safePage.toLocaleString("en-US")} من{" "}
+              {totalPages.toLocaleString("en-US")}
               {sort
                 ? ` — الفرز حسب «${SORTABLE_COLUMNS.find((column) => column.key === sort.key)?.label ?? sort.key}» ${sort.dir === "asc" ? "تصاعدي" : "تنازلي"}`
                 : " — مرتبة من الأحدث إلى الأقدم"}
@@ -251,134 +323,221 @@ export default function LogsPage() {
               {error}
             </p>
           ) : loading || !items ? (
-            <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>
+            <p className="text-sm text-muted-foreground">جارٍ تحميل كامل السجل…</p>
           ) : items.length === 0 ? (
             <EmptyState
               title="لا يوجد نشاط مسجل"
               description="ستظهر هنا عمليات الرفع والتحديث والحذف وإدارة الإعدادات وزيارات السجلات."
             />
-          ) : visibleItems.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <EmptyState
               title="لا نتائج مطابقة للفلاتر"
-              description="جرّب تغيير نوع العملية أو الشخص أو نطاق التاريخ أو نص البحث، أو أعد تعيين الفلاتر لعرض كل العمليات."
+              description="جرّب تغيير نوع العملية أو الهدف أو نطاق التاريخ أو نص البحث، أو أعد تعيين الفلاتر لعرض كل العمليات."
             />
           ) : (
-            <Card>
-              <CardContent className="overflow-x-auto p-0">
-                <table className="w-full min-w-[860px] text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      {SORTABLE_COLUMNS.map((column, index) => {
-                        const active = sort?.key === column.key;
-                        const dir = sort?.dir ?? "asc";
-                        return (
-                          <th
-                            key={`${column.key}-${index}`}
-                            scope="col"
-                            className="p-0 text-right font-bold"
-                            aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => toggleSort(column.key)}
-                              className={cn(
-                                "flex w-full items-center justify-between gap-1 p-4 text-right transition hover:bg-muted",
-                                active && "bg-primary/5 text-primary",
-                              )}
-                              aria-label={`فرز حسب ${column.label} ${active && dir === "asc" ? "تنازلي" : "تصاعدي"}`}
+            <>
+              <Card>
+                <CardContent className="overflow-x-auto p-0">
+                  <table className="w-full min-w-[860px] text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        {SORTABLE_COLUMNS.map((column, index) => {
+                          const active = sort?.key === column.key;
+                          const dir = sort?.dir ?? "asc";
+                          return (
+                            <th
+                              key={`${column.key}-${index}`}
+                              scope="col"
+                              className="p-0 text-right font-bold"
+                              aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
                             >
-                              <span>{column.label}</span>
-                              <SortGlyph active={active} dir={dir} />
-                            </button>
-                          </th>
+                              <button
+                                type="button"
+                                onClick={() => toggleSort(column.key)}
+                                className={cn(
+                                  "flex w-full items-center justify-between gap-1 p-4 text-right transition hover:bg-muted",
+                                  active && "bg-primary/5 text-primary",
+                                )}
+                                aria-label={`فرز حسب ${column.label} ${active && dir === "asc" ? "تنازلي" : "تصاعدي"}`}
+                              >
+                                <span>{column.label}</span>
+                                <SortGlyph active={active} dir={dir} />
+                              </button>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleItems.map((log) => {
+                        const key = toActionKey(log.action);
+                        const visit = key === "RECORD_VISITED" ? parseVisitDetails(log.details) : null;
+                        const edit = key === "RECORD_EDITED" ? parseEditDetails(log.details) : null;
+                        const created = new Date(log.createdAt);
+                        const fileName = resolveFileName(log);
+                        const fileVersion = resolveFileVersion(log);
+                        const recordAction = isPersonRecordAction(log.action);
+                        const fileEvent = isFileAction(log);
+                        return (
+                          <tr key={log.id} className="border-t align-top">
+                            <td className="p-4">
+                              {log.actor ? (
+                                <span className="ltr-numbers">
+                                  <span className="font-bold text-foreground">{log.actor}</span>
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="p-4">
+                              <Badge variant="secondary" className="gap-1">
+                                <History className="size-3" />
+                                {actionLabel(log)}
+                              </Badge>
+                            </td>
+                            <td className="p-4">
+                              {visit?.recordId ? (
+                                <Link
+                                  href={`/records/${visit.recordId}`}
+                                  prefetch={false}
+                                  className="font-semibold text-primary hover:underline"
+                                >
+                                  {log.targetName}
+                                </Link>
+                              ) : edit?.recordId ? (
+                                <Link
+                                  href={`/records/${edit.recordId}`}
+                                  prefetch={false}
+                                  className="font-semibold text-primary hover:underline"
+                                >
+                                  {edit.personName ?? log.targetName}
+                                </Link>
+                              ) : (
+                                <span className="font-semibold">{log.targetName}</span>
+                              )}
+                              {recordAction || fileEvent ? (
+                                <span className="mt-1 block text-xs font-normal leading-6 text-muted-foreground">
+                                  {recordAction ? (
+                                    <>
+                                      <span className="block">
+                                        الملف:{" "}
+                                        <span className="font-bold text-foreground">{fileName ?? "ملف محذوف"}</span>
+                                      </span>
+                                      <span className="block">
+                                        الإصدار:{" "}
+                                        <span className="font-bold text-foreground">
+                                          {fileVersion != null ? `v${fileVersion}` : "—"}
+                                        </span>
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="block">
+                                      الإصدار:{" "}
+                                      <span className="font-bold text-foreground">
+                                        {fileVersion != null ? `v${fileVersion}` : "—"}
+                                      </span>
+                                    </span>
+                                  )}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="p-4 text-xs leading-6 text-muted-foreground">
+                              {visit ? (
+                                <>
+                                  <span className="block">
+                                    الزائر:{" "}
+                                    <span className="font-bold text-foreground">{visit.visitorDisplayName}</span>{" "}
+                                    <span className="ltr-numbers">@{visit.visitorUsername}</span>
+                                  </span>
+                                  {visit.fileName ? <span className="block">الملف: {visit.fileName}</span> : null}
+                                </>
+                              ) : edit ? (
+                                <>
+                                  {edit.headerRaw ? (
+                                    <span className="block">
+                                      الحقل: <span className="font-bold text-foreground">{edit.headerRaw}</span>
+                                    </span>
+                                  ) : null}
+                                  <span className="block">
+                                    القيمة:{" "}
+                                    <span className="font-bold text-foreground">{edit.oldValue ?? "—"}</span>
+                                    {" ← "}
+                                    <span className="font-bold text-foreground">{edit.newValue ?? "—"}</span>
+                                  </span>
+                                  {edit.rowIndex ? (
+                                    <span className="block text-right" dir="rtl">صف Excel: <span className="ltr-numbers">{edit.rowIndex}</span></span>
+                                  ) : null}
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                            <td className="p-4 ltr-numbers text-right">{formatUploadDateTime(created)}</td>
+                            <td className="p-4 text-muted-foreground">{relativeArabic(created)}</td>
+                          </tr>
                         );
                       })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleItems.map((log) => {
-                      const key = toActionKey(log.action);
-                      const visit = key === "RECORD_VISITED" ? parseVisitDetails(log.details) : null;
-                      const edit = key === "RECORD_EDITED" ? parseEditDetails(log.details) : null;
-                      const created = new Date(log.createdAt);
-                      return (
-                        <tr key={log.id} className="border-t align-top">
-                          <td className="p-4">
-                            {log.actor ? (
-                              <span className="ltr-numbers">
-                                <span className="font-bold text-foreground">{log.actor}</span>
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="p-4">
-                            <Badge variant="secondary" className="gap-1">
-                              <History className="size-3" />
-                              {actionLabel(log)}
-                            </Badge>
-                          </td>
-                          <td className="p-4 font-semibold">
-                            {visit?.recordId ? (
-                              <Link
-                                href={`/records/${visit.recordId}`}
-                                prefetch={false}
-                                className="text-primary hover:underline"
-                              >
-                                {log.targetName}
-                              </Link>
-                            ) : edit?.recordId ? (
-                              <Link
-                                href={`/records/${edit.recordId}`}
-                                prefetch={false}
-                                className="text-primary hover:underline"
-                              >
-                                {edit.personName ?? log.targetName}
-                              </Link>
-                            ) : (
-                              log.targetName
-                            )}
-                          </td>
-                          <td className="p-4 text-xs leading-6 text-muted-foreground">
-                            {visit ? (
-                              <>
-                                <span className="block">
-                                  الزائر:{" "}
-                                  <span className="font-bold text-foreground">{visit.visitorDisplayName}</span>{" "}
-                                  <span className="ltr-numbers">@{visit.visitorUsername}</span>
-                                </span>
-                                {visit.fileName ? <span className="block">الملف: {visit.fileName}</span> : null}
-                              </>
-                            ) : edit ? (
-                              <>
-                                {edit.headerRaw ? (
-                                  <span className="block">
-                                    الحقل: <span className="font-bold text-foreground">{edit.headerRaw}</span>
-                                  </span>
-                                ) : null}
-                                <span className="block">
-                                  القيمة:{" "}
-                                  <span className="font-bold text-foreground">{edit.oldValue ?? "—"}</span>
-                                  {" ← "}
-                                  <span className="font-bold text-foreground">{edit.newValue ?? "—"}</span>
-                                </span>
-                                {edit.rowIndex ? (
-                                  <span className="block text-right" dir="rtl">صف Excel: <span className="ltr-numbers">{edit.rowIndex}</span></span>
-                                ) : null}
-                              </>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td className="p-4 ltr-numbers text-right">{formatUploadDateTime(created)}</td>
-                          <td className="p-4 text-muted-foreground">{relativeArabic(created)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+              {totalPages > 1 ? (
+                <nav aria-label="التنقل بين صفحات السجل" className="flex flex-wrap items-center justify-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={safePage <= 1}
+                    onClick={() => setPage(safePage - 1)}
+                    aria-label="الصفحة السابقة"
+                  >
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                    السابق
+                  </Button>
+                  {pageWindow[0] > 1 ? (
+                    <>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setPage(1)}>
+                        1
+                      </Button>
+                      {pageWindow[0] > 2 ? <span className="text-muted-foreground">…</span> : null}
+                    </>
+                  ) : null}
+                  {pageWindow.map((p) => (
+                    <Button
+                      key={p}
+                      type="button"
+                      variant={p === safePage ? "default" : "outline"}
+                      size="sm"
+                      aria-current={p === safePage ? "page" : undefined}
+                      onClick={() => setPage(p)}
+                    >
+                      {p.toLocaleString("en-US")}
+                    </Button>
+                  ))}
+                  {pageWindow[pageWindow.length - 1] < totalPages ? (
+                    <>
+                      {pageWindow[pageWindow.length - 1] < totalPages - 1 ? (
+                        <span className="text-muted-foreground">…</span>
+                      ) : null}
+                      <Button type="button" variant="outline" size="sm" onClick={() => setPage(totalPages)}>
+                        {totalPages.toLocaleString("en-US")}
+                      </Button>
+                    </>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={safePage >= totalPages}
+                    onClick={() => setPage(safePage + 1)}
+                    aria-label="الصفحة التالية"
+                  >
+                    التالي
+                    <ChevronLeft className="size-4" aria-hidden="true" />
+                  </Button>
+                </nav>
+              ) : null}
+            </>
           )}
         </>
       )}

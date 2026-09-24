@@ -166,7 +166,7 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
     }
 
     [HttpGet("files/{id:guid}/export")]
-    public async Task<IActionResult> Export(Guid id, [FromQuery] bool markEdits = false)
+    public async Task<IActionResult> Export(Guid id, [FromQuery] bool markEdits = false, [FromQuery] int? version = null)
     {
         var user = await RequirePermissionAsync(Permissions.ExportRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
@@ -174,13 +174,16 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
         if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
         try
         {
-            var data = await files.GetExportDataAsync(id);
+            var data = version.HasValue
+                ? await files.GetVersionExportDataAsync(id, version.Value)
+                : await files.GetExportDataAsync(id);
             if (data is null) return NotFound(ApiResponse.Failure("الملف غير موجود."));
 
             var bytes = exports.Build(data.SheetName, data.Headers, data.Records, data.Edits, markEdits, data.NationalIdHeader);
 
             var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
-            var encoded = Uri.EscapeDataString($"{data.FileName}-معدل-{date}.xlsx");
+            var suffix = version.HasValue ? $"-v{version.Value}" : "-معدل";
+            var encoded = Uri.EscapeDataString($"{data.FileName}{suffix}-{date}.xlsx");
             Response.Headers.ContentDisposition = $"attachment; filename*=UTF-8''{encoded}";
             Response.Headers.CacheControl = "no-store";
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -219,6 +222,43 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
             return StatusCode(StatusCodes.Status202Accepted, ApiResponse.Success(new { jobId }, "تم بدء استبدال الملف."));
         }
         catch (Exception ex) { return HandleError(ex); }
+    }
+
+    /// <summary>Manual version bump N → N+1 with a required note describing
+    /// WHAT changed. Live manual edits are archived into history; the new
+    /// version starts clean. Requires the versions.bump permission.</summary>
+    [HttpPost("files/{id:guid}/bump-version")]
+    public async Task<IActionResult> BumpVersion(Guid id, [FromBody] BumpVersionRequest? request)
+    {
+        var user = await RequirePermissionAsync(Permissions.VersionsBump);
+        if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        var target = await files.GetAsync(id);
+        if (target is null) return NotFound(ApiResponse.Failure("الملف غير موجود."));
+        var scope = await Auth.ResolveDataScope(user);
+        if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
+        try
+        {
+            var result = await files.BumpVersionAsync(id, request?.Note, user.Username);
+            return Ok(ApiResponse.Success(result,
+                $"تم رفع الإصدار من {result.PreviousVersion} إلى {result.NewVersion}."));
+        }
+        catch (Exception ex) { return HandleError(ex); }
+    }
+
+    /// <summary>Version history newest-first with per-version edit counts and
+    /// the pending (live) manual edit count on the current version.</summary>
+    [HttpGet("files/{id:guid}/versions")]
+    public async Task<IActionResult> Versions(Guid id)
+    {
+        var user = CurrentUser ?? await Auth.GetSessionUserAsync(Request.Cookies[SessionCookie.Name]);
+        if (user is null) return UnauthorizedSession();
+        if (!Auth.HasPermission(user, Permissions.GroupsView)
+            && !Auth.HasPermission(user, Permissions.SearchView))
+            return HiddenNotFound();
+        var scope = await Auth.ResolveDataScope(user);
+        if (scope.FileIds is not null && !scope.FileIds.Contains(id)) return HiddenNotFound();
+        var versions = await files.GetVersionsAsync(id);
+        return versions is null ? HiddenNotFound() : Ok(ApiResponse.Success(versions));
     }
 
     /// <summary>Cell-by-cell replace preview: column check first, then every

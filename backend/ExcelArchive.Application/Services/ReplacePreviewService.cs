@@ -59,6 +59,12 @@ public class ReplacePreviewService(
                 throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
             newByNormalized[norm] = c;
         }
+        // Pending MANUAL edits decide the coming version: N+1 when clean,
+        // N+2 when live manual edits exist (they take N+1 as their own
+        // version). Bulk-audit rows are the current version's own content,
+        // never pending.
+        var pendingEditCount = (await uow.RecordEdits.ListAsync(e => e.FileId == fileId && e.RecordId != null && !e.IsBulk, ct)).Count;
+        var nextVersion = target.Version + (pendingEditCount > 0 ? 2 : 1);
         var oldSet = new HashSet<string>(targetColumns.Select(c => c.HeaderNormalized), StringComparer.Ordinal);
         // Common columns as (system header, new-file header, system column index),
         // in system column order for a stable report.
@@ -76,7 +82,8 @@ public class ReplacePreviewService(
 
         if (!identical)
             return new ReplacePreviewResponse(false, addedColumns, removedColumns,
-                null, null, null, null, null, false, null, null, target.Version);
+                null, null, null, null, null, false, null, null, target.Version,
+                null, pendingEditCount, nextVersion);
 
         // Identical structure: compare data cell by cell.
         LinkedSheetsConfig? linked = null;
@@ -146,12 +153,13 @@ public class ReplacePreviewService(
         }
 
         // Manual (internal) edits of the CURRENT version only: archived edits
-        // carry a null record id and must not flag preview rows.
+        // carry a null record id and bulk-audit rows are version content, so
+        // neither must flag preview rows as manually edited.
         var edits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
         var editByCell = new Dictionary<(int Row, string Header), (string? By, DateTime At)>();
         foreach (var e in edits)
         {
-            if (!e.RecordId.HasValue) continue;
+            if (!e.RecordId.HasValue || e.IsBulk) continue;
             if (!recordIdToRow.TryGetValue(e.RecordId.Value, out var rowIndex)) continue;
             var key = (rowIndex, e.HeaderRaw);
             if (editByCell.TryGetValue(key, out var existing) && existing.At >= e.CreatedAt) continue;
@@ -326,7 +334,8 @@ public class ReplacePreviewService(
             addedRowIndices.Take(MaxRowSample).ToList(),
             removedRowIndices.Take(MaxRowSample).ToList(),
             changedCells > changes.Count,
-            matchMode, nationalIdHeader, target.Version, newColumnStats);
+            matchMode, nationalIdHeader, target.Version, newColumnStats,
+            pendingEditCount, nextVersion);
     }
 
     private static string Fit(string value)

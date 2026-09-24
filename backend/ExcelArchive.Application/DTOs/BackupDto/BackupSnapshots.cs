@@ -14,7 +14,8 @@ public sealed record BackupSnapshot(
     IReadOnlyList<MappingTemplate> Templates,
     IReadOnlyList<UploadJob> Jobs,
     IReadOnlyList<ActivityLog> Logs,
-    IReadOnlyList<RecordEdit> Edits);
+    IReadOnlyList<RecordEdit> Edits,
+    IReadOnlyList<FileVersion> Versions);
 
 /// <summary>Accounts transfer read for export.</summary>
 public sealed record AccountsSnapshot(

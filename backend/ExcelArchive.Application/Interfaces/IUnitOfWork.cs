@@ -21,6 +21,7 @@ public interface IUnitOfWork
     IRecordEditRepository RecordEdits { get; }
     IDataQualityRepository DataQuality { get; }
     IMappingTemplateRepository MappingTemplates { get; }
+    IFileVersionRepository FileVersions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 

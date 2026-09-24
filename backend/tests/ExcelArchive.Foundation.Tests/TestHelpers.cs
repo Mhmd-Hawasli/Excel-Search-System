@@ -83,7 +83,7 @@ internal static class TestHelpers
         new UserRepository(db), new GroupRepository(db), new FileRepository(db),
         new RecordRepository(db), new ActivityLogRepository(db), new UploadJobRepository(db),
         new CategoryRepository(db), new FileColumnRepository(db), new RecordEditRepository(db),
-        new DataQualityRepository(db), new MappingTemplateRepository(db));
+        new DataQualityRepository(db), new MappingTemplateRepository(db), new FileVersionRepository(db));
 
     public static IColumnOrderService ColumnOrders(AppDbContext db) => new ColumnOrderService(Uow(db));
 

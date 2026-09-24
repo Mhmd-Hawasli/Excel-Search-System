@@ -43,6 +43,32 @@ public record UpdateMappingRequest(IReadOnlyList<UpdateColumnMappingDto> Columns
 public record UpdateColumnMappingDto(Guid Id, string? StandardField, Guid? CategoryId);
 public record DeleteFileRequest(string ConfirmName);
 public record MoveFileRequest(Guid TargetGroupId);
+public record BumpVersionRequest(string? Note);
+
+/// <summary>One version-history entry: WHAT changed in this version and who did it.</summary>
+public record FileVersionDto(
+    Guid Id,
+    Guid FileId,
+    int Version,
+    string Note,
+    string Kind,
+    string? CreatedBy,
+    DateTime CreatedAt,
+    long EditCount);
+
+/// <summary>Full version state of a file: current number, pending (live) manual
+/// edits on it, and the history newest-first.</summary>
+public record FileVersionsResponse(
+    Guid FileId,
+    int CurrentVersion,
+    int PendingEditCount,
+    IReadOnlyList<FileVersionDto> Versions);
+
+public record BumpVersionResponse(
+    Guid FileId,
+    int PreviousVersion,
+    int NewVersion,
+    int ArchivedEdits);
 public record ReplaceColumnDto(string HeaderRaw, string HeaderNormalized, int ColumnIndex, string? StandardField, Guid? CategoryId);
 public record ReplaceLinkedSheetsDto(IReadOnlyList<string> SheetNames, int NationalIdColumnIndex);
 /// <summary>One cell the user chose to KEEP at its current (old) value instead

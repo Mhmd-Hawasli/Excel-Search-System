@@ -283,6 +283,7 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
                 .Where(p => !string.IsNullOrWhiteSpace(p)));
         if (string.IsNullOrWhiteSpace(displayName)) displayName = "سجل بلا اسم";
         var fileName = record.File.Name;
+        var fileVersion = record.File.Version;
 
         await uow.ExecuteInTransactionAsync(async () =>
         {
@@ -301,7 +302,7 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
             }
             await uow.SaveChangesAsync(ct);
             await activity.WriteAsync(ActivityAction.RecordDeleted, displayName,
-                new { recordId, fileId, fileName, rowIndex, by = user.Username }, ct);
+                new { recordId, fileId, fileName, fileVersion, rowIndex, by = user.Username }, ct);
         }, ct);
 
         return new RecordDeletedDto(fileId, rowIndex);

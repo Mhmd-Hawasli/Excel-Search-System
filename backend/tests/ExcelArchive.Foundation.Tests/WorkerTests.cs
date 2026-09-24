@@ -276,18 +276,20 @@ public sealed class WorkerTests : IDisposable
             Assert.Equal(1, await db.Files.CountAsync());
             var kept = await db.Files.FirstAsync();
             Assert.Equal(target.Id, kept.Id);
-            Assert.Equal(2, kept.Version);
+            // Pending manual edits take their own version (N+1); the bulk
+            // update lands on N+2.
+            Assert.Equal(3, kept.Version);
             Assert.Equal("جديد", (await db.Records.FirstAsync()).Data.RootElement.GetProperty("الاسم").GetString());
             Assert.DoesNotContain(oldRecordId, await db.Records.Select(r => r.Id).ToListAsync());
             var allEdits = await db.RecordEdits.ToListAsync();
             Assert.Equal(2, allEdits.Count);
             var archived = Assert.Single(allEdits, e => e.RecordId == null);
-            Assert.Equal(1, archived.FileVersion);
+            Assert.Equal(2, archived.FileVersion);
             Assert.Equal(target.Id, archived.FileId);
             Assert.Equal("قديم معدل", archived.NewValue);
-            // Bulk audit: the cell change قديم → جديد is logged as version N+1.
+            // Bulk audit: the cell change قديم → جديد is logged as version N+2.
             var bulk = Assert.Single(allEdits, e => e.RecordId != null);
-            Assert.Equal(2, bulk.FileVersion);
+            Assert.Equal(3, bulk.FileVersion);
             Assert.Equal(target.Id, bulk.FileId);
             Assert.Equal("الاسم", bulk.HeaderRaw);
             Assert.Equal("قديم", bulk.OldValue);
@@ -335,9 +337,11 @@ public sealed class WorkerTests : IDisposable
 
             var kept = Assert.Single(await db.Files.ToListAsync());
             Assert.Equal("target", kept.Name);
-            Assert.Equal(2, kept.Version);
+            // Pending manual edit takes N+1; the alternate-structure update
+            // lands on N+2 (no common columns, so no bulk audit rows).
+            Assert.Equal(3, kept.Version);
             var archived = Assert.Single(await db.RecordEdits.ToListAsync());
-            Assert.Equal(1, archived.FileVersion);
+            Assert.Equal(2, archived.FileVersion);
             Assert.Null(archived.RecordId);
             Assert.Null(archived.FileColumnId);
             Assert.Equal(kept.Id, archived.FileId);

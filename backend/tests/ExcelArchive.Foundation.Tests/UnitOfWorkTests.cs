@@ -32,6 +32,7 @@ public sealed class UnitOfWorkTests(ITestOutputHelper output)
         services.AddScoped<IRecordEditRepository, RecordEditRepository>();
         services.AddScoped<IDataQualityRepository, DataQualityRepository>();
         services.AddScoped<IMappingTemplateRepository, MappingTemplateRepository>();
+        services.AddScoped<IFileVersionRepository, FileVersionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         return services.BuildServiceProvider();
     }
@@ -53,6 +54,7 @@ public sealed class UnitOfWorkTests(ITestOutputHelper output)
         Assert.NotNull(uow.RecordEdits);
         Assert.NotNull(uow.DataQuality);
         Assert.NotNull(uow.MappingTemplates);
+        Assert.NotNull(uow.FileVersions);
     }
 
     [Fact]

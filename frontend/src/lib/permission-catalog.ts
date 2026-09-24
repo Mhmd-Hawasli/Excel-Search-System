@@ -105,6 +105,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    key: "versions",
+    label: "إصدارات الملفات",
+    permissions: [
+      { key: "versions.bump", label: "رفع إصدار الملف مع رسالة التغيرات" },
+    ],
+  },
+  {
     key: "groups",
     label: "المجموعات والملفات",
     permissions: [
@@ -112,6 +119,7 @@ export const PERMISSION_GROUPS = [
       { key: "groups.create", label: "إنشاء مجموعة جديدة" },
       { key: "groups.update", label: "التعديل على جميع المجموعات (الاسم، الوصف، الترتيب، الحذف)" },
       { key: "groups.defaultSearch", label: "التعديل على التضمين في البحث الافتراضي (الجماعي)" },
+      { key: "groups.viewPrivate", label: "إظهار المجموعات الخاصة للمستخدمين الآخرين (صيانة وأعطال)" },
       {
         key: "groups.viewScoped",
         label: "إظهار والبحث في المجموعات والملفات المحددة",

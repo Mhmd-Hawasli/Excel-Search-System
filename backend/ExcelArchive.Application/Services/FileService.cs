@@ -392,4 +392,161 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         await uow.SaveChangesAsync(ct);
         return job.Id;
     }
+
+    /// <summary>Manual version bump (N → N+1) with a required note describing
+    /// WHAT changed. Live manual edits of the current version are archived
+    /// (kept in history with their version stamp) so the new version starts
+    /// clean. The ONLY writer of files.version besides replace promotion.</summary>
+    public async Task<BumpVersionResponse> BumpVersionAsync(Guid fileId, string? note, string actorUsername, CancellationToken ct = default)
+    {
+        var trimmed = (note ?? "").Trim();
+        if (trimmed.Length < 2 || trimmed.Length > 2000)
+            throw new InvalidDataException("اكتب رسالة الإصدار: ما التغيرات التي حصلت؟ (حرفان على الأقل).");
+        var file = await uow.Files.FindAsync(fileId, ct)
+            ?? throw new KeyNotFoundException("الملف غير موجود.");
+        var previous = file.Version;
+        var archived = 0;
+        await uow.ExecuteInTransactionAsync(async () =>
+        {
+            // Archive live MANUAL edits of the current version: they stay
+            // visible in history stamped with it, while the new version
+            // starts clean. Bulk-audit rows of the current version belong to
+            // it and are archived along (they are history, not pending).
+            var live = await uow.RecordEdits.ListAsync(e => e.FileId == fileId && e.RecordId != null, ct);
+            foreach (var edit in live)
+            {
+                edit.FileVersion = previous;
+                edit.RecordId = null;
+                edit.FileColumnId = null;
+            }
+            archived = live.Count(e => !e.IsBulk);
+            await uow.SaveChangesAsync(ct);
+            file.Version = previous + 1;
+            file.UpdatedAt = DateTime.UtcNow;
+            await uow.SaveChangesAsync(ct);
+            uow.FileVersions.Add(new FileVersion
+            {
+                FileId = fileId,
+                Version = file.Version,
+                Note = trimmed,
+                Kind = "manual",
+                CreatedBy = actorUsername,
+            });
+            await uow.SaveChangesAsync(ct);
+        }, ct);
+        await activity.WriteAsync(ActivityAction.FileVersionBumped, file.Name,
+            new { fileId, previousVersion = previous, newVersion = file.Version, archivedEdits = archived, note = trimmed, by = actorUsername }, ct);
+        return new BumpVersionResponse(fileId, previous, file.Version, archived);
+    }
+
+    /// <summary>Reconstructs the file as it was at the end of the given
+    /// version by rewinding the current values through the edit log: every
+    /// cell's earliest edit NEWER than the target version yields its OldValue.
+    /// Rows are resolved by live record id first, then by stable national id.
+    /// Limitation: rows added/removed by later updates cannot be resurrected
+    /// from cell edits, so those appear as of the current row set.</summary>
+    public async Task<FileExportDataDto?> GetVersionExportDataAsync(Guid fileId, int version, CancellationToken ct = default)
+    {
+        var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
+        if (file is null) return null;
+        if (version < 1 || version > file.Version)
+            throw new InvalidDataException($"رقم الإصدار غير صالح. الإصدارات المتاحة من 1 إلى {file.Version}.");
+        if (version == file.Version)
+            return await GetExportDataAsync(fileId, ct);
+        const int MaxExportRows = 100_000;
+        if (file.RowCount > MaxExportRows)
+            throw new InvalidOperationException(
+                $"حجم الملف ({file.RowCount} صف) يتجاوز حد التصدير المباشر ({MaxExportRows}). قسّم الملف ثم صدّر على دفعات.");
+        var headers = file.Columns.Select(c => c.HeaderRaw).ToList();
+        var headerSet = new HashSet<string>(headers, StringComparer.Ordinal);
+        var records = await uow.Records.ListExportRowsAsync(fileId, ct);
+        var edits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
+        var byId = records.ToDictionary(r => r.Id);
+        var byNational = new Dictionary<string, Domain.Entities.Record>(StringComparer.Ordinal);
+        foreach (var r in records)
+            if (r.DNationalId is not null)
+                byNational.TryAdd(r.DNationalId, r);
+        var data = records.ToDictionary(r => r.Id, r => CellMap(r.Data));
+        var rewound = new HashSet<(Guid, string)>();
+        foreach (var e in edits
+                     .Where(e => e.FileVersion > version)
+                     .OrderBy(e => e.FileVersion)
+                     .ThenBy(e => e.CreatedAt))
+        {
+            Domain.Entities.Record? target = null;
+            if (e.RecordId.HasValue)
+                byId.TryGetValue(e.RecordId.Value, out target);
+            if (target is null && !string.IsNullOrWhiteSpace(e.NationalId))
+                byNational.TryGetValue(e.NationalId, out target);
+            if (target is null || !headerSet.Contains(e.HeaderRaw)) continue;
+            if (!rewound.Add((target.Id, e.HeaderRaw))) continue;
+            data[target.Id][e.HeaderRaw] = e.OldValue ?? "";
+        }
+        var nationalHeader = file.Columns
+            .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
+        return new FileExportDataDto(
+            file.SheetName,
+            file.Name,
+            headers,
+            records.Select(r => new ExportRecordDto(
+                r.Id, r.RowIndex,
+                data[r.Id],
+                ToHeaderMap(r.FmtFills), ToHeaderMap(r.FmtFontColors),
+                r.SfFullName, r.DNationalId ?? r.SfNationalId?.ToString())).ToList(),
+            edits
+                .Where(e => e.FileVersion <= version)
+                .Select(e => new ExportEditDto(
+                    e.RecordId?.ToString(), e.HeaderRaw, e.OldValue, e.NewValue,
+                    e.EditedBy, e.CreatedAt)).ToList(),
+            nationalHeader);
+    }
+
+    private static Dictionary<string, string> CellMap(JsonDocument? doc)
+    {
+        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var prop in doc.RootElement.EnumerateObject())
+            map[prop.Name] = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? ""
+                : prop.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : prop.Value.GetRawText();
+        return map;
+    }
+
+    /// <summary>Version history newest-first plus the live (pending) manual
+    /// edit count on the current version. Missing rows (files predating the
+    /// history table) are backfilled as seed entries.</summary>
+    public async Task<FileVersionsResponse?> GetVersionsAsync(Guid fileId, CancellationToken ct = default)
+    {
+        var file = await uow.Files.FindAsync(fileId, ct);
+        if (file is null) return null;
+        var existing = await uow.FileVersions.ListByFileAsync(fileId, ct);
+        var have = new HashSet<int>(existing.Select(v => v.Version));
+        var missing = new List<FileVersion>();
+        for (var v = 1; v <= file.Version; v++)
+        {
+            if (have.Contains(v)) continue;
+            missing.Add(new FileVersion
+            {
+                FileId = fileId,
+                Version = v,
+                Note = v == 1 ? "الإصدار الأول عند رفع الملف." : "إصدار سابق محفوظ قبل تفعيل سجل الإصدارات.",
+                Kind = "seed",
+            });
+        }
+        if (missing.Count > 0)
+        {
+            uow.FileVersions.AddRange(missing);
+            await uow.SaveChangesAsync(ct);
+            existing = await uow.FileVersions.ListByFileAsync(fileId, ct);
+        }
+        var edits = await uow.RecordEdits.ListAsync(e => e.FileId == fileId, ct);
+        var counts = edits.GroupBy(e => e.FileVersion).ToDictionary(g => g.Key, g => (long)g.Count());
+        var pending = edits.Count(e => e.RecordId != null && !e.IsBulk);
+        var versions = existing
+            .OrderByDescending(v => v.Version)
+            .Select(v => new FileVersionDto(v.Id, v.FileId, v.Version, v.Note, v.Kind,
+                v.CreatedBy, v.CreatedAt, counts.TryGetValue(v.Version, out var c) ? c : 0))
+            .ToList();
+        return new FileVersionsResponse(fileId, file.Version, pending, versions);
+    }
 }

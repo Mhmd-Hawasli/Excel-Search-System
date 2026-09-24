@@ -33,10 +33,27 @@ public sealed class ScopeTests
     private static CurrentUserDto User(params PermissionDto[] perms) => TestHelpers.User(perms);
 
     [Fact]
-    public async Task GlobalView_SeesEverything()
+    public async Task GlobalView_WithoutMaintenanceGrant_GetsExplicitAllowList()
     {
+        // Privacy-aware contract: a global viewer WITHOUT groups.viewPrivate
+        // gets an explicit allow-list (all shared groups + own private ones)
+        // instead of the legacy unrestricted null/null, so foreign private
+        // data drops out of every scope-checked surface automatically.
         using var db = Seeded();
         var scope = await TestHelpers.Auth(db).ResolveDataScope(User(TestHelpers.Perm(Permissions.GroupsView)));
+        Assert.NotNull(scope.GroupIds);
+        Assert.NotNull(scope.FileIds);
+        Assert.True(new HashSet<Guid> { G1, G2 }.SetEquals(scope.GroupIds!));
+        Assert.True(new HashSet<Guid> { F1, F2, F3 }.SetEquals(scope.FileIds!));
+    }
+
+    [Fact]
+    public async Task GlobalView_WithMaintenanceGrant_StaysUnrestricted()
+    {
+        using var db = Seeded();
+        var scope = await TestHelpers.Auth(db).ResolveDataScope(User(
+            TestHelpers.Perm(Permissions.GroupsView),
+            TestHelpers.Perm(Permissions.GroupsViewPrivate)));
         Assert.Null(scope.GroupIds);
         Assert.Null(scope.FileIds);
     }

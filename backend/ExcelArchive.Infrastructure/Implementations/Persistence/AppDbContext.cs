@@ -24,6 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ConflictQueryCache> ConflictQueryCaches => Set<ConflictQueryCache>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+    public DbSet<FileVersion> FileVersions => Set<FileVersion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -201,6 +202,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.CheckedDate).HasColumnType("date");
             e.Property(x => x.RebuiltAt).HasColumnType("timestamptz(3)");
             e.HasIndex(x => x.RebuiltAt);
+        });
+
+        modelBuilder.Entity<FileVersion>(e =>
+        {
+            e.HasOne(x => x.File)
+                .WithMany(f => f.Versions)
+                .HasForeignKey(x => x.FileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.FileId, x.Version }).IsUnique();
+            e.HasIndex(x => x.FileId);
+            e.Property(x => x.Note).IsRequired();
         });
 
         modelBuilder.Entity<User>(e =>

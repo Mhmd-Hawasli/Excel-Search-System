@@ -54,4 +54,9 @@ public record ReplacePreviewResponse(
     string? MatchMode,
     string? NationalIdHeader,
     int CurrentVersion,
-    IReadOnlyList<ReplacePreviewNewColumn>? NewColumns = null);
+    IReadOnlyList<ReplacePreviewNewColumn>? NewColumns = null,
+    // Version rule visibility: live (pending) manual edits on the current
+    // version take their own separate version at update time, so the update
+    // lands on N+2 instead of N+1.
+    int PendingEditCount = 0,
+    int NextVersion = 0);

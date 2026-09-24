@@ -117,4 +117,37 @@ export const filesService = {
     if (!envelope.data) throw new Error("تعذر معاينة الفروقات.");
     return envelope.data;
   },
+
+  async bumpVersion(fileId: string, note: string): Promise<{ fileId: string; previousVersion: number; newVersion: number; archivedEdits: number }> {
+    const envelope = await apiPost<ApiEnvelope<{ fileId: string; previousVersion: number; newVersion: number; archivedEdits: number }>>(
+      `/api/files/${fileId}/bump-version`,
+      { note },
+    );
+    if (!envelope.data) throw new Error("تعذر رفع الإصدار.");
+    return envelope.data;
+  },
+
+  async listVersions(fileId: string): Promise<FileVersions> {
+    const envelope = await apiGet<ApiEnvelope<FileVersions>>(`/api/files/${fileId}/versions`);
+    if (!envelope.data) throw new Error("تعذر تحميل سجل الإصدارات.");
+    return envelope.data;
+  },
 };
+
+export interface FileVersionEntry {
+  id: string;
+  fileId: string;
+  version: number;
+  note: string;
+  kind: string;
+  createdBy: string | null;
+  createdAt: string;
+  editCount: number;
+}
+
+export interface FileVersions {
+  fileId: string;
+  currentVersion: number;
+  pendingEditCount: number;
+  versions: FileVersionEntry[];
+}
