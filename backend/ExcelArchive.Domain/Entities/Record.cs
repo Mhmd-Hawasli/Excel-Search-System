@@ -7,6 +7,7 @@ public class Record
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid FileId { get; set; }
     public int RowIndex { get; set; }
+    public long? Pk { get; set; }
     public JsonDocument Data { get; set; } = null!;
 
     // Standard field shadow values (search-friendly normalized columns).

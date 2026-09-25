@@ -7,7 +7,7 @@ public sealed record ExportRecordDto(
 
 public sealed record ExportEditDto(
     string? RecordId, string HeaderRaw, string OldValue, string NewValue,
-    string? EditedBy, DateTime CreatedAt);
+    string? EditedBy, DateTime CreatedAt, long? Pk = null);
 
 public sealed record FileExportDataDto(
     string SheetName,

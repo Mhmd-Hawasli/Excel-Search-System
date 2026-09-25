@@ -11,7 +11,7 @@ public sealed class FileExportBuilderAdapter : IFileExportBuilder
             sheetName,
             headers,
             records.Select(r => new ExportRecord(r.Id, r.RowIndex, r.Data, r.Fills, r.Fonts, r.DisplayName, r.NationalId)).ToList(),
-            edits.Select(e => new ExportEdit(e.RecordId, e.HeaderRaw, e.OldValue, e.NewValue, e.EditedBy, e.CreatedAt)).ToList(),
+            edits.Select(e => new ExportEdit(e.RecordId, e.HeaderRaw, e.OldValue, e.NewValue, e.EditedBy, e.CreatedAt, e.Pk)).ToList(),
             markEdits,
             nationalIdHeader);
 }

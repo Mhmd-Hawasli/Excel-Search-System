@@ -19,9 +19,10 @@ public record ManualRecordTemplateDto(
     string FileName,
     Guid GroupId,
     string GroupName,
-    IReadOnlyList<ManualRecordTemplateColumnDto> Columns);
+    IReadOnlyList<ManualRecordTemplateColumnDto> Columns,
+    long NextPk = 1);
 
-public record ManualRecordCreatedDto(Guid Id, Guid FileId, int RowIndex);
+public record ManualRecordCreatedDto(Guid Id, Guid FileId, int RowIndex, long? Pk = null);
 
 public record RecordDeletedDto(Guid FileId, int RowIndex);
 

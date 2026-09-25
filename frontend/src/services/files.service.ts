@@ -64,10 +64,15 @@ export const filesService = {
   async updateMapping(
     fileId: string,
     columns: Array<{ id: string; standardField: string | null; categoryId: string | null }>,
+    pk?: { pkColumnId: string | null; confirmPkChange: boolean },
   ): Promise<number> {
     const envelope = await apiPost<ApiEnvelope<{ ok: boolean; updatedRecords: number }>>(
       `/api/files/${fileId}/mapping`,
-      { columns },
+      {
+        columns,
+        pkColumnId: pk?.pkColumnId ?? null,
+        confirmPkChange: pk?.confirmPkChange ?? false,
+      },
     );
     if (envelope.data?.updatedRecords === undefined) throw new Error("تعذر حفظ التعديلات.");
     return envelope.data.updatedRecords;
@@ -143,6 +148,7 @@ export interface FileVersionEntry {
   createdBy: string | null;
   createdAt: string;
   editCount: number;
+  canExport: boolean;
 }
 
 export interface FileVersions {

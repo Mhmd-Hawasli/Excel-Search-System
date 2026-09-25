@@ -65,13 +65,21 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
             await RelatedByNationalIdAsync(record, fileIds, ct),
             await RelatedByPersonAsync(record, fileIds, ct),
             await ConflictByNationalIdAsync(record, fileIds, ct),
-            await ConflictByMotherAsync(record, fileIds, ct));
+            await ConflictByMotherAsync(record, fileIds, ct),
+            record.Pk ?? record.RowIndex);
     }
 
     private async Task<(Dictionary<string, EditedHeaderDto> Headers, int Count)> RecordEditsAsync(
         Guid recordId, CancellationToken ct)
     {
-        var edits = await uow.RecordEdits.ListByRecordAsync(recordId, ct);
+        var record = await uow.Records.FindAsync(recordId, ct);
+        var edits = (await uow.RecordEdits.ListByRecordAsync(recordId, ct)).ToList();
+        if (record?.Pk is long pk)
+        {
+            var archived = await uow.RecordEdits.ListAsync(e =>
+                e.FileId == record.FileId && e.RecordId == null && e.Pk == pk, ct);
+            edits.AddRange(archived);
+        }
         var headers = new Dictionary<string, EditedHeaderDto>(StringComparer.Ordinal);
         // Oldest-first pass: first oldValue is the true Excel original, last write wins.
         foreach (var edit in edits.OrderBy(e => e.CreatedAt))
@@ -148,7 +156,7 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
                 c.StandardField.HasValue ? StandardFieldKeys.Key(c.StandardField.Value) : null,
                 c.CategoryId, c.Category?.Name, c.Category?.SortOrder, c.ColumnIndex))
             .ToList();
-        return new ManualRecordTemplateDto(file.Id, file.Name, file.GroupId, file.Group.Name, columns);
+        return new ManualRecordTemplateDto(file.Id, file.Name, file.GroupId, file.Group.Name, columns, file.NextPk);
     }
 
     public async Task<SuggestionListDto?> GetSuggestionsAsync(Guid fileId, string? standardField, Guid? columnId, int take, CurrentUserDto user, CancellationToken ct = default)
@@ -202,6 +210,9 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
 
         var (data, byField) = ParseManualValues(columns, request?.Values);
         await EnsureUniqueInFileAsync(fileId, columns, data, byField, ct);
+        var pkColumn = columns.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        if (pkColumn is not null)
+            await ValidatePkAsync(file, data, pkColumn.HeaderRaw, ct);
     }
 
     public async Task<ManualRecordCreatedDto> CreateManualAsync(Guid fileId, CreateManualRecordRequest request, CurrentUserDto user, CancellationToken ct = default)
@@ -227,11 +238,19 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
         await EnsureUniqueInFileAsync(fileId, columns, data, byField, ct);
 
         var rowIndex = await uow.Records.GetMaxRowIndexAsync(fileId, ct) + 1;
+        long? pk = null;
+        var pkColumn = columns.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        if (pkColumn is not null)
+        {
+            pk = await ValidatePkAsync(file, data, pkColumn.HeaderRaw, ct);
+            data[pkColumn.HeaderRaw] = pk.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         var record = new Record
         {
             FileId = fileId,
             RowIndex = rowIndex,
+            Pk = pk,
             Data = System.Text.Json.JsonSerializer.SerializeToDocument(data),
         };
         RecordShadowMapper.Apply(record, byField);
@@ -246,6 +265,7 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
             if (trackedFile is not null)
             {
                 trackedFile.RowCount += 1;
+                if (pk.HasValue) trackedFile.NextPk = pk.Value + 1;
                 trackedFile.UpdatedAt = DateTime.UtcNow;
             }
             await uow.SaveChangesAsync(ct);
@@ -266,7 +286,21 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
             created = record;
         }, ct);
 
-        return new ManualRecordCreatedDto(created!.Id, fileId, rowIndex);
+        return new ManualRecordCreatedDto(created!.Id, fileId, rowIndex, pk);
+    }
+
+    private async Task<long> ValidatePkAsync(Domain.Entities.File file,
+        IReadOnlyDictionary<string, string> data, string pkHeader, CancellationToken ct)
+    {
+        if (!data.TryGetValue(pkHeader, out var rawPk)
+            || !long.TryParse(rawPk, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var pk)
+            || pk < file.NextPk)
+            throw new InvalidDataException($"أدخل مفتاح pk جديدًا لا يقل عن {file.NextPk}.");
+        var existing = await uow.Records.ListExportRowsAsync(file.Id, ct);
+        if (existing.Any(r => (r.Pk ?? r.RowIndex) == pk))
+            throw new InvalidDataException("مفتاح pk مستخدم بالفعل في هذا الملف.");
+        return pk;
     }
 
     public async Task<RecordDeletedDto?> DeleteAsync(Guid recordId, CurrentUserDto user, CancellationToken ct = default)

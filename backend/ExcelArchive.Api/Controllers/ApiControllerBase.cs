@@ -41,8 +41,10 @@ public abstract class ApiControllerBase(IAuthService auth) : ControllerBase
     {
         // Never swallow server errors silently: production diagnostics depend
         // on this log line (e.g. the /merge/export 500 with real user data).
-        HttpContext.RequestServices
-            .GetRequiredService<ILogger<ApiControllerBase>>()
+        // Direct controller tests have no request service provider. A real
+        // HTTP request still logs the exception through its DI scope.
+        HttpContext.RequestServices?
+            .GetService<ILogger<ApiControllerBase>>()?
             .LogError(ex, "Request {Method} {Path} failed with {ErrorType}: {ErrorMessage}",
                 Request.Method, Request.Path, ex.GetType().FullName, ex.Message);
         return ex switch

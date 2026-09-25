@@ -110,6 +110,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(x => x.FileId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.FileId, x.RowIndex }).IsUnique();
+            e.HasIndex(x => new { x.FileId, x.Pk }).IsUnique();
             e.HasIndex(x => x.FileId);
             e.HasIndex(x => x.NationalIdNum);
             // No EF index on SfFunctionalCategory: Data/SearchIndexes.sql provides
@@ -162,6 +163,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.RecordId);
             e.HasIndex(x => x.FileId);
             e.HasIndex(x => new { x.FileId, x.CreatedAt });
+            e.HasIndex(x => new { x.FileId, x.Pk });
         });
 
         modelBuilder.Entity<MappingTemplate>(e =>

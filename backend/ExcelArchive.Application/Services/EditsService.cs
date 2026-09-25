@@ -45,11 +45,11 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         string? newValue = null, int? version = null, string? fromDate = null,
         string? toDate = null, string? user = null, string? sortBy = null,
         string? sortDir = "desc", IReadOnlyList<string>? columns = null,
-        IReadOnlyList<string>? users = null, CancellationToken ct = default)
+        IReadOnlyList<string>? users = null, string? source = null, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var (rows, total) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users, ct);
+        var (rows, total, manual, upload, formatting) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users, source, ct);
         // Person full name for the history table (V1 UI-12): one lookup for
         // the page, mapped in memory so deleted records stay visible.
         // Archived (previous-version) edits carry a null record id and keep
@@ -67,6 +67,14 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             .Distinct()
             .ToList();
         var byNational = new Dictionary<(Guid FileId, string National), Record>(rows.Count);
+        var byPk = new Dictionary<(Guid FileId, long Pk), Record>(rows.Count);
+        foreach (var fid in rows.Select(e => e.FileId).Distinct())
+        {
+            var keys = rows.Where(e => e.FileId == fid && e.Pk.HasValue).Select(e => e.Pk!.Value).Distinct().ToList();
+            if (keys.Count == 0) continue;
+            var matches = await uow.Records.ListAsync(r => r.FileId == fid && r.Pk.HasValue && keys.Contains(r.Pk.Value), ct);
+            foreach (var match in matches) byPk[(fid, match.Pk!.Value)] = match;
+        }
         if (nationalIds.Count > 0)
         {
             foreach (var fid in rows.Select(e => e.FileId).Distinct().ToList())
@@ -84,8 +92,13 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             Record? target = null;
             if (e.RecordId.HasValue)
                 liveById.TryGetValue(e.RecordId.Value, out target);
-            if (target is null && !string.IsNullOrWhiteSpace(e.NationalId))
+            if (target is null && e.Pk.HasValue)
+                byPk.TryGetValue((e.FileId, e.Pk.Value), out target);
+            if (target is null && !e.Pk.HasValue && !string.IsNullOrWhiteSpace(e.NationalId))
                 byNational.TryGetValue((e.FileId, e.NationalId), out target);
+            if (target is not null)
+                person = new EditPerson(target.Id, target.SfFullName, target.SfFirstName,
+                    target.SfFatherName, target.SfLastName, target.RowIndex);
             string? currentValue = null;
             if (target is not null)
             {
@@ -95,8 +108,9 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             return new EditDto(e.Id, e.RecordId, e.FileId, e.FileColumnId,
                 e.HeaderRaw, e.OldValue, e.NewValue, e.CreatedAt,
                 person?.DisplayName(), person?.RowIndex, e.EditedBy, e.FileVersion,
-                e.NationalId, currentValue, target?.Id);
-        }).ToList(), total, page, pageSize);
+                e.NationalId, currentValue, target?.Id,
+                !e.IsBulk ? "manual" : e.IsFormatting ? "formatting" : "upload");
+        }).ToList(), total, page, pageSize, new EditSourceCounts(manual, upload, formatting));
     }
 
     public async Task<EditOptionsDto> OptionsAsync(Guid fileId, DataScopeDto scope, CancellationToken ct = default)
@@ -134,7 +148,14 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         // otherwise show zero history. Resolve archived edits back by stable
         // national id within the same file (mirrors ListAsync above).
         var record = await uow.Records.FindAsync(recordId, ct);
-        if (record is not null && !string.IsNullOrWhiteSpace(record.DNationalId))
+        if (record is not null && record.Pk.HasValue)
+        {
+            var archived = await uow.RecordEdits.ListAsync(
+                e => e.FileId == record.FileId && e.RecordId == null && e.Pk == record.Pk, ct);
+            var known = new HashSet<Guid>(edits.Select(e => e.Id));
+            edits.AddRange(archived.Where(e => known.Add(e.Id)));
+        }
+        if (record is not null && record.Pk is null && !string.IsNullOrWhiteSpace(record.DNationalId))
         {
             var archived = await uow.RecordEdits.ListAsync(
                 e => e.FileId == record.FileId && e.RecordId == null && e.NationalId == record.DNationalId, ct);
@@ -177,6 +198,8 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
             ? columns.FirstOrDefault(c => c.Id == fileColumnId.Value)
             : columns.FirstOrDefault(c => c.HeaderRaw == (headerRaw ?? "").Trim());
         if (target is null) throw new KeyNotFoundException("العمود غير موجود في هذا الملف.");
+        if (string.Equals(target.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("لا يمكن تعديل مفتاح الربط الرئيسي pk.");
 
         var data = RowData(record.Data);
         var oldValue = data.TryGetValue(target.HeaderRaw, out var cur) ? cur ?? "" : "";
@@ -198,6 +221,9 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         if (nationalCol is not null)
         {
             nextData.TryGetValue(nationalCol.HeaderRaw, out var nationalRaw);
+            if (string.IsNullOrWhiteSpace(nationalRaw)
+                && target.Id == nationalCol.Id)
+                data.TryGetValue(nationalCol.HeaderRaw, out nationalRaw);
             var norm = ArabicNormalizer.NormalizeNationalId(nationalRaw ?? "");
             editNationalId = string.IsNullOrEmpty(norm) ? null : norm;
         }
@@ -224,6 +250,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
                 NewValue = newValue,
                 EditedBy = actorUsername,
                 NationalId = editNationalId,
+                Pk = record.Pk,
             });
 
             // Recompute sf_*/n_*/d_*/nationalIdNum via the shared mapper (V1 buildRecordFieldUpdates).

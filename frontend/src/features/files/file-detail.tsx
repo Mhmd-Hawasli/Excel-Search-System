@@ -188,26 +188,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
           </div>
         </div>
       ) : null}
-      <div className="grid gap-3 rounded-xl border bg-amber-500/5 p-4 text-sm leading-relaxed">
-        <p className="font-bold flex items-center gap-2">
-          <PencilLine className="size-4 text-amber-600" />
-          الفرق بين التحديث والتعديل
-        </p>
-        <ul className="list-disc ps-5 text-muted-foreground space-y-1">
-          <li>
-            <span className="font-semibold text-foreground">تحديث الملف:</span> رفع مصنف Excel جديد ليحل محل البيانات الحالية (للبيانات الجديدة أو تغيير بنية الأعمدة في المصدر).
-          </li>
-          <li>
-            <span className="font-semibold text-foreground">تعديل الأعمدة والفئات:</span> تعديل شامل دون إعادة رفع — اختيار الأعمدة المرجعية (حقول البحث) وتوزيع الفئات كما في معالج الرفع، ثم إعادة حساب كل السجلات المحفوظة فورًا.
-          </li>
-          <li>
-            <span className="font-semibold text-foreground">رفع إصدار الملف:</span> تثبيت نسخة جديدة (N إلى N+1) مع رسالة تصف التغيرات، دون تغيير البيانات. التعديلات اليدوية المعلقة تُؤرشف ضمن الإصدار الحالي.
-            أما تحديث الملف فوق تعديلات يدوية معلقة فيرفع الإصدار N إلى N+2: التعديلات في إصدار منفصل (N+1) والتحديث في (N+2).
-          </li>
-        </ul>
-      </div>
-
-      <VersionHistoryCard fileId={file.id} canExport={canExport} />
+      <VersionHistoryCard fileId={file.id} canExport={canExport} canViewHistory={canViewHistory} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Card>

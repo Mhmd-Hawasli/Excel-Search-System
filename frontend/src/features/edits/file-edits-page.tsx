@@ -15,7 +15,7 @@ import { EditHistorySection } from "./edit-history-section";
  * صفحة سجل تعديلات داخلية خاصة بملف واحد (/edits/[fileId]).
  * تُفتح من زر "عرض السجل" في ملخص الملفات أو "عرض سجل التعديلات" في تفاصيل الملف.
  */
-export function FileEditsPage({ fileId }: { fileId: string }) {
+export function FileEditsPage({ fileId, initialVersion }: { fileId: string; initialVersion?: number }) {
   const { data: user } = useApiQuery(() => authService.me(), []);
   const [file, setFile] = useState<EditedFileSummary | null>(null);
   const [loadingFile, setLoadingFile] = useState(true);
@@ -87,7 +87,7 @@ export function FileEditsPage({ fileId }: { fileId: string }) {
         }
       />
 
-      <EditHistorySection fileId={fileId} currentVersion={file?.currentVersion} />
+      <EditHistorySection fileId={fileId} currentVersion={file?.currentVersion} initialVersion={initialVersion} />
     </div>
   );
 }

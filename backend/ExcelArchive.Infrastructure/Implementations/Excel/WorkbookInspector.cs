@@ -2,7 +2,6 @@ using ClosedXML.Excel;
 using ExcelArchive.Application.DTOs.UploadDto;
 using ExcelArchive.Application.Interfaces.Excel;
 using ExcelArchive.Infrastructure.Implementations.Storage;
-using FileIO = System.IO.File;
 
 namespace ExcelArchive.Infrastructure.Implementations.Excel;
 
@@ -28,9 +27,9 @@ public sealed class WorkbookInspector(WorkbookFileStore store) : IWorkbookInspec
             if (workbook.Worksheets.Count == 0) throw new InvalidDataException("لا يحتوي المصنف على أي أوراق قابلة للقراءة.");
             var token = await store.SaveAsync(fileName, bytes, ct);
             var sidecar = SheetInspector.ExtractSidecar(workbook);
-            // Persist the filter-normalized copy so the worker sees unhidden rows.
-            SheetInspector.RemoveFilters(workbook);
-            await FileIO.WriteAllBytesAsync(store.PathFor(token), ToBytes(workbook), ct);
+            // The import walks row numbers, including hidden/filtered rows.
+            // Keep the validated original bytes: re-serializing here can
+            // produce a workbook that ClosedXML cannot load a second time.
             await store.WriteSidecarAsync(token, sidecar, ct);
             var first = workbook.Worksheets.First();
             var table = sidecar.Tables.TryGetValue(first.Name, out var t) ? t : null;
@@ -172,12 +171,6 @@ public sealed class WorkbookInspector(WorkbookFileStore store) : IWorkbookInspec
     public string BuildColumnSignature(IEnumerable<string> headers)
         => HeaderEngine.ColumnSignature(headers);
 
-    private static byte[] ToBytes(XLWorkbook workbook)
-    {
-        using var ms = new MemoryStream();
-        workbook.SaveAs(ms);
-        return ms.ToArray();
-    }
 
     private static IReadOnlyDictionary<string, object?> ToSheetDictionary(Guid token, SheetInspection inspection) =>
         new Dictionary<string, object?>

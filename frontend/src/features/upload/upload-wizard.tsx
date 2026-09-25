@@ -61,6 +61,9 @@ export function UploadWizard({
   const [inspection, setInspection] = useState<WorkbookInspection | null>(null);
   const [sheet, setSheet] = useState<SheetInspection | null>(null);
   const [columns, setColumns] = useState<ColumnMapping[]>([]);
+  // columnIndex of the Excel column designated as the main pk key. Bound by the
+  // column's name (user choice / literal "pk" header), never by position.
+  const [pkColumnIndex, setPkColumnIndex] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
@@ -82,17 +85,21 @@ export function UploadWizard({
     setSheet(next);
     if (!next) {
       setColumns([]);
+      setPkColumnIndex(null);
       return;
     }
     setColumns(
       ensureUniqueStandardFields(
         next.columns.map((column) => ({
           ...column,
-          standardField: column.suggestedField,
+          standardField: column.headerRaw.toLowerCase() === "pk" ? null : column.suggestedField,
           categoryId: null,
         })),
         next.linkedSheets?.nationalIdColumnIndex,
       ),
+    );
+    setPkColumnIndex(
+      next.columns.find((column) => column.headerRaw.toLowerCase() === "pk")?.columnIndex ?? null,
     );
   }
 
@@ -135,6 +142,29 @@ export function UploadWizard({
     );
   }
 
+  function linkPkColumn(selectedColumnIndex: string) {
+    const columnIndex = selectedColumnIndex === "" ? null : Number(selectedColumnIndex);
+    setPkColumnIndex(columnIndex);
+    if (columnIndex === null) return;
+    // The key column is reserved: it carries no standard field or category.
+    setColumns((current) =>
+      current.map((column) =>
+        column.columnIndex === columnIndex
+          ? { ...column, standardField: null, categoryId: null }
+          : column,
+      ),
+    );
+  }
+
+  // "pk" is a reserved header for the key column only. A second literal pk
+  // column that the user did not designate would collide after the rename.
+  function hasPkNameConflict() {
+    return columns.some(
+      (column) =>
+        column.columnIndex !== pkColumnIndex && column.headerRaw.trim().toLowerCase() === "pk",
+    );
+  }
+
   function applyTemplate(templateId: string) {
     const selected = templates.find((template) => template.id === templateId);
     if (
@@ -162,17 +192,20 @@ export function UploadWizard({
       ensureUniqueStandardFields(
         current.map((column) => {
           const match = saved.find((item) => item.headerRaw === column.headerRaw);
-          return match
-            ? {
-                ...column,
-                standardField: STANDARD_FIELD_KEYS.includes(match.standardField as StandardFieldKey)
-                  ? match.standardField
-                  : null,
-                categoryId: categories.some((category) => category.id === match.categoryId)
-                  ? match.categoryId
-                  : null,
-              }
-            : column;
+          if (!match) return column;
+          // The designated key column stays reserved even when a template
+          // tries to give it a standard field or a category.
+          if (column.columnIndex === pkColumnIndex)
+            return { ...column, standardField: null, categoryId: null };
+          return {
+            ...column,
+            standardField: STANDARD_FIELD_KEYS.includes(match.standardField as StandardFieldKey)
+              ? match.standardField
+              : null,
+            categoryId: categories.some((category) => category.id === match.categoryId)
+              ? match.categoryId
+              : null,
+          };
         }),
         sheet?.linkedSheets?.nationalIdColumnIndex,
       ),
@@ -183,6 +216,7 @@ export function UploadWizard({
   function canContinue() {
     if (step === 0) return Boolean(groupId && inspection && sheet);
     if (step === 1) return name.trim().length >= 2 && name.trim().length <= 160;
+    if (step === 2) return pkColumnIndex !== null && !hasPkNameConflict();
     return true;
   }
 
@@ -212,6 +246,20 @@ export function UploadWizard({
 
   async function confirmImport() {
     if (!inspection || !sheet) return;
+    if (pkColumnIndex === null) {
+      toast.error("اختر عمود مفتاح الربط الرئيسي (pk) أولًا.");
+      return;
+    }
+    const conflictColumn = columns.find(
+      (column) =>
+        column.columnIndex !== pkColumnIndex && column.headerRaw.trim().toLowerCase() === "pk",
+    );
+    if (conflictColumn) {
+      toast.error(
+        `العمود «${conflictColumn.headerRaw}» يحمل اسم pk لكنه غير محدد كمفتاح رئيسي. حدده كمفتاح أو أعد تسميته في ملف Excel.`,
+      );
+      return;
+    }
     setBusy(true);
     try {
       const { jobId } = await uploadService.createJob({
@@ -224,14 +272,24 @@ export function UploadWizard({
         sheetIndex: sheet.sheetIndex,
         totalRows: sheet.rowCount,
         linkedSheets: sheet.linkedSheets ?? undefined,
-        columns: columns.map(
-          ({ headerRaw, headerNormalized, columnIndex, standardField, categoryId }) => ({
-            headerRaw,
-            headerNormalized,
-            columnIndex,
-            standardField,
-            categoryId,
-          }),
+        // The designated column becomes "pk" by name (keeping its Excel
+        // position); every other column keeps its own header.
+        columns: columns.map((column) =>
+          column.columnIndex === pkColumnIndex
+            ? {
+                headerRaw: "pk",
+                headerNormalized: "pk",
+                columnIndex: column.columnIndex,
+                standardField: null,
+                categoryId: null,
+              }
+            : {
+                headerRaw: column.headerRaw,
+                headerNormalized: column.headerNormalized,
+                columnIndex: column.columnIndex,
+                standardField: column.standardField,
+                categoryId: column.categoryId,
+              },
         ),
       });
       setJob({
@@ -496,6 +554,33 @@ export function UploadWizard({
                     </tr>
                   </thead>
                   <tbody>
+                    <tr className="border-t bg-muted/30">
+                      <th scope="row" className="p-3 text-right font-semibold">pk — مفتاح الربط الرئيسي</th>
+                      <td className="p-3">
+                        <FieldMappingSelect
+                          ariaLabel="عمود Excel المرتبط بمفتاح pk"
+                          value={pkColumnIndex !== null ? String(pkColumnIndex) : ""}
+                          disabled={Boolean(sheet?.linkedSheets)}
+                          onChange={linkPkColumn}
+                          searchLabel="بحث في الخيارات"
+                          unmappedLabel="اختر عمود المفتاح…"
+                          options={[
+                            { value: "", label: "غير مربوط" },
+                            ...columns.map((column) => ({
+                              value: String(column.columnIndex),
+                              label:
+                                column.headerRaw +
+                                (column.headerRaw.trim().toLowerCase() === "pk"
+                                  ? " (مقترح)"
+                                  : "") +
+                                (column.standardField !== null
+                                  ? ` — مرتبط بـ ${STANDARD_FIELD_LABELS[column.standardField]}`
+                                  : ""),
+                            })),
+                          ]}
+                        />
+                      </td>
+                    </tr>
                     {STANDARD_FIELD_KEYS.map((key) => {
                       const linkedColumn = columns.find((column) => column.standardField === key);
                       return (
@@ -511,7 +596,7 @@ export function UploadWizard({
                               onChange={(next) => linkStandardField(key, next)}
                               options={[
                                 { value: "", label: "غير مربوط" },
-                                ...columns.map((column) => ({
+                                ...columns.filter((column) => column.columnIndex !== pkColumnIndex).map((column) => ({
                                   value: String(column.columnIndex),
                                   label:
                                     column.headerRaw +
@@ -534,8 +619,21 @@ export function UploadWizard({
               </div>
               <p className="text-xs text-muted-foreground">
                 لا يمكن ربط عمود Excel بأكثر من حقل قياسي. الحقول التي لا يقابلها عمود في الملف يمكن
-                تركها «غير مربوط».
+                تركها «غير مربوط». مفتاح pk الرئيسي يُربط بأي عمود تختاره حسب اسمه لا حسب ترتيبه،
+                ويصبح هذا العمود هو pk داخل النظام.
               </p>
+              {sheet?.linkedSheets ? (
+                <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+                  في وضع الأوراق المترابطة، يجب أن تحوي الورقة الأساسية عمودًا اسمه pk وهو مفتاح
+                  الربط الرئيسي (في أي موقع)، لأن الرابط بين الأوراق هو الرقم الوطني.
+                </p>
+              ) : null}
+              {hasPkNameConflict() ? (
+                <p className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+                  يوجد عمود آخر يحمل اسم pk غير محدد كمفتاح رئيسي. حدده كمفتاح رئيسي أو أعد تسميته
+                  في ملف Excel قبل المتابعة.
+                </p>
+              ) : null}
               {!columns.some((column) => column.standardField === "full_name") &&
               ["first_name", "father_name", "last_name"].every((key) =>
                 columns.some((column) => column.standardField === key),
@@ -558,12 +656,16 @@ export function UploadWizard({
                   className="grid grid-cols-1 gap-3 border-t p-3 xl:grid-cols-[minmax(10rem,0.25fr)_1fr] xl:items-center"
                 >
                   <p className="text-sm font-semibold">{column.headerRaw}</p>
-                  <CategorySelector
-                    categories={categories}
-                    value={column.categoryId}
-                    onChange={(categoryId) => updateColumn(index, { categoryId })}
-                    label={`فئة العمود ${column.headerRaw}`}
-                  />
+                  {column.columnIndex === pkColumnIndex ? (
+                    <p className="text-sm text-muted-foreground">مفتاح الربط الرئيسي، يحدده ملف Excel ولا يتغير داخل النظام.</p>
+                  ) : (
+                    <CategorySelector
+                      categories={categories}
+                      value={column.categoryId}
+                      onChange={(categoryId) => updateColumn(index, { categoryId })}
+                      label={`فئة العمود ${column.headerRaw}`}
+                    />
+                  )}
                 </div>
               ))}
             </div>

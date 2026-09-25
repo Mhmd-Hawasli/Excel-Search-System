@@ -16,6 +16,14 @@ public static class DbSeeder
         // from AppDbContext on first boot (idempotent on later boots).
         await db.Database.EnsureCreatedAsync();
 
+        // Schema only: historical data stays untouched until its approved
+        // snapshot is available. Newly imported rows receive server-issued pk.
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE records ADD COLUMN IF NOT EXISTS pk bigint NULL");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS pk bigint NULL");
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE files ADD COLUMN IF NOT EXISTS next_pk bigint NOT NULL DEFAULT 1");
+        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS ix_records_file_id_pk ON records (file_id, pk)");
+        await db.Database.ExecuteSqlRawAsync("CREATE INDEX IF NOT EXISTS ix_record_edits_file_id_pk ON record_edits (file_id, pk)");
+
         // V2 addition: record_edits.edited_by (who made each edit). EnsureCreated
         // cannot alter an existing database, so the column is added idempotently.
         await db.Database.ExecuteSqlRawAsync(
@@ -72,6 +80,8 @@ public static class DbSeeder
         // pending manual work (pending counts, preview flags, N+1/N+2 rule).
         await db.Database.ExecuteSqlRawAsync(
             "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS is_bulk boolean NOT NULL DEFAULT false");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE record_edits ADD COLUMN IF NOT EXISTS is_formatting boolean NOT NULL DEFAULT false");
 
         // Version history: every N → N+1 bump (manual bump button or file
         // update) stores WHAT changed here, so version numbers carry a note.
@@ -79,6 +89,8 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS pgcrypto");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE TABLE IF NOT EXISTS file_versions (id uuid NOT NULL PRIMARY KEY, file_id uuid NOT NULL REFERENCES files (id) ON DELETE CASCADE, version integer NOT NULL, note text NOT NULL, kind text NOT NULL DEFAULT 'manual', created_by text NULL, created_at timestamptz(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE file_versions ADD COLUMN IF NOT EXISTS snapshot_gzip bytea NULL");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_file_versions_file_id_version ON file_versions (file_id, version)");
         await db.Database.ExecuteSqlRawAsync(

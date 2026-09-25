@@ -29,9 +29,11 @@ type SortableColumn = "person" | "column" | "oldvalue" | "newvalue" | "version" 
 export function EditHistorySection({
   fileId,
   currentVersion,
+  initialVersion,
 }: {
   fileId: string;
   currentVersion?: number;
+  initialVersion?: number;
 }) {
   const [history, setHistory] = useState<EditHistoryPage | null>(null);
   const [options, setOptions] = useState<EditOptions | null>(null);
@@ -76,7 +78,6 @@ export function EditHistorySection({
   // خيارات الفلاتر الذكية (الأعمدة والمستخدمون المتاحون + الإصدار الحالي).
   useEffect(() => {
     let active = true;
-    setOptions(null);
     (async () => {
       try {
         const result = await editsService.options(fileId);
@@ -88,17 +89,29 @@ export function EditHistorySection({
     return () => { active = false; };
   }, [fileId]);
 
-  // فلتر الإصدار يبدأ من الإصدار الحالي للملف.
+  // فلتر الإصدار يبدأ من الإصدار الحالي للملف، أو من ?version= عند
+  // القدوم من زر "عرض سجل التعديلات" في سجل الإصدارات.
+  const versionInitKey = `${fileId}:${initialVersion ?? ""}`;
   useEffect(() => {
-    const fallback = options?.currentVersion ?? currentVersion;
-    if (fallback === undefined || versionInitFor.current === fileId) return;
-    versionInitFor.current = fileId;
-    setFilters((prev) => (prev.version === undefined ? { ...prev, version: fallback } : prev));
+    const fallback = initialVersion ?? options?.currentVersion ?? currentVersion;
+    if (fallback === undefined || versionInitFor.current === versionInitKey) return;
+    versionInitFor.current = versionInitKey;
+    setFilters((prev) =>
+      initialVersion !== undefined
+        ? { ...prev, version: initialVersion }
+        : prev.version === undefined
+          ? { ...prev, version: fallback }
+          : prev,
+    );
     setPage(1);
-  }, [fileId, options, currentVersion]);
+  }, [fileId, options, currentVersion, initialVersion, versionInitKey]);
 
   useEffect(() => {
-    loadHistory(fileId, page, pageSize, filters);
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) void loadHistory(fileId, page, pageSize, filters);
+    });
+    return () => { active = false; };
   }, [fileId, page, pageSize, filters, loadHistory]);
 
   function handleSort(col: SortableColumn) {
@@ -146,7 +159,7 @@ export function EditHistorySection({
     }
   }
 
-  function SortIcon({ col }: { col: SortableColumn }) {
+  function sortIcon(col: SortableColumn) {
     if (filters.sortBy !== col) return <ArrowUpDown className="size-3 opacity-40" />;
     return filters.sortDir === "asc" ? <ArrowUp className="size-3 text-primary" /> : <ArrowDown className="size-3 text-primary" />;
   }
@@ -161,6 +174,7 @@ export function EditHistorySection({
     filters.fromDate ||
     filters.toDate ||
     filters.user ||
+    filters.source ||
     (filters.users && filters.users.length > 0);
 
   function renderValue(raw: string | null) {
@@ -312,6 +326,20 @@ export function EditHistorySection({
                 />
               </div>
               <div>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">مصدر التعديل</label>
+                <select
+                  aria-label="مصدر التعديل"
+                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                  value={filters.source ?? ""}
+                  onChange={(e) => applyFilters({ source: (e.target.value || undefined) as EditsFilters["source"] })}
+                >
+                  <option value="">كل المصادر</option>
+                  <option value="manual">تعديل يدوي</option>
+                  <option value="upload">تحديث ملف</option>
+                  <option value="formatting">تغيير شكلي</option>
+                </select>
+              </div>
+              <div>
                 <label className="mb-1 block text-xs font-semibold text-muted-foreground">إلى تاريخ</label>
                 <Input
                   type="date"
@@ -339,6 +367,14 @@ export function EditHistorySection({
         </Card>
       ) : null}
 
+      {history ? (
+        <div className="flex flex-wrap gap-2 text-xs" aria-label="إحصائيات مصدر التعديلات">
+          <Badge variant="outline">يدوي: {history.sourceCounts.manual}</Badge>
+          <Badge variant="outline">تحديث ملف: {history.sourceCounts.upload}</Badge>
+          <Badge variant="outline">شكلي: {history.sourceCounts.formatting}</Badge>
+        </div>
+      ) : null}
+
       {historyLoading && !history ? (
         <p className="text-sm text-muted-foreground">جارٍ تحميل السجل…</p>
       ) : history && history.items.length > 0 ? (
@@ -349,38 +385,38 @@ export function EditHistorySection({
                 <tr>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("person")}>
-                      الشخص <SortIcon col="person" />
+                      الشخص {sortIcon("person")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("column")}>
-                      العمود <SortIcon col="column" />
+                      العمود {sortIcon("column")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("oldvalue")}>
-                      القيمة القديمة <SortIcon col="oldvalue" />
+                      القيمة القديمة {sortIcon("oldvalue")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("newvalue")}>
-                      القيمة الجديدة <SortIcon col="newvalue" />
+                      القيمة الجديدة {sortIcon("newvalue")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">القيمة الحالية</th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("version")}>
-                      الإصدار <SortIcon col="version" />
+                      الإصدار {sortIcon("version")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("date")}>
-                      التاريخ <SortIcon col="date" />
+                      التاريخ {sortIcon("date")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">
                     <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("user")}>
-                      المستخدم <SortIcon col="user" />
+                      المستخدم {sortIcon("user")}
                     </button>
                   </th>
                   <th scope="col" className="p-3 text-right font-bold">السجل</th>
@@ -414,6 +450,9 @@ export function EditHistorySection({
                         )}
                       </td>
                       <td className="p-3">
+                        <Badge variant="outline" className="mb-1 block w-fit text-[10px]">
+                          {item.source === "manual" ? "يدوي" : item.source === "formatting" ? "شكلي" : "تحديث ملف"}
+                        </Badge>
                         <Badge variant={archived ? "outline" : "secondary"}>
                           الإصدار {item.fileVersion}
                         </Badge>

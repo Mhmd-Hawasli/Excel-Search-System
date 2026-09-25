@@ -19,11 +19,11 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
             .ContinueWith(t => (IReadOnlyList<(Guid, int, DateTime)>)t.Result.Select(r => (r.FileId, r.Count, r.Last)).ToList(), ct);
     }
 
-    public async Task<(IReadOnlyList<RecordEdit> Rows, int Total)> ListPagedAsync(Guid? fileId, IReadOnlyList<Guid>? fileIds, int page, int pageSize,
+    public async Task<(IReadOnlyList<RecordEdit> Rows, int Total, int Manual, int Upload, int Formatting)> ListPagedAsync(Guid? fileId, IReadOnlyList<Guid>? fileIds, int page, int pageSize,
         string? person, string? column, string? oldValue, string? newValue,
         int? version, string? fromDate, string? toDate, string? user,
         string? sortBy, string? sortDir, IReadOnlyList<string>? columns,
-        IReadOnlyList<string>? users, CancellationToken ct = default)
+        IReadOnlyList<string>? users, string? source, CancellationToken ct = default)
     {
         var query = Db.RecordEdits.AsNoTracking().AsQueryable();
         if (fileId is not null) query = query.Where(e => e.FileId == fileId);
@@ -102,6 +102,23 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
                 query = query.Where(e => e.EditedBy != null && set.Contains(e.EditedBy));
         }
 
+        // Counts describe the selected stage/version and other filters before
+        // narrowing to one source, so the user can switch sources without
+        // losing the context of the other two totals.
+        var counts = await query.GroupBy(e => new { e.IsBulk, e.IsFormatting })
+            .Select(g => new { g.Key.IsBulk, g.Key.IsFormatting, Count = g.Count() })
+            .ToListAsync(ct);
+        var manual = counts.Where(c => !c.IsBulk).Sum(c => c.Count);
+        var upload = counts.Where(c => c.IsBulk && !c.IsFormatting).Sum(c => c.Count);
+        var formatting = counts.Where(c => c.IsBulk && c.IsFormatting).Sum(c => c.Count);
+        query = source switch
+        {
+            "manual" => query.Where(e => !e.IsBulk),
+            "upload" => query.Where(e => e.IsBulk && !e.IsFormatting),
+            "formatting" => query.Where(e => e.IsBulk && e.IsFormatting),
+            _ => query,
+        };
+
         // Sorting
         query = sortBy?.ToLower() switch
         {
@@ -118,7 +135,7 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         var total = await query.CountAsync(ct);
         var rows = await query
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return (rows, total);
+        return (rows, total, manual, upload, formatting);
     }
 
     public async Task<IReadOnlyList<RecordEdit>> ListByRecordAsync(Guid recordId, CancellationToken ct = default)

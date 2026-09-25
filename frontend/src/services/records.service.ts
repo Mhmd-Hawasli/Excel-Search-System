@@ -42,6 +42,7 @@ export interface RecordDetail {
   originalFilename: string;
   uploadedAt: string;
   rowIndex: number;
+  pk: number;
   displayName: string;
   sfNationalId: string | null;
   dNationalId: string | null;
@@ -90,6 +91,7 @@ export interface ManualTemplate {
   groupId: string;
   groupName: string;
   columns: ManualTemplateColumn[];
+  nextPk: number;
 }
 
 export interface SuggestionList {
@@ -104,6 +106,7 @@ export interface ManualCreated {
   id: string;
   fileId: string;
   rowIndex: number;
+  pk: number | null;
 }
 
 export const recordsService = {

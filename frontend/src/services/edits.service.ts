@@ -26,6 +26,7 @@ export interface EditHistoryItem {
   nationalId: string | null;
   currentValue: string | null;
   currentRecordId: string | null;
+  source: "manual" | "upload" | "formatting";
 }
 
 export interface EditHistoryPage {
@@ -33,6 +34,7 @@ export interface EditHistoryPage {
   total: number;
   page: number;
   pageSize: number;
+  sourceCounts: { manual: number; upload: number; formatting: number };
 }
 
 export interface EditsFilters {
@@ -46,6 +48,7 @@ export interface EditsFilters {
   toDate?: string;
   user?: string;
   users?: string[];
+  source?: "manual" | "upload" | "formatting";
   sortBy?: string;
   sortDir?: string;
 }

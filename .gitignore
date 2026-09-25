@@ -60,6 +60,21 @@ snapshots/*.dump
 snapshots/*.manifest
 snapshots/*.json
 
+# Personal data / migration workdirs (never committed)
+*.dump
+edits-backup-*/
+pk-migration/
+old-excel/
+*-edits.csv
+*-records.csv
+v3-*.csv
+v3-*.sql
+v6-*.csv
+v6-*.gz
+v6-*.sql
+*.xlsx
+!frontend/**/fixtures/*.xlsx
+
 # Local package artifacts
 *.nupkg
 *.snupkg

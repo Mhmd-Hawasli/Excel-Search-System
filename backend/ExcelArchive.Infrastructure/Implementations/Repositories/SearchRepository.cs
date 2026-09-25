@@ -64,13 +64,13 @@ public sealed class SearchRepository(IConfiguration config) : ISearchRepository
                        r."sf_first_name", r."sf_father_name", r."sf_last_name",
                        r."sf_phone", r."sf_contract_code", r."sf_secondary_contract_code",
                        r."sf_job_title", r."sf_functional_category", r."sf_organizational_level",
-                       CASE {string.Join(" ", fieldCases)} ELSE NULL END,
-                       CASE {string.Join(" ", valueCases)} ELSE NULL END,
-                       {rank} AS "matchRank", r."row_index"
-                FROM "records" r JOIN "files" f ON f."id" = r."file_id" JOIN "groups" g ON g."id" = f."group_id"
-                WHERE {where}
-                {OrderSql(sortBy, sortDirection)}
-                LIMIT {pageSize} OFFSET {offset}
+                       CASE {string.Join(" ", fieldCases)} ELSE NULL END AS "matchedField",
+                        CASE {string.Join(" ", valueCases)} ELSE NULL END AS "matchedValue",
+                        {rank} AS "matchRank", r."row_index"
+                 FROM "records" r JOIN "files" f ON f."id" = r."file_id" JOIN "groups" g ON g."id" = f."group_id"
+                 WHERE {where}
+                 {OrderSql(sortBy, sortDirection)}
+                 LIMIT {pageSize} OFFSET {offset}
                 """;
             foreach (var p in parameters) cmd.Parameters.AddWithValue(p.ParameterName, p.Value ?? DBNull.Value);
             using var reader = await cmd.ExecuteReaderAsync(ct);
@@ -140,13 +140,13 @@ public sealed class SearchRepository(IConfiguration config) : ISearchRepository
                        r."sf_first_name", r."sf_father_name", r."sf_last_name",
                        r."sf_phone", r."sf_contract_code", r."sf_secondary_contract_code",
                        r."sf_job_title", r."sf_functional_category", r."sf_organizational_level",
-                       CASE {string.Join(" ", fieldCases)} ELSE NULL END,
-                       CASE {string.Join(" ", valueCases)} ELSE NULL END,
-                       {rank} AS "matchRank", r."row_index"
-                FROM "records" r JOIN "files" f ON f."id" = r."file_id" JOIN "groups" g ON g."id" = f."group_id"
-                WHERE {where}
-                {OrderSql(null, "asc")}
-                LIMIT {limit}
+                       CASE {string.Join(" ", fieldCases)} ELSE NULL END AS "matchedField",
+                        CASE {string.Join(" ", valueCases)} ELSE NULL END AS "matchedValue",
+                        {rank} AS "matchRank", r."row_index"
+                 FROM "records" r JOIN "files" f ON f."id" = r."file_id" JOIN "groups" g ON g."id" = f."group_id"
+                 WHERE {where}
+                 {OrderSql(null, "asc")}
+                 LIMIT {limit}
                 """;
             foreach (var p in parameters) cmd.Parameters.AddWithValue(p.ParameterName, p.Value ?? DBNull.Value);
             using var reader = await cmd.ExecuteReaderAsync(ct);

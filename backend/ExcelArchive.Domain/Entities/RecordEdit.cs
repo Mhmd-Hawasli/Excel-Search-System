@@ -9,6 +9,7 @@ public class RecordEdit
     /// record page, which only shows current-version edits).</summary>
     public Guid? RecordId { get; set; }
     public Guid FileId { get; set; }
+    public long? Pk { get; set; }
     public Guid? FileColumnId { get; set; }
     /// <summary>File version this edit was made on. Archived edits keep the
     /// old version number so history can label them (V1, V2, ...).</summary>
@@ -27,6 +28,10 @@ public class RecordEdit
     /// rows never count as "pending" edits and never flag preview cells as
     /// manually edited.</summary>
     public bool IsBulk { get; set; }
+    /// <summary>Workbook value differs only in representation (spacing,
+    /// leading zeros, date formatting). It is visible in the audit trail but
+    /// excluded from semantic change counts.</summary>
+    public bool IsFormatting { get; set; }
 
     /// <summary>Normalized (11-char, zero-padded) national ID of the edited
     /// person at edit time. Stable row identity: unlike Excel row numbers it

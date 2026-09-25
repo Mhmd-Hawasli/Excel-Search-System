@@ -41,6 +41,7 @@ public class UploadJobProcessor(
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"Upload job {job.Id} failed: {ex}");
             await uow.UploadJobs.FailAsync(job.Id, ex.Message, ct);
         }
     }
@@ -52,7 +53,7 @@ public class UploadJobProcessor(
         var replace = config.Mode == "replace" ? await LoadReplaceTargetAsync(config, ct) : null;
         if (await uow.Groups.FindAsync(config.GroupId, ct) is null)
             throw new InvalidDataException("المجموعة المحددة غير موجودة.");
-        await ValidateConfigAsync(config, ct);
+        await ValidateConfigAsync(config, replace, ct);
 
         byte[] bytes;
         try { bytes = await files.LoadAsync(config.Token.ToString(), ct); }
@@ -80,7 +81,7 @@ public class UploadJobProcessor(
     }
 
     private sealed record ReplaceTarget(Guid Id, Guid GroupId, string Name, string Description,
-        int Version, int RowCount);
+        int Version, int RowCount, long NextPk);
 
     private async Task<ReplaceTarget?> LoadReplaceTargetAsync(UploadJobConfig config, CancellationToken ct)
     {
@@ -88,10 +89,10 @@ public class UploadJobProcessor(
         var target = await uow.Files.FindWithColumnsAsync(config.FileId.Value, ct)
             ?? throw new KeyNotFoundException("الملف المراد تحديثه غير موجود.");
         return new ReplaceTarget(target.Id, target.GroupId, target.Name, target.Description,
-            target.Version, target.RowCount);
+            target.Version, target.RowCount, target.NextPk);
     }
 
-    private async Task ValidateConfigAsync(UploadJobConfig config, CancellationToken ct)
+    private async Task ValidateConfigAsync(UploadJobConfig config, ReplaceTarget? replace, CancellationToken ct)
     {
         if (config.Columns.Count == 0) throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة.");
         var seen = new HashSet<StandardField>();
@@ -101,7 +102,20 @@ public class UploadJobProcessor(
                 throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة.");
             if (c.StandardField is not null && !seen.Add(c.StandardField.Value))
                 throw new InvalidDataException("لا يمكن ربط حقل قياسي واحد بأكثر من عمود.");
+            if (string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase)
+                && (c.StandardField is not null || c.CategoryId is not null))
+                throw new InvalidDataException("مفتاح الربط pk ثابت ولا يقبل تصنيفًا أو ربطًا بحقل آخر.");
         }
+        var hasPk = config.Columns.Count(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase)) == 1;
+        var oldHasPk = replace is not null && (await uow.FileColumns.ListByFileAsync(replace.Id, ct))
+            .Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        // Jobs queued before this rollout may lack pk. The public upload API
+        // requires it for every newly submitted file; keep old queued jobs valid.
+        // The key column may sit anywhere in the workbook (it is matched by the
+        // "pk" header, not by position) — only the replace path must keep the
+        // old keys, so a target that had pk still needs exactly one pk column.
+        if (!hasPk && oldHasPk)
+            throw new InvalidDataException("يلزم عمود pk واحد في ملف Excel الجديد للحفاظ على مفاتيح pk القديمة عند تحديث الملف.");
         if (config.Linked is not null)
         {
             var err = headers.LinkedMappingError(config.SheetName, config.SheetIndex,
@@ -129,6 +143,8 @@ public class UploadJobProcessor(
         // Only real (non-replacement) uploads record a V1 history row here;
         // replacement versions are recorded at promotion (N+1 / N+2).
         var file = await CreateFileAsync(config, config.Name, import.WorksheetName, jobId, replace is null, ct);
+        try
+        {
 
         var fileColumns = await uow.FileColumns.ListByFileAsync(file.Id, ct);
         // Per-cell keep-old choices (preview toggles): swap the workbook's value
@@ -142,6 +158,16 @@ public class UploadJobProcessor(
             keepPlan = KeepOldApplier.Build(oldRecords, targetColumns, config.Columns, config.KeepOldCells);
         }
         var seenNational = new HashSet<string>(StringComparer.Ordinal);
+        var workbookHasPk = config.Columns.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        var targetHasPk = replace is not null && (await uow.FileColumns.ListByFileAsync(replace.Id, ct))
+            .Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        var existingKeys = replace is null ? new HashSet<long>()
+            : (await uow.Records.ListExportRowsAsync(replace.Id, ct))
+                .Select(r => r.Pk ?? r.RowIndex).ToHashSet();
+        var seenPk = new HashSet<long>();
+        var nextPk = replace is null ? 1L
+            : Math.Max(replace.NextPk, existingKeys.Count == 0 ? 1 : existingKeys.Max() + 1);
+        var minimumNewPk = nextPk;
         var batch = new List<Record>(BatchSize);
         var issues = new List<DataQualityIssue>();
         var processed = 0;
@@ -154,6 +180,22 @@ public class UploadJobProcessor(
             foreach (var column in config.Columns)
                 data[column.HeaderRaw] = column.ColumnIndex - 1 < row.Values.Count
                     ? row.Values[column.ColumnIndex - 1] : "";
+            var pkHeader = config.Columns.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))?.HeaderRaw ?? "pk";
+            long? pk = null;
+            if (workbookHasPk)
+            {
+                var rawPk = data.GetValueOrDefault(pkHeader)?.Trim() ?? "";
+                if (!long.TryParse(rawPk, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsedPk)
+                    || parsedPk < 1 || parsedPk == long.MaxValue)
+                    throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk مطلوب ويجب أن يكون عددًا صحيحًا موجبًا.");
+                if (replace is not null && !existingKeys.Contains(parsedPk) && parsedPk < minimumNewPk)
+                    throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk جديد أصغر من التسلسل التالي المسموح ({minimumNewPk}).");
+                if (!seenPk.Add(parsedPk))
+                    throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk مكرر داخل الملف.");
+                nextPk = Math.Max(nextPk, parsedPk + 1);
+                data[pkHeader] = parsedPk.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                pk = parsedPk;
+            }
             if (keepPlan is not null)
                 KeepOldApplier.Apply(keepPlan, data, row.RowIndex);
             if (data.Values.All(string.IsNullOrWhiteSpace))
@@ -166,7 +208,7 @@ public class UploadJobProcessor(
             }
             else
             {
-                batch.Add(BuildRecord(file.Id, row.RowIndex, fileColumns, data, row.Styles));
+                batch.Add(BuildRecord(file.Id, row.RowIndex, fileColumns, data, row.Styles, pk));
                 issues.AddRange(CollectIssues(file.Id, row.RowIndex, fileColumns, data, seenNational));
                 imported++;
             }
@@ -176,12 +218,15 @@ public class UploadJobProcessor(
                 batch.Clear(); issues.Clear();
             }
         }
+        if (targetHasPk && existingKeys.Except(seenPk).Any())
+            throw new InvalidDataException("لا يجوز حذف أو تغيير مفتاح pk قديم عند تحديث الملف؛ أعد جميع المفاتيح الأصلية.");
         await FlushAsync(jobId, batch, issues, processed, ct);
 
         await uow.ExecuteInTransactionAsync(async () =>
         {
             // The file row stays tracked (no tracker clearing in this path).
             file.RowCount = imported;
+            file.NextPk = nextPk;
             file.UpdatedAt = DateTime.UtcNow;
             await uow.SaveChangesAsync(ct);
             var j = await uow.UploadJobs.FindAsync(jobId, ct);
@@ -191,6 +236,9 @@ public class UploadJobProcessor(
             j.Status = replace is null ? UploadJobStatus.Done : j.Status;
             if (replace is null)
             {
+                var entry = (await uow.FileVersions.ListAsync(
+                    v => v.FileId == file.Id && v.Version == 1, ct)).Single();
+                entry.SnapshotGzip = await CaptureSnapshotAsync(file.Id, ct);
                 j.FinishedAt = DateTime.UtcNow;
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileUploaded, config.Name,
@@ -202,6 +250,12 @@ public class UploadJobProcessor(
             }
         }, ct);
         return file.Id;
+        }
+        catch
+        {
+            await uow.UploadJobs.DeleteFileAsync(file.Id, CancellationToken.None);
+            throw;
+        }
     }
 
     private async Task<FileEntity> CreateFileAsync(
@@ -265,7 +319,7 @@ public class UploadJobProcessor(
 
     private static Record BuildRecord(
         Guid fileId, int rowIndex, IReadOnlyList<FileColumn> columns,
-        Dictionary<string, string> data, IReadOnlyDictionary<string, CellStyleDto>? styles)
+        Dictionary<string, string> data, IReadOnlyDictionary<string, CellStyleDto>? styles, long? pk)
     {
         var fills = new Dictionary<string, string>();
         var fonts = new Dictionary<string, string>();
@@ -282,6 +336,7 @@ public class UploadJobProcessor(
         {
             FileId = fileId,
             RowIndex = rowIndex,
+            Pk = pk,
             Data = JsonSerializer.SerializeToDocument(data),
             FmtFills = fills.Count > 0 ? JsonSerializer.SerializeToDocument(fills) : null,
             FmtFontColors = fonts.Count > 0 ? JsonSerializer.SerializeToDocument(fonts) : null,
@@ -354,6 +409,21 @@ public class UploadJobProcessor(
             var pendingManualCount = previousEdits.Count(e => e.RecordId is not null && !e.IsBulk);
             var manualVersion = replace.Version + 1;
             var newVersion = pendingManualCount > 0 ? replace.Version + 2 : replace.Version + 1;
+            var oldSnapshot = await CaptureSnapshotAsync(replace.Id, ct);
+            var priorVersions = await uow.FileVersions.ListAsync(v => v.FileId == replace.Id, ct);
+            var previousEntry = priorVersions.FirstOrDefault(v => v.Version == replace.Version);
+            if (previousEntry is null)
+            {
+                previousEntry = new FileVersion
+                {
+                    FileId = replace.Id, Version = replace.Version,
+                    Kind = "seed", Note = "الإصدار السابق قبل تحديث الملف.",
+                };
+                uow.FileVersions.Add(previousEntry);
+                priorVersions = [.. priorVersions, previousEntry];
+            }
+            if (pendingManualCount == 0 || previousEntry.SnapshotGzip is null)
+                previousEntry.SnapshotGzip = oldSnapshot;
             foreach (var edit in previousEdits)
             {
                 // Remap FIRST (before the archived skip below): in
@@ -369,6 +439,11 @@ public class UploadJobProcessor(
                 // content, not pending work.
                 if (!edit.IsBulk)
                     edit.FileVersion = pendingManualCount > 0 ? manualVersion : replace.Version;
+                if (edit.Pk is null && edit.RecordId.HasValue)
+                {
+                    var owner = await uow.Records.FindAsync(edit.RecordId.Value, ct);
+                    edit.Pk = owner?.Pk;
+                }
                 edit.RecordId = null;
                 edit.FileColumnId = null;
             }
@@ -405,6 +480,7 @@ public class UploadJobProcessor(
                 target.OriginalFilename = temporary.OriginalFilename;
                 target.SheetName = temporary.SheetName;
                 target.RowCount = tempRowCount;
+                target.NextPk = temporary.NextPk;
                 target.ColumnSignature = temporary.ColumnSignature;
                 target.UploadedAt = DateTime.UtcNow;
                 target.UpdatedAt = DateTime.UtcNow;
@@ -443,12 +519,14 @@ public class UploadJobProcessor(
                         FileId = target.Id, Version = manualVersion,
                         Note = $"تعديلات يدوية على الإصدار {replace.Version} ({pendingManualCount}) حُفظت في إصدار منفصل عند التحديث.",
                         Kind = "manual", CreatedBy = config.RequestedBy,
+                        SnapshotGzip = oldSnapshot,
                     });
                 uow.FileVersions.Add(new FileVersion
                 {
                     FileId = target.Id, Version = newVersion,
                     Note = $"تحديث الملف: {replace.RowCount} ← {tempRowCount} سجل ({auditEdits.Count} خلية متغيرة).",
                     Kind = "update", CreatedBy = config.RequestedBy,
+                    SnapshotGzip = await CaptureSnapshotAsync(target.Id, ct),
                 });
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileUpdated, target.Name,
@@ -461,6 +539,9 @@ public class UploadJobProcessor(
                 var auditEdits = await BuildReplaceAuditAsync(
                     target.Id, temporaryFileId, newVersion, temporaryFileId,
                     config.RequestedBy, ct);
+                foreach (var versionEntry in priorVersions)
+                    versionEntry.FileId = temporary.Id;
+                await uow.SaveChangesAsync(ct);
                 uow.Files.Remove(target);
                 temporary.Name = target.Name;
                 temporary.Description = target.Description;
@@ -490,12 +571,14 @@ public class UploadJobProcessor(
                         FileId = temporary.Id, Version = manualVersion,
                         Note = $"تعديلات يدوية على الإصدار {replace.Version} ({pendingManualCount}) حُفظت في إصدار منفصل عند التحديث.",
                         Kind = "manual", CreatedBy = config.RequestedBy,
+                        SnapshotGzip = oldSnapshot,
                     });
                 uow.FileVersions.Add(new FileVersion
                 {
                     FileId = temporary.Id, Version = newVersion,
                     Note = $"تحديث الملف ببنية بديلة: {previousRows} ← {newRowsCount} سجل ({auditEdits.Count} خلية متغيرة).",
                     Kind = "update", CreatedBy = config.RequestedBy,
+                    SnapshotGzip = await CaptureSnapshotAsync(temporary.Id, ct),
                 });
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileReplaced, target.Name,
@@ -504,10 +587,18 @@ public class UploadJobProcessor(
         }, ct);
     }
 
+    private async Task<byte[]> CaptureSnapshotAsync(Guid fileId, CancellationToken ct)
+    {
+        var export = await new FileService(uow, activity, columns, headers)
+            .GetExportDataAsync(fileId, ct)
+            ?? throw new InvalidDataException("تعذر حفظ نسخة الإصدار.");
+        return VersionSnapshotCodec.Encode(export);
+    }
+
     /// <summary>Builds the V(N+1) bulk audit: every cell whose stored value
     /// differs after the replace becomes a RecordEdit (old → new) stamped
     /// with the new version. Row identity mirrors the preview (national-id
-    /// key when it covers ≥70% uniquely, else positional by RowIndex order).
+    /// key when every row has a unique valid ID, else positional by RowIndex).
     /// Kept-old cells already carry the old value in the temp rows, so they
     /// naturally produce no diff and are not logged.</summary>
     private async Task<List<RecordEdit>> BuildReplaceAuditAsync(
@@ -516,10 +607,8 @@ public class UploadJobProcessor(
     {
         var oldRows = await uow.Records.ListExportRowsAsync(oldFileId, ct);
         var newRows = await uow.Records.ListExportRowsAsync(newFileId, ct);
-        if (oldRows.Count == 0 || newRows.Count == 0) return [];
         var oldCols = await uow.FileColumns.ListByFileAsync(oldFileId, ct);
         var newCols = await uow.FileColumns.ListByFileAsync(newFileId, ct);
-        if (oldCols.Count == 0 || newCols.Count == 0) return [];
 
         var newByNorm = new Dictionary<string, FileColumn>(StringComparer.Ordinal);
         foreach (var c in newCols)
@@ -529,25 +618,34 @@ public class UploadJobProcessor(
         foreach (var oc in oldCols.OrderBy(c => c.ColumnIndex))
             if (newByNorm.TryGetValue(oc.HeaderNormalized, out var nc))
                 common.Add((oc.HeaderRaw, nc));
-        if (common.Count == 0) return [];
+        var oldByNorm = oldCols.ToDictionary(c => c.HeaderNormalized, StringComparer.Ordinal);
+        var addedCols = newCols.Where(c => !oldByNorm.ContainsKey(c.HeaderNormalized)).ToList();
+        var removedCols = oldCols.Where(c => !newByNorm.ContainsKey(c.HeaderNormalized)).ToList();
 
-        var oldMaps = oldRows.Select(r => (r.Id, r.RowIndex, Map: RowMap(r.Data))).ToList();
-        var newMaps = newRows.Select(r => (r.Id, r.RowIndex, Map: RowMap(r.Data))).ToList();
+        var oldMaps = oldRows.Select(r => (r.Id, r.RowIndex, Pk: r.Pk ?? r.RowIndex, Map: RowMap(r.Data))).ToList();
+        var newMaps = newRows.Select(r => (r.Id, r.RowIndex, Pk: r.Pk ?? r.RowIndex, Map: RowMap(r.Data))).ToList();
 
-        // National-id key matching when it covers most rows uniquely.
+        // User-supplied pk survives row reordering and national-id edits.
         var oldNational = oldCols.FirstOrDefault(c => c.StandardField == StandardField.NationalId);
         var newNational = newCols.FirstOrDefault(c => c.StandardField == StandardField.NationalId);
         var useKey = false;
         Dictionary<string, int>? oldKeyToIdx = null;
         Dictionary<string, int>? newKeyToIdx = null;
-        if (oldNational is not null && newNational is not null)
+        if (oldRows.All(r => r.Pk.HasValue) && newRows.All(r => r.Pk.HasValue))
+        {
+            useKey = true;
+            oldKeyToIdx = oldMaps.Select((r, i) => (r, i)).ToDictionary(x => x.r.Pk.ToString(), x => x.i);
+            newKeyToIdx = newMaps.Select((r, i) => (r, i)).ToDictionary(x => x.r.Pk.ToString(), x => x.i);
+        }
+        else if (oldNational is not null && newNational is not null)
         {
             var curMap = new Dictionary<string, int>(StringComparer.Ordinal);
             var dup = false;
             for (var i = 0; i < oldMaps.Count && !dup; i++)
             {
                 oldMaps[i].Map.TryGetValue(oldNational.HeaderRaw, out var v);
-                var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                var key = ArabicNormalizer.NationalIdIssue(v ?? "") is null
+                    ? ArabicNormalizer.NationalIdDigits(v ?? "") : null;
                 if (key is null) continue;
                 if (!curMap.TryAdd(key, i)) dup = true;
             }
@@ -557,18 +655,35 @@ public class UploadJobProcessor(
                 for (var i = 0; i < newMaps.Count && !dup; i++)
                 {
                     newMaps[i].Map.TryGetValue(newNational.HeaderRaw, out var v);
-                    var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                    var key = ArabicNormalizer.NationalIdIssue(v ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(v ?? "") : null;
                     if (key is null) continue;
                     if (!nxtMap.TryAdd(key, i)) dup = true;
                 }
             }
-            if (!dup && oldMaps.Count > 0 && newMaps.Count > 0
-                && curMap.Count >= oldMaps.Count * 0.7
-                && nxtMap.Count >= newMaps.Count * 0.7)
+            if (dup)
+                throw new InvalidDataException("توجد أرقام وطنية مكررة؛ لا يمكن تسجيل فروق الصفوف بأمان قبل تصحيحها.");
+            if (oldMaps.Count > 0 && newMaps.Count > 0
+                && curMap.Count == oldMaps.Count
+                && nxtMap.Count == newMaps.Count)
             {
                 useKey = true;
                 oldKeyToIdx = curMap;
                 newKeyToIdx = nxtMap;
+            }
+            if (!useKey)
+            {
+                for (var i = 0; i < Math.Min(oldMaps.Count, newMaps.Count); i++)
+                {
+                    oldMaps[i].Map.TryGetValue(oldNational.HeaderRaw, out var oldRaw);
+                    newMaps[i].Map.TryGetValue(newNational.HeaderRaw, out var newRaw);
+                    var oldKey = ArabicNormalizer.NationalIdIssue(oldRaw ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(oldRaw ?? "") : null;
+                    var newKey = ArabicNormalizer.NationalIdIssue(newRaw ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(newRaw ?? "") : null;
+                    if (oldKey is not null && newKey is not null && oldKey != newKey)
+                        throw new InvalidDataException("توجد أرقام وطنية ناقصة مع تغيير ترتيب الصفوف أو هويتها؛ أصلح الأرقام الناقصة قبل التحديث.");
+                }
             }
         }
 
@@ -598,42 +713,91 @@ public class UploadJobProcessor(
         var nationalHeader = newCols
             .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
         var result = new List<RecordEdit>(Math.Min(pairs.Count * common.Count, MaxAuditEdits));
+        void AddAudit(Guid? recordId, Guid? columnId, string header,
+            string oldValue, string newValue, string? nationalId, long? pk, bool formatting = false)
+        {
+            if (string.Equals(header, "pk", StringComparison.OrdinalIgnoreCase)) return;
+            if (result.Count >= MaxAuditEdits)
+                throw new InvalidOperationException(
+                    $"يتجاوز سجل التغييرات حد {MaxAuditEdits} خلية. لم تُطبق عملية التحديث؛ قسّم الملف إلى دفعات أصغر.");
+            result.Add(new RecordEdit
+            {
+                RecordId = recordId,
+                FileId = auditFileId,
+                FileColumnId = columnId,
+                FileVersion = newVersion,
+                HeaderRaw = header,
+                OldValue = oldValue,
+                NewValue = newValue,
+                EditedBy = editedBy,
+                NationalId = nationalId,
+                Pk = pk,
+                IsBulk = true,
+                IsFormatting = formatting,
+            });
+        }
+        static string? RowNational(Dictionary<string, string> map, FileColumn? column)
+        {
+            if (column is null) return null;
+            map.TryGetValue(column.HeaderRaw, out var raw);
+            var normalized = ArabicNormalizer.NormalizeNationalId(raw ?? "");
+            return normalized.Length == 0 ? null : normalized;
+        }
         foreach (var (ni, oi) in pairs)
         {
             ct.ThrowIfCancellationRequested();
             var oldMap = oldMaps[oi].Map;
             var newEntry = newMaps[ni];
-            string? nationalId = null;
-            if (nationalHeader is not null)
-            {
-                newEntry.Map.TryGetValue(nationalHeader, out var nationalRaw);
-                var norm = ArabicNormalizer.NormalizeNationalId(nationalRaw ?? "");
-                nationalId = string.IsNullOrEmpty(norm) ? null : norm;
-            }
+            var nationalId = RowNational(newEntry.Map, newNational);
             foreach (var (oldRaw, newCol) in common)
             {
                 oldMap.TryGetValue(oldRaw, out var ov);
                 newEntry.Map.TryGetValue(newCol.HeaderRaw, out var nv);
                 ov ??= "";
                 nv ??= "";
-                // Same equivalence as the preview: formatting-only differences
-                // (leading zeros, date order, spacing...) are the same logical
-                // value and must not pollute the audit log with phantom edits.
-                if (ValueEquivalence.AreEquivalent(ov, nv)) continue;
-                if (result.Count >= MaxAuditEdits) return result;
-                result.Add(new RecordEdit
-                {
-                    RecordId = newEntry.Id,
-                    FileId = auditFileId,
-                    FileColumnId = newCol.Id,
-                    FileVersion = newVersion,
-                    HeaderRaw = newCol.HeaderRaw,
-                    OldValue = ov.Length <= 5000 ? ov : ov[..5000],
-                    NewValue = nv.Length <= 5000 ? nv : nv[..5000],
-                    EditedBy = editedBy,
-                    NationalId = nationalId,
-                    IsBulk = true,
-                });
+                // Preserve representation-only edits separately from semantic edits.
+                var verdict = ValueEquivalence.Compare(ov, nv);
+                if (verdict == ValueEquivalence.Verdict.Same) continue;
+                AddAudit(newEntry.Id, newCol.Id, newCol.HeaderRaw, ov, nv,
+                    nationalId, newEntry.Pk, verdict == ValueEquivalence.Verdict.FormattingOnly);
+            }
+            foreach (var column in addedCols)
+            {
+                newEntry.Map.TryGetValue(column.HeaderRaw, out var value);
+                if (!string.IsNullOrEmpty(value))
+                    AddAudit(newEntry.Id, column.Id, column.HeaderRaw, "", value, nationalId, newEntry.Pk);
+            }
+            foreach (var column in removedCols)
+            {
+                oldMap.TryGetValue(column.HeaderRaw, out var value);
+                if (!string.IsNullOrEmpty(value))
+                    AddAudit(null, null, column.HeaderRaw, value, "", nationalId, newEntry.Pk);
+            }
+        }
+        var pairedOld = pairs.Select(p => p.OldIdx).ToHashSet();
+        var pairedNew = pairs.Select(p => p.NewIdx).ToHashSet();
+        for (var ni = 0; ni < newMaps.Count; ni++)
+        {
+            if (pairedNew.Contains(ni)) continue;
+            var row = newMaps[ni];
+            var nationalId = RowNational(row.Map, newNational);
+            foreach (var column in newCols)
+            {
+                row.Map.TryGetValue(column.HeaderRaw, out var value);
+                if (!string.IsNullOrEmpty(value))
+                    AddAudit(row.Id, column.Id, column.HeaderRaw, "", value, nationalId, row.Pk);
+            }
+        }
+        for (var oi = 0; oi < oldMaps.Count; oi++)
+        {
+            if (pairedOld.Contains(oi)) continue;
+            var row = oldMaps[oi];
+            var nationalId = RowNational(row.Map, oldNational);
+            foreach (var column in oldCols)
+            {
+                row.Map.TryGetValue(column.HeaderRaw, out var value);
+                if (!string.IsNullOrEmpty(value))
+                    AddAudit(null, null, column.HeaderRaw, value, "", nationalId, row.Pk);
             }
         }
         return result;

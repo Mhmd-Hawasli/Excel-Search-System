@@ -16,7 +16,7 @@ public sealed record ExportRecord(
 
 public sealed record ExportEdit(
     string? RecordId, string HeaderRaw, string OldValue, string NewValue,
-    string? EditedBy, DateTime CreatedAt);
+    string? EditedBy, DateTime CreatedAt, long? Pk = null);
 
 public static class FileExportBuilder
 {
@@ -244,7 +244,10 @@ public static class FileExportBuilder
                     return (object)NormalizeNationalId(raw);
                 }
                 var parsed = raw.Length > 0 ? ParseStoredDate(raw) : null;
-                if (parsed.HasValue)
+                // A typed Excel date reimports using its display format. Keep
+                // other stored representations as text so exporting and then
+                // reimporting the same file creates no formatting-only edits.
+                if (parsed.HasValue && raw == parsed.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture))
                 {
                     dateCells.Add((rowIndex, columnIndex));
                     return (object)parsed.Value;
@@ -332,8 +335,11 @@ public static class FileExportBuilder
         // their row/person cells render as "—".
         if (markEdits && edits.Count > 0)
         {
-            var logHeaders = new[] { "رقم السطر", "الاسم الثلاثي", "الرقم الوطني", "اسم العمود", "القيمة القديمة", "القيمة الحديثة", "اسم حساب الشخص الذي عدل", "تاريخ التعديل" };
+            var hasPk = records.Any(r => r.Data.ContainsKey("pk"));
+            var logHeaders = new[] { hasPk ? "pk" : "رقم السطر", "الاسم الثلاثي", "الرقم الوطني", "اسم العمود", "القيمة القديمة", "القيمة الحديثة", "اسم حساب الشخص الذي عدل", "تاريخ التعديل" };
             var byId = records.ToDictionary(r => r.Id.ToString(), StringComparer.Ordinal);
+            var byPk = records.Where(r => r.Data.ContainsKey("pk"))
+                .ToDictionary(r => r.Data["pk"], StringComparer.Ordinal);
             var log = workbook.AddWorksheet("سجل التعديلات");
             for (var i = 0; i < logHeaders.Length; i++) log.Cell(1, i + 1).Value = logHeaders[i];
             for (var r = 0; r < edits.Count; r++)
@@ -343,8 +349,12 @@ public static class FileExportBuilder
                 ExportRecord? target = null;
                 if (!string.IsNullOrEmpty(edit.RecordId))
                     byId.TryGetValue(edit.RecordId, out target);
+                if (target is null && edit.Pk.HasValue)
+                    byPk.TryGetValue(edit.Pk.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), out target);
                 if (target is not null)
-                    log.Cell(row, 1).Value = target.RowIndex;
+                    log.Cell(row, 1).Value = target.Data.GetValueOrDefault("pk") ?? target.RowIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                else if (edit.Pk.HasValue)
+                    log.Cell(row, 1).Value = edit.Pk.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 else
                     log.Cell(row, 1).Value = "—";
                 log.Cell(row, 2).Value = string.IsNullOrWhiteSpace(target?.DisplayName) ? "—" : FitCellText(target.DisplayName);

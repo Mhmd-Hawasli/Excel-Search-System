@@ -47,4 +47,5 @@ public record RecordDetailDto(
     RelatedGroupDto RelatedByNationalId,
     RelatedGroupDto RelatedByPerson,
     RelatedGroupDto ConflictByNationalId,
-    RelatedGroupDto ConflictByMother);
+    RelatedGroupDto ConflictByMother,
+    long Pk = 0);

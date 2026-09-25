@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+﻿using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using ExcelArchive.Application.DTOs.ExcelDto;
 using ExcelArchive.Application.DTOs.FileDto;
 using ExcelArchive.Application.DTOs.UploadDto;
@@ -45,7 +47,8 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
     {
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
         if (file is null) return null;
-        var quality = await uow.DataQuality.CountByFileAsync(fileId, ct);
+        var quality = await uow.DataQuality.CountByFileAsync(fileId, ct)
+            + (await DuplicateQualityIssuesAsync(fileId, file.Columns, ct)).Count;
         var edits = includeEdits ? await uow.RecordEdits.CountByFileAsync(fileId, ct) : 0;
         var dto = new FileDto(file.Id, file.GroupId, file.Name, file.Description,
             file.OriginalFilename, file.SheetName, file.RowCount, file.ColumnSignature, file.Version,
@@ -58,14 +61,83 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
 
     public async Task<FileQualityDto?> GetQualityAsync(Guid fileId, CancellationToken ct = default)
     {
-        var file = await uow.Files.FindAsync(fileId, ct);
+        var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
         if (file is null) return null;
         var issues = await uow.DataQuality.ListByFileAsync(fileId, ct);
+        var duplicateIssues = await DuplicateQualityIssuesAsync(fileId, file.Columns, ct);
         var counts = Enum.GetValues<DataQualityIssueType>()
             .Select(t => new QualityTypeCount(ToIssueKey(t), issues.LongCount(i => i.IssueType == t)))
             .ToList();
+        counts.Add(new QualityTypeCount("DUPLICATE_SHAM_CASH",
+            duplicateIssues.LongCount(i => i.IssueType == "DUPLICATE_SHAM_CASH")));
+        counts.Add(new QualityTypeCount("DUPLICATE_FULL_NAME_MOTHER",
+            duplicateIssues.LongCount(i => i.IssueType == "DUPLICATE_FULL_NAME_MOTHER")));
         return new FileQualityDto(file.Id, file.Name, file.RowCount, counts,
-            issues.Select(i => new QualityIssueDto(i.RowIndex, ToIssueKey(i.IssueType), i.ColumnName, i.RawValue)).ToList());
+            issues.Select(i => new QualityIssueDto(i.RowIndex, ToIssueKey(i.IssueType), i.ColumnName, i.RawValue))
+                .Concat(duplicateIssues).OrderBy(i => i.RowIndex).ToList());
+    }
+
+    private async Task<List<QualityIssueDto>> DuplicateQualityIssuesAsync(
+        Guid fileId, IEnumerable<FileColumn> columns, CancellationToken ct)
+    {
+        var sham = columns.FirstOrDefault(c => c.StandardField == StandardField.ShamCash)?.HeaderRaw;
+        var full = columns.FirstOrDefault(c => c.StandardField == StandardField.FullName)?.HeaderRaw;
+        var first = columns.FirstOrDefault(c => c.StandardField == StandardField.FirstName)?.HeaderRaw;
+        var father = columns.FirstOrDefault(c => c.StandardField == StandardField.FatherName)?.HeaderRaw;
+        var last = columns.FirstOrDefault(c => c.StandardField == StandardField.LastName)?.HeaderRaw;
+        var mother = columns.FirstOrDefault(c => c.StandardField == StandardField.MotherName)?.HeaderRaw;
+        if (sham is null && (mother is null || (full is null && first is null))) return [];
+        var shamRows = new Dictionary<string, List<(int Row, string Raw)>>(StringComparer.Ordinal);
+        var personRows = new Dictionary<string, List<(int Row, string Raw)>>(StringComparer.Ordinal);
+        foreach (var record in await uow.Records.ListExportRowsAsync(fileId, ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (record.Data?.RootElement.ValueKind != JsonValueKind.Object) continue;
+            var data = record.Data.RootElement;
+            string Value(string? header) => header is not null && data.TryGetProperty(header, out var v)
+                ? v.ToString().Trim() : "";
+            if (sham is not null)
+            {
+                var raw = Value(sham);
+                var key = ShamCash.Normalize(raw);
+                if (key is not null)
+                {
+                    if (!shamRows.TryGetValue(key, out var rows)) shamRows[key] = rows = [];
+                    rows.Add((record.RowIndex, raw));
+                }
+            }
+            if (mother is not null)
+            {
+                var name = full is not null ? Value(full)
+                    : string.Join(" ", new[] { Value(first), Value(father), Value(last) }
+                        .Where(s => s.Length > 0));
+                var motherName = Value(mother);
+                var nameKey = ArabicNormalizer.NormalizeStored(name);
+                var motherKey = ArabicNormalizer.NormalizeStored(motherName);
+                if (nameKey.Length > 0 && motherKey.Length > 0)
+                {
+                    var key = nameKey + "\u001f" + motherKey;
+                    if (!personRows.TryGetValue(key, out var rows)) personRows[key] = rows = [];
+                    rows.Add((record.RowIndex, name + " | " + motherName));
+                }
+            }
+        }
+        var result = new List<QualityIssueDto>();
+        foreach (var rows in shamRows.Values.Where(r => r.Count > 1))
+            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_SHAM_CASH", sham, r.Raw)));
+        foreach (var rows in personRows.Values.Where(r => r.Count > 1))
+            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_FULL_NAME_MOTHER", "الاسم الثلاثي واسم الأم", r.Raw)));
+        return result;
+    }
+
+    /// <summary>SHA-256 hex over unit-separator-joined normalized headers in
+    /// ColumnIndex order — mirrors HeaderEngine.ColumnSignature without taking
+    /// an Infrastructure dependency (Application must not reference it).</summary>
+    private static string ComputeColumnSignature(IEnumerable<FileColumn> columns)
+    {
+        var joined = string.Join(((char)0x1F).ToString(),
+            columns.OrderBy(c => c.ColumnIndex).Select(c => ArabicNormalizer.NormalizeStored(c.HeaderRaw)));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(joined))).ToLowerInvariant();
     }
 
     private static string ToIssueKey(DataQualityIssueType type) => type switch
@@ -82,7 +154,9 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
 
     /// <summary>Full remap: ownership + dup + category validation, global sort
     /// orders, shadow + quality rebuild for every record, activity. Mirrors V1
-    /// update-mapping-service.ts; returns the updated record count.</summary>
+    /// update-mapping-service.ts; returns the updated record count.
+    /// Changing the pk key (PkColumnId) destroys every stored record of the
+    /// file and is applied only with ConfirmPkChange.</summary>
     public async Task<int> UpdateMappingAsync(Guid fileId, UpdateMappingRequest request, string actorUsername, CancellationToken ct = default)
     {
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct)
@@ -90,12 +164,43 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         if (request.Columns.Count != file.Columns.Count)
             throw new InvalidDataException("عدد الأعمدة المرسلة لا يطابق عدد أعمدة الملف.");
         var byId = file.Columns.ToDictionary(c => c.Id);
+        var currentPk = file.Columns.FirstOrDefault(c =>
+            string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+
+        // pk change detection: an explicit PkColumnId different from the
+        // current key column means the user re-designated the key.
+        FileColumn? newPk = null;
+        var pkChanged = false;
+        if (request.PkColumnId.HasValue)
+        {
+            if (request.PkColumnId.Value == Guid.Empty)
+                throw new InvalidDataException("يجب تحديد عمود مفتاح الربط الرئيسي.");
+            if (!byId.TryGetValue(request.PkColumnId.Value, out newPk))
+                throw new InvalidDataException("عمود مفتاح الربط المحدد لا ينتمي لهذا الملف.");
+            if (currentPk is null || newPk.Id != currentPk.Id)
+            {
+                pkChanged = true;
+                if (!request.ConfirmPkChange)
+                    throw new InvalidDataException("تغيير مفتاح الربط الرئيسي سيحذف جميع السجلات التابعة لهذا الملف نهائيًا. أكّد العملية للمتابعة.");
+                var newPkItem = request.Columns.FirstOrDefault(i => i.Id == newPk.Id);
+                if (newPkItem is null || !string.IsNullOrWhiteSpace(newPkItem.StandardField) || newPkItem.CategoryId is not null)
+                    throw new InvalidDataException("عمود مفتاح الربط الجديد يجب أن يكون بدون حقل قياسي أو فئة.");
+            }
+        }
+        var effectivePkId = pkChanged ? newPk!.Id : (request.PkColumnId ?? currentPk?.Id);
+
         var patches = new List<(FileColumn Column, StandardField? Field, Guid? CategoryId)>();
         var seen = new HashSet<StandardField>();
+        var seenColumnIds = new HashSet<Guid>();
         foreach (var item in request.Columns)
         {
             if (!byId.TryGetValue(item.Id, out var column))
                 throw new InvalidDataException("أحد الأعمدة لا ينتمي لهذا الملف.");
+            if (!seenColumnIds.Add(item.Id))
+                throw new InvalidDataException("لا يمكن إرسال العمود نفسه أكثر من مرة عند تعديل الربط.");
+            if (effectivePkId.HasValue && column.Id == effectivePkId.Value
+                && (!string.IsNullOrWhiteSpace(item.StandardField) || item.CategoryId is not null))
+                throw new InvalidDataException("لا يمكن تعديل مفتاح الربط الرئيسي pk أو تصنيفه.");
             StandardField? field = null;
             var raw = item.StandardField?.Trim() ?? "";
             if (raw.Length > 0)
@@ -111,6 +216,60 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         if (categoryIds.Count > 0 && await uow.Categories.CountAsync(c => categoryIds.Contains(c.Id), ct) != categoryIds.Count)
             throw new InvalidDataException("إحدى الفئات غير موجودة.");
 
+        var oldMapping = file.Columns.Select(c => new
+        {
+            c.HeaderRaw,
+            standardField = c.StandardField?.ToString(),
+            c.CategoryId,
+            c.SortOrder,
+        }).ToList();
+        var total = 0;
+        await uow.ExecuteInTransactionAsync(async () =>
+        {
+        // A pk change invalidates every stored row identity (Record.Pk, edits
+        // keyed by pk, quality): destroy all file rows first, then swap the
+        // pk header onto the newly designated column. The header NAME set is
+        // preserved (swap), only which physical column is the key moves.
+        var recordsDeleted = 0;
+        string? oldPkHeader = null;
+        string? newPkHeader = null;
+        if (pkChanged)
+        {
+            const int DeletePage = 500;
+            while (true)
+            {
+                var doomed = await uow.Records.ListBatchesByFileAsync(fileId, null, DeletePage, ct);
+                if (doomed.Count == 0) break;
+                recordsDeleted += doomed.Count;
+                uow.Records.RemoveRange(doomed);
+                await uow.SaveChangesAsync(ct);
+            }
+            var allIssues = await uow.DataQuality.ListByFileAsync(fileId, ct);
+            if (allIssues.Count > 0)
+            {
+                uow.DataQuality.RemoveRange(allIssues);
+                await uow.SaveChangesAsync(ct);
+            }
+            var allEdits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
+            if (allEdits.Count > 0)
+            {
+                uow.RecordEdits.RemoveRange(allEdits);
+                await uow.SaveChangesAsync(ct);
+            }
+            oldPkHeader = currentPk?.HeaderRaw;
+            newPkHeader = newPk!.HeaderRaw;
+            if (currentPk is not null)
+            {
+                (currentPk.HeaderRaw, newPk.HeaderRaw) = (newPk.HeaderRaw, currentPk.HeaderRaw);
+                (currentPk.HeaderNormalized, newPk.HeaderNormalized) = (newPk.HeaderNormalized, currentPk.HeaderNormalized);
+            }
+            else
+            {
+                // Legacy file without a key: the designated column takes the pk name.
+                newPk.HeaderRaw = "pk";
+                newPk.HeaderNormalized = "pk";
+            }
+        }
         foreach (var (column, field, categoryId) in patches)
         {
             column.StandardField = field;
@@ -122,13 +281,38 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             patches[i].Column.SortOrder = orders[i];
         await uow.SaveChangesAsync(ct);
 
+        if (pkChanged)
+        {
+            // The file is now structurally re-keyed with zero rows: reset the
+            // counters and refresh the header signature for the new layout.
+            file.RowCount = 0;
+            file.NextPk = 1;
+            file.ColumnSignature = ComputeColumnSignature(file.Columns);
+            file.UpdatedAt = DateTime.UtcNow;
+            await uow.SaveChangesAsync(ct);
+            await activity.WriteAsync(ActivityAction.FileUpdated, file.Name,
+                new
+                {
+                    fileId, mappingUpdated = true, columns = patches.Count,
+                    pkChanged = true, recordsDeleted, recordsUpdated = 0,
+                    oldPkHeader, newPkHeader, by = actorUsername,
+                    after = file.Columns.Select(c => new
+                    {
+                        c.HeaderRaw,
+                        standardField = c.StandardField?.ToString(),
+                        c.CategoryId,
+                        c.SortOrder,
+                    }).ToList(),
+                }, ct);
+            return;
+        }
+
         // Rebuild shadows + non-empty quality issues for every record (500/page).
         var stale = await uow.DataQuality.ListNonEmptyByFileAsync(fileId, ct);
         uow.DataQuality.RemoveRange(stale);
         await uow.SaveChangesAsync(ct);
         const int Page = 500;
         var seenNational = new HashSet<string>(StringComparer.Ordinal);
-        var total = 0;
         int? lastRow = null;
         while (true)
         {
@@ -180,8 +364,23 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             lastRow = batch[^1].RowIndex;
             if (batch.Count < Page) break;
         }
+        file.UpdatedAt = DateTime.UtcNow;
+        await uow.SaveChangesAsync(ct);
         await activity.WriteAsync(ActivityAction.FileUpdated, file.Name,
-            new { fileId, mappingUpdated = true, columns = patches.Count, recordsUpdated = total }, ct);
+            new
+            {
+                fileId, mappingUpdated = true, columns = patches.Count,
+                recordsUpdated = total, by = actorUsername,
+                before = oldMapping,
+                after = file.Columns.Select(c => new
+                {
+                    c.HeaderRaw,
+                    standardField = c.StandardField?.ToString(),
+                    c.CategoryId,
+                    c.SortOrder,
+                }).ToList(),
+            }, ct);
+        }, ct);
         return total;
     }
 
@@ -233,27 +432,42 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             throw new InvalidOperationException(
                 $"حجم الملف ({file.RowCount} صف) يتجاوز حد التصدير المباشر ({MaxExportRows}). قسّم الملف ثم صدّر على دفعات.");
         var records = await uow.Records.ListExportRowsAsync(fileId, ct);
-        var edits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
+        // A version export marks only changes belonging to that version.
+        // The full cross-version history remains available in the edits API.
+        var edits = (await uow.RecordEdits.ListByFileAsync(fileId, ct))
+            .Where(e => e.FileVersion == file.Version).ToList();
         var nationalHeader = file.Columns
             .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
         return new FileExportDataDto(
             file.SheetName,
             file.Name,
-            file.Columns.Select(c => c.HeaderRaw).ToList(),
+            new[] { "pk" }.Concat(file.Columns.Where(c => !string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => c.ColumnIndex).Select(c => c.HeaderRaw)).ToList(),
             records.Select(r => new ExportRecordDto(
                 r.Id, r.RowIndex,
-                r.Data is null || r.Data.RootElement.ValueKind != JsonValueKind.Object
-                    ? new Dictionary<string, string>()
-                    : r.Data.RootElement.EnumerateObject().ToDictionary(
-                        p => p.Name,
-                        p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? ""
-                            : p.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : p.Value.GetRawText()),
+                ExportData(r),
                 ToHeaderMap(r.FmtFills), ToHeaderMap(r.FmtFontColors),
                 r.SfFullName, r.DNationalId ?? r.SfNationalId?.ToString())).ToList(),
             edits.Select(e => new ExportEditDto(
                 e.RecordId?.ToString(), e.HeaderRaw, e.OldValue, e.NewValue,
-                e.EditedBy, e.CreatedAt)).ToList(),
+                e.EditedBy, e.CreatedAt, e.Pk)).ToList(),
             nationalHeader);
+    }
+
+    private static Dictionary<string, string> ExportData(Record r)
+    {
+        var data = r.Data is null || r.Data.RootElement.ValueKind != JsonValueKind.Object
+            ? new Dictionary<string, string>()
+            : r.Data.RootElement.EnumerateObject().ToDictionary(
+                p => p.Name,
+                p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? ""
+                    : p.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : p.Value.GetRawText());
+        // Export-facing pk: zero-padded text (00001) so Excel keeps it as
+        // text with leading zeros. Import normalizes back to plain digits,
+        // so round-trips stay clean; internal matching (preview/keep-old)
+        // intentionally keeps plain digits.
+        data["pk"] = (r.Pk ?? r.RowIndex).ToString(System.Globalization.CultureInfo.InvariantCulture).PadLeft(5, '0');
+        return data;
     }
 
     private static Dictionary<string, string>? ToHeaderMap(JsonDocument? doc)
@@ -281,6 +495,11 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             c.HeaderRaw ?? "", c.HeaderNormalized ?? "", c.ColumnIndex, c.StandardField, c.CategoryId)).ToList();
         if (mapped.Any(c => string.IsNullOrWhiteSpace(c.HeaderRaw) || c.ColumnIndex < 1))
             throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+        if ((target.Columns.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))
+                && mapped.Count(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase)) != 1)
+            || mapped.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase)
+                && (!string.IsNullOrWhiteSpace(c.StandardField) || c.CategoryId is not null)))
+            throw new InvalidDataException("تحديث الملف يتطلب عمود pk الأصلي دون ربط أو فئة.");
         // Per-cell keep-old choices (preview toggles): meaningful only for the
         // direct (same) update where rows correspond by name/key.
         var keepOld = (request.KeepOldCells ?? []).ToList();
@@ -408,6 +627,21 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         var archived = 0;
         await uow.ExecuteInTransactionAsync(async () =>
         {
+            var state = await GetExportDataAsync(fileId, ct)
+                ?? throw new InvalidDataException("تعذر حفظ نسخة الإصدار الحالية.");
+            var snapshot = VersionSnapshotCodec.Encode(state);
+            var currentEntry = (await uow.FileVersions.ListAsync(
+                v => v.FileId == fileId && v.Version == previous, ct)).FirstOrDefault();
+            if (currentEntry is null)
+                uow.FileVersions.Add(new FileVersion
+                {
+                    FileId = fileId, Version = previous, Kind = "seed",
+                    Note = "الإصدار السابق قبل رفع النسخة اليدوية.",
+                    SnapshotGzip = snapshot,
+                });
+            else
+                currentEntry.SnapshotGzip = snapshot;
+            await uow.SaveChangesAsync(ct);
             // Archive live MANUAL edits of the current version: they stay
             // visible in history stamped with it, while the new version
             // starts clean. Bulk-audit rows of the current version belong to
@@ -415,6 +649,11 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             var live = await uow.RecordEdits.ListAsync(e => e.FileId == fileId && e.RecordId != null, ct);
             foreach (var edit in live)
             {
+                if (edit.Pk is null && edit.RecordId.HasValue)
+                {
+                    var owner = await uow.Records.FindAsync(edit.RecordId.Value, ct);
+                    edit.Pk = owner?.Pk;
+                }
                 edit.FileVersion = previous;
                 edit.RecordId = null;
                 edit.FileColumnId = null;
@@ -431,6 +670,7 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                 Note = trimmed,
                 Kind = "manual",
                 CreatedBy = actorUsername,
+                SnapshotGzip = snapshot,
             });
             await uow.SaveChangesAsync(ct);
         }, ct);
@@ -439,12 +679,8 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         return new BumpVersionResponse(fileId, previous, file.Version, archived);
     }
 
-    /// <summary>Reconstructs the file as it was at the end of the given
-    /// version by rewinding the current values through the edit log: every
-    /// cell's earliest edit NEWER than the target version yields its OldValue.
-    /// Rows are resolved by live record id first, then by stable national id.
-    /// Limitation: rows added/removed by later updates cannot be resurrected
-    /// from cell edits, so those appear as of the current row set.</summary>
+    /// <summary>Exports an exact stored version state. Older installations
+    /// have no snapshot, so refuse an inaccurate reconstructed workbook.</summary>
     public async Task<FileExportDataDto?> GetVersionExportDataAsync(Guid fileId, int version, CancellationToken ct = default)
     {
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
@@ -453,63 +689,28 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             throw new InvalidDataException($"رقم الإصدار غير صالح. الإصدارات المتاحة من 1 إلى {file.Version}.");
         if (version == file.Version)
             return await GetExportDataAsync(fileId, ct);
-        const int MaxExportRows = 100_000;
-        if (file.RowCount > MaxExportRows)
-            throw new InvalidOperationException(
-                $"حجم الملف ({file.RowCount} صف) يتجاوز حد التصدير المباشر ({MaxExportRows}). قسّم الملف ثم صدّر على دفعات.");
-        var headers = file.Columns.Select(c => c.HeaderRaw).ToList();
-        var headerSet = new HashSet<string>(headers, StringComparer.Ordinal);
-        var records = await uow.Records.ListExportRowsAsync(fileId, ct);
-        var edits = await uow.RecordEdits.ListByFileAsync(fileId, ct);
-        var byId = records.ToDictionary(r => r.Id);
-        var byNational = new Dictionary<string, Domain.Entities.Record>(StringComparer.Ordinal);
-        foreach (var r in records)
-            if (r.DNationalId is not null)
-                byNational.TryAdd(r.DNationalId, r);
-        var data = records.ToDictionary(r => r.Id, r => CellMap(r.Data));
-        var rewound = new HashSet<(Guid, string)>();
-        foreach (var e in edits
-                     .Where(e => e.FileVersion > version)
-                     .OrderBy(e => e.FileVersion)
-                     .ThenBy(e => e.CreatedAt))
+        var entry = (await uow.FileVersions.ListByFileAsync(fileId, ct))
+            .FirstOrDefault(v => v.Version == version);
+        if (entry?.SnapshotGzip is null)
+            throw new InvalidDataException("لا توجد نسخة محفوظة دقيقة لهذا الإصدار القديم؛ لا يمكن تصديره دون خطر عرض بيانات غير صحيحة.");
+        var snapshot = VersionSnapshotCodec.Decode(entry.SnapshotGzip);
+        // Early snapshots included the entire audit log. Keep the saved row
+        // links (needed to highlight historical cells), but include only the
+        // entries actually stamped with this version in its marked export.
+        var versionEdits = await uow.RecordEdits.ListAsync(
+            e => e.FileId == fileId && e.FileVersion == version, ct);
+        var remaining = versionEdits
+            .GroupBy(e => (e.HeaderRaw, e.OldValue, e.NewValue, e.CreatedAt))
+            .ToDictionary(g => g.Key, g => g.Count());
+        var filtered = new List<ExportEditDto>();
+        foreach (var edit in snapshot.Edits)
         {
-            Domain.Entities.Record? target = null;
-            if (e.RecordId.HasValue)
-                byId.TryGetValue(e.RecordId.Value, out target);
-            if (target is null && !string.IsNullOrWhiteSpace(e.NationalId))
-                byNational.TryGetValue(e.NationalId, out target);
-            if (target is null || !headerSet.Contains(e.HeaderRaw)) continue;
-            if (!rewound.Add((target.Id, e.HeaderRaw))) continue;
-            data[target.Id][e.HeaderRaw] = e.OldValue ?? "";
+            var key = (edit.HeaderRaw, edit.OldValue, edit.NewValue, edit.CreatedAt);
+            if (!remaining.TryGetValue(key, out var count) || count == 0) continue;
+            filtered.Add(edit);
+            remaining[key] = count - 1;
         }
-        var nationalHeader = file.Columns
-            .FirstOrDefault(c => c.StandardField == StandardField.NationalId)?.HeaderRaw;
-        return new FileExportDataDto(
-            file.SheetName,
-            file.Name,
-            headers,
-            records.Select(r => new ExportRecordDto(
-                r.Id, r.RowIndex,
-                data[r.Id],
-                ToHeaderMap(r.FmtFills), ToHeaderMap(r.FmtFontColors),
-                r.SfFullName, r.DNationalId ?? r.SfNationalId?.ToString())).ToList(),
-            edits
-                .Where(e => e.FileVersion <= version)
-                .Select(e => new ExportEditDto(
-                    e.RecordId?.ToString(), e.HeaderRaw, e.OldValue, e.NewValue,
-                    e.EditedBy, e.CreatedAt)).ToList(),
-            nationalHeader);
-    }
-
-    private static Dictionary<string, string> CellMap(JsonDocument? doc)
-    {
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-        var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var prop in doc.RootElement.EnumerateObject())
-            map[prop.Name] = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() ?? ""
-                : prop.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : prop.Value.GetRawText();
-        return map;
+        return snapshot with { Edits = filtered };
     }
 
     /// <summary>Version history newest-first plus the live (pending) manual
@@ -545,7 +746,8 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         var versions = existing
             .OrderByDescending(v => v.Version)
             .Select(v => new FileVersionDto(v.Id, v.FileId, v.Version, v.Note, v.Kind,
-                v.CreatedBy, v.CreatedAt, counts.TryGetValue(v.Version, out var c) ? c : 0))
+                v.CreatedBy, v.CreatedAt, counts.TryGetValue(v.Version, out var c) ? c : 0,
+                v.Version == file.Version || v.SnapshotGzip is not null))
             .ToList();
         return new FileVersionsResponse(fileId, file.Version, pending, versions);
     }

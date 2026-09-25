@@ -16,6 +16,9 @@ public class FileVersion
     public string Kind { get; set; } = "manual";
     public string? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Compressed, exact workbook state at the end of this version.
+    /// Legacy versions without a snapshot cannot be exported faithfully.</summary>
+    public byte[]? SnapshotGzip { get; set; }
 
     public File File { get; set; } = null!;
 }

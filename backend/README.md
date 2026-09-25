@@ -42,7 +42,6 @@ dotnet run --project ExcelArchive.Api --urls http://0.0.0.0:5005
 - `ExcelArchive.Infrastructure/` — `Implementations/` (`Persistence/` incl. `Sql/` + `UnitOfWork`,
   `Repositories/`, `Security/`, `Storage/`, `Excel/`, `Caching/`, `BackgroundServices/`, `HealthChecks/`),
   `Migrations/`, `GlobalUsings.cs`. No `DependencyInjection.cs`: composition lives in API.
-- `tests/ExcelArchive.Foundation.Tests/` — unit/behavior/HTTP/storage/integration/performance tests.
 
 Dependency direction: `Api → {Application, Infrastructure} → Domain`; `Infrastructure → Application`.
 Controllers consume Application contracts only (plus domain value types); no EF/Npgsql/ClosedXML in

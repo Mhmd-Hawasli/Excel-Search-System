@@ -11,7 +11,7 @@ public interface IEditsService
         string? newValue = null, int? version = null, string? fromDate = null,
         string? toDate = null, string? user = null, string? sortBy = null,
         string? sortDir = "desc", IReadOnlyList<string>? columns = null,
-        IReadOnlyList<string>? users = null, CancellationToken ct = default);
+        IReadOnlyList<string>? users = null, string? source = null, CancellationToken ct = default);
     /// <summary>Exact-match candidates for one file's history filters:
     /// distinct edited columns, editing users (merged with active system
     /// users), and the file's current version.</summary>

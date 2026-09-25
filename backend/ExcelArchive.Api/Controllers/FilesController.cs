@@ -113,14 +113,17 @@ public class FilesController(IFileService files, IAuthService auth, IFileExportB
         try
         {
             var updated = await files.UpdateMappingAsync(id,
-                new UpdateMappingRequest(normalized), user.Username);
+                new UpdateMappingRequest(normalized, request.PkColumnId, request.ConfirmPkChange), user.Username);
             return Ok(ApiResponse.Success(new { ok = true, updatedRecords = updated }));
         }
         catch (Exception ex)
         {
             var message = ex.Message;
             var known = message.Contains("لا يمكن") || message.Contains("غير موجود")
-                || message.Contains("لا يطابق") || message.Contains("غير معروف");
+                || message.Contains("لا يطابق") || message.Contains("غير معروف")
+                || message.Contains("ينتمي") || message.Contains("سيحذف")
+                || message.Contains("أكّد") || message.Contains("مفتاح الربط")
+                || message.Contains("بدون حقل") || message.Contains("تحديد عمود");
             return known ? Bad(message) : HandleError(ex);
         }
     }

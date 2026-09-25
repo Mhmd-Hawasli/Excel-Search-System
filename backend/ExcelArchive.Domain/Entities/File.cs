@@ -9,6 +9,7 @@ public class File
     public string OriginalFilename { get; set; } = "";
     public string SheetName { get; set; } = "";
     public int RowCount { get; set; }
+    public long NextPk { get; set; } = 1;
     public string ColumnSignature { get; set; } = "";
     public int Version { get; set; } = 1;
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;

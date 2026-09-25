@@ -369,7 +369,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
       <PageHeader
         eyebrow="سجل"
         title={data.displayName}
-        description={`${data.fileName} — ${data.groupName} — صف ${data.rowIndex} — رُفع ${data.uploadedAt}`}
+        description={`${data.fileName} — ${data.groupName} — مفتاح ${data.pk} — رُفع ${data.uploadedAt}`}
         actions={
           <div className="no-print flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
@@ -388,7 +388,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                   <AlertDialogHeader>
                     <AlertDialogTitle>حذف السجل نهائياً؟</AlertDialogTitle>
                     <AlertDialogDescription>
-                      سيُحذف «{data.displayName}» (صف {data.rowIndex} في {data.fileName}) مع سجل تعديلاته نهائياً،
+                      سيُحذف «{data.displayName}» (مفتاح {data.pk} في {data.fileName}) مع سجل تعديلاته نهائياً،
                       ولا يمكن التراجع عن هذا الإجراء.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
@@ -555,7 +555,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                               ) : null}
                             </span>
                             <span className="no-print flex shrink-0 gap-1">
-                              {canEdit ? (
+                              {canEdit && column.headerRaw.toLowerCase() !== "pk" ? (
                                 <Button
                                   type="button"
                                   size="icon"
@@ -568,7 +568,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                                   <Pencil className="size-4" />
                                 </Button>
                               ) : null}
-                              {canEdit && editInfo && column.value !== editInfo.originalValue ? (
+                              {canEdit && column.headerRaw.toLowerCase() !== "pk" && editInfo && column.value !== editInfo.originalValue ? (
                                 <Button
                                   type="button"
                                   size="icon"

@@ -15,7 +15,8 @@ public class EditsController(IEditsService edits, IAuthService auth) : ApiContro
         [FromQuery] int? version = null, [FromQuery] string? fromDate = null,
         [FromQuery] string? toDate = null, [FromQuery] string? user = null,
         [FromQuery] string? sortBy = null, [FromQuery] string? sortDir = "desc",
-        [FromQuery] string[]? columns = null, [FromQuery] string[]? users = null)
+        [FromQuery] string[]? columns = null, [FromQuery] string[]? users = null,
+        [FromQuery] string? source = null)
     {
         var currentUser = await RequirePermissionAsync(Permissions.EditsView);
         if (currentUser is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
@@ -25,7 +26,9 @@ public class EditsController(IEditsService edits, IAuthService auth) : ApiContro
             return Ok(new { files = await edits.SummaryAsync(scope) });
         if (fileId is not null && scope.FileIds is not null && !scope.FileIds.Contains(fileId.Value))
             return HiddenNotFound();
-        return Ok(await edits.ListAsync(fileId, scope, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users));
+        if (source is not null && source is not ("manual" or "upload" or "formatting"))
+            return BadRequest(new { ok = false, message = "نوع التعديل غير صالح." });
+        return Ok(await edits.ListAsync(fileId, scope, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users, source));
     }
 
     /// <summary>Smart-filter candidates for one file's edit history: distinct

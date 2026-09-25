@@ -1,13 +1,14 @@
 ﻿namespace ExcelArchive.Application.DTOs.EditDto;
 
 public record EditedFileSummary(Guid FileId, string FileName, Guid GroupId, string GroupName, int EditCount, DateTime LastEditAt, int CurrentVersion = 1);
-public record EditDto(Guid Id, Guid? RecordId, Guid FileId, Guid? FileColumnId, string HeaderRaw, string OldValue, string NewValue, DateTime CreatedAt, string? PersonName = null, int? RowIndex = null, string? EditedBy = null, int FileVersion = 1, string? NationalId = null, string? CurrentValue = null, Guid? CurrentRecordId = null);
+public record EditDto(Guid Id, Guid? RecordId, Guid FileId, Guid? FileColumnId, string HeaderRaw, string OldValue, string NewValue, DateTime CreatedAt, string? PersonName = null, int? RowIndex = null, string? EditedBy = null, int FileVersion = 1, string? NationalId = null, string? CurrentValue = null, Guid? CurrentRecordId = null, string Source = "manual");
 /// <summary>Filter dropdown values for one file's edit history: exact-match
 /// candidates for the column / user multi-selects, plus the file's current
 /// version (default of the version stepper).</summary>
 public record EditOptionsDto(IReadOnlyList<string> Columns, IReadOnlyList<EditUserOption> Users, int CurrentVersion);
 public record EditUserOption(string Username, string? DisplayName);
-public record EditsResult(IReadOnlyList<EditDto> Items, int Total, int Page, int PageSize);
+public record EditSourceCounts(int Manual, int Upload, int Formatting);
+public record EditsResult(IReadOnlyList<EditDto> Items, int Total, int Page, int PageSize, EditSourceCounts SourceCounts);
 public record RevertEditRequest(Guid RecordId, Guid? FileColumnId, string? HeaderRaw);
 public record VisitRecordRequest(Guid RecordId);
 

@@ -52,7 +52,8 @@ public class UploadJobsController(IUploadService upload, IAuthService auth, IGro
     {
         var user = await RequirePermissionAsync(Permissions.UploadRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
-        var job = await upload.GetJobAsync(id);
+        var scope = await Auth.ResolveDataScope(user);
+        var job = await upload.GetJobAsync(id, scope);
         return job is null ? HiddenNotFound() : Ok(ApiResponse.Success(job));
     }
 
@@ -62,9 +63,15 @@ public class UploadJobsController(IUploadService upload, IAuthService auth, IGro
         var user = await RequirePermissionAsync(Permissions.UploadRun);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
         if (request is null) return Bad("بيانات القالب غير صالحة.");
+        var scope = await Auth.ResolveDataScope(user);
         try
         {
-            return Ok(ApiResponse.Success(await upload.SaveTemplateAsync(id, request, user.Username)));
+            return Ok(ApiResponse.Success(await upload.SaveTemplateAsync(id, request, user.Username, scope)));
+        }
+        catch (KeyNotFoundException)
+        {
+            // Out-of-scope or missing job: hide as not-found (same as Create/Get).
+            return HiddenNotFound();
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("يوجد قالب"))
         {

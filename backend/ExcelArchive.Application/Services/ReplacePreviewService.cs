@@ -47,6 +47,12 @@ public class ReplacePreviewService(
             throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
 
         var targetColumns = target.Columns.OrderBy(c => c.ColumnIndex).ToList();
+        if (mapped.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))
+            && !targetColumns.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase)))
+            targetColumns.Insert(0, new ExcelArchive.Domain.Entities.FileColumn
+            {
+                HeaderRaw = "pk", HeaderNormalized = "pk", ColumnIndex = 0,
+            });
         // Smart name-based matching (NOT positional): columns are matched by
         // normalized header name, so inserting/reordering columns no longer
         // invalidates the whole update. Additions are allowed (new columns are
@@ -121,7 +127,8 @@ public class ReplacePreviewService(
                 data[c.HeaderRaw] = v;
                 if (!string.IsNullOrWhiteSpace(v)) hasValue = true;
             }
-            if (!hasValue) continue;
+            if (!hasValue)
+                throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk فارغ.");
             newRows.Add((row.RowIndex, data));
         }
 
@@ -147,6 +154,7 @@ public class ReplacePreviewService(
                         : p.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? ""
                         : p.Value.GetRawText();
             }
+            data["pk"] = (r.Pk ?? r.RowIndex).ToString(System.Globalization.CultureInfo.InvariantCulture);
             currentRows.Add((r.Id, r.RowIndex, data));
             recordIdToRow[r.Id] = r.RowIndex;
         }
@@ -180,14 +188,45 @@ public class ReplacePreviewService(
         Dictionary<string, int>? currentKeyToIdx = null;
         Dictionary<string, int>? newKeyToIdx = null;
         var useKey = false;
-        if (nationalIdHeader is not null && nationalIdNewRaw is not null)
+        var pkColumn = mapped.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        var targetHasPk = target.Columns.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        if (pkColumn is null && targetHasPk)
+            throw new InvalidDataException("تحديث الملف يتطلب عمود pk.");
+        if (pkColumn is not null)
+        {
+            var currentPk = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var i = 0; i < currentRows.Count; i++)
+                currentPk.Add(currentRows[i].Data["pk"], i);
+            var nextPk = new Dictionary<string, int>(StringComparer.Ordinal);
+            var minimumNewPk = Math.Max(target.NextPk,
+                currentRows.Count == 0 ? 1 : currentRows.Max(r => long.Parse(r.Data["pk"])) + 1);
+            for (var i = 0; i < newRows.Count; i++)
+            {
+                if (!newRows[i].Data.TryGetValue(pkColumn.HeaderRaw, out var raw)
+                    || !long.TryParse(raw, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var key) || key < 1 || key == long.MaxValue)
+                    throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk مفقود أو غير صالح.");
+                if (!currentPk.ContainsKey(key.ToString()) && key < minimumNewPk)
+                    throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk الجديد يجب ألا يقل عن {minimumNewPk}.");
+                if (!nextPk.TryAdd(key.ToString(), i))
+                    throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk مكرر.");
+            }
+            if (targetHasPk && currentPk.Keys.Except(nextPk.Keys).Any())
+                throw new InvalidDataException("لا يجوز حذف أو تغيير مفتاح pk قديم عند تحديث الملف؛ أعد جميع المفاتيح الأصلية.");
+            useKey = true;
+            matchMode = "pk";
+            currentKeyToIdx = currentPk;
+            newKeyToIdx = nextPk;
+        }
+        if (!useKey && nationalIdHeader is not null && nationalIdNewRaw is not null)
         {
             var curMap = new Dictionary<string, int>(StringComparer.Ordinal);
             var dup = false;
             for (var i = 0; i < currentRows.Count; i++)
             {
                 currentRows[i].Data.TryGetValue(nationalIdHeader, out var v);
-                var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                var key = ArabicNormalizer.NationalIdIssue(v ?? "") is null
+                    ? ArabicNormalizer.NationalIdDigits(v ?? "") : null;
                 if (key is null) continue;
                 if (curMap.ContainsKey(key)) { dup = true; break; }
                 curMap[key] = i;
@@ -198,23 +237,40 @@ public class ReplacePreviewService(
                 for (var i = 0; i < newRows.Count; i++)
                 {
                     newRows[i].Data.TryGetValue(nationalIdNewRaw, out var v);
-                    var key = ArabicNormalizer.NationalIdDigits(v ?? "");
+                    var key = ArabicNormalizer.NationalIdIssue(v ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(v ?? "") : null;
                     if (key is null) continue;
                     if (newMap.ContainsKey(key)) { dup = true; break; }
                     newMap[key] = i;
                 }
             }
+            if (dup)
+                throw new InvalidDataException("توجد أرقام وطنية مكررة؛ لا يمكن مطابقة الصفوف بأمان قبل تصحيحها.");
             if (!dup)
             {
                 var coverage = currentRows.Count > 0 && newRows.Count > 0
-                    && curMap.Count >= currentRows.Count * 0.7
-                    && newMap.Count >= newRows.Count * 0.7;
+                    && curMap.Count == currentRows.Count
+                    && newMap.Count == newRows.Count;
                 if (coverage)
                 {
                     useKey = true;
                     matchMode = "nationalId";
                     currentKeyToIdx = curMap;
                     newKeyToIdx = newMap;
+                }
+            }
+            if (!useKey)
+            {
+                for (var i = 0; i < Math.Min(currentRows.Count, newRows.Count); i++)
+                {
+                    currentRows[i].Data.TryGetValue(nationalIdHeader, out var oldRaw);
+                    newRows[i].Data.TryGetValue(nationalIdNewRaw, out var newRaw);
+                    var oldKey = ArabicNormalizer.NationalIdIssue(oldRaw ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(oldRaw ?? "") : null;
+                    var newKey = ArabicNormalizer.NationalIdIssue(newRaw ?? "") is null
+                        ? ArabicNormalizer.NationalIdDigits(newRaw ?? "") : null;
+                    if (oldKey is not null && newKey is not null && oldKey != newKey)
+                        throw new InvalidDataException("توجد أرقام وطنية ناقصة مع تغيير ترتيب الصفوف أو هويتها؛ أصلح الأرقام الناقصة قبل التحديث.");
                 }
             }
         }

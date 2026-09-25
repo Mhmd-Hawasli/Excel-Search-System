@@ -125,8 +125,8 @@ export function FileUpdateWizard({
           );
           return {
             ...column,
-            standardField: old?.standardField ?? column.suggestedField,
-            categoryId: old?.categoryId ?? null,
+            standardField: column.headerRaw.toLowerCase() === "pk" ? null : old?.standardField ?? column.suggestedField,
+            categoryId: column.headerRaw.toLowerCase() === "pk" ? null : old?.categoryId ?? null,
           };
         }),
         next.linkedSheets?.nationalIdColumnIndex,
@@ -481,7 +481,7 @@ export function FileUpdateWizard({
                       <FieldMappingSelect
                         ariaLabel={`حقل البحث للعمود ${column.headerRaw}`}
                         value={column.standardField ?? ""}
-                        disabled={column.columnIndex === sheet.linkedSheets?.nationalIdColumnIndex}
+                        disabled={column.headerRaw.toLowerCase() === "pk" || column.columnIndex === sheet.linkedSheets?.nationalIdColumnIndex}
                         onChange={(next) =>
                           updateColumn(index, {
                             standardField: (next || null) as StandardFieldKey | null,
@@ -500,12 +500,16 @@ export function FileUpdateWizard({
                         ]}
                       />
                     </div>
-                    <CategorySelector
-                      categories={categories}
-                      value={column.categoryId}
-                      onChange={(categoryId) => updateColumn(index, { categoryId })}
-                      label={`فئة العمود ${column.headerRaw}`}
-                    />
+                    {column.headerRaw.toLowerCase() === "pk" ? (
+                      <p className="text-sm text-muted-foreground">مفتاح ثابت؛ لا يمكن تغيير ربطه أو فئته.</p>
+                    ) : (
+                      <CategorySelector
+                        categories={categories}
+                        value={column.categoryId}
+                        onChange={(categoryId) => updateColumn(index, { categoryId })}
+                        label={`فئة العمود ${column.headerRaw}`}
+                      />
+                    )}
                   </div>
                 ))}
               </CardContent>
@@ -524,7 +528,9 @@ export function FileUpdateWizard({
                   {identical
                     ? "يقارن كل خلية بين القيمة الحالية في النظام والقيمة في الملف الجديد، ويميز القيم التي تم تعديلها داخليًا وستُستبدل."
                     : "يقارن الأعمدة المشتركة بالاسم بين القيمة الحالية في النظام والقيمة في الملف الجديد (قديم مقابل جديد)، مع توضيح الأعمدة التي ستُفقد والصفوف التي ستتغير قبل إنشاء الإصدار البديل."}
-                  {preview?.matchMode === "nationalId" || preview?.summary?.matchMode === "nationalId"
+                  {preview?.matchMode === "pk" || preview?.summary?.matchMode === "pk"
+                    ? " المطابقة تمت عبر مفتاح pk."
+                    : preview?.matchMode === "nationalId" || preview?.summary?.matchMode === "nationalId"
                     ? " المطابقة تمت عبر الرقم الوطني."
                     : " المطابقة تمت حسب ترتيب الصفوف."}
                   {!identical

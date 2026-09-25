@@ -39,7 +39,14 @@ public record FileQualityDto(
     int RowCount,
     IReadOnlyList<QualityTypeCount> Counts,
     IReadOnlyList<QualityIssueDto> Issues);
-public record UpdateMappingRequest(IReadOnlyList<UpdateColumnMappingDto> Columns);
+/// <summary>Remap request. PkColumnId designates the FileColumn that must act
+/// as the pk key after the update (null = keep the current key). Changing the
+/// key destroys every stored record of the file, so a pk change is applied
+/// only when ConfirmPkChange is true (explicit user acknowledgment).</summary>
+public record UpdateMappingRequest(
+    IReadOnlyList<UpdateColumnMappingDto> Columns,
+    Guid? PkColumnId = null,
+    bool ConfirmPkChange = false);
 public record UpdateColumnMappingDto(Guid Id, string? StandardField, Guid? CategoryId);
 public record DeleteFileRequest(string ConfirmName);
 public record MoveFileRequest(Guid TargetGroupId);
@@ -54,7 +61,8 @@ public record FileVersionDto(
     string Kind,
     string? CreatedBy,
     DateTime CreatedAt,
-    long EditCount);
+    long EditCount,
+    bool CanExport = true);
 
 /// <summary>Full version state of a file: current number, pending (live) manual
 /// edits on it, and the history newest-first.</summary>

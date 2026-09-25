@@ -40,7 +40,9 @@ public static class KeepOldApplier
         foreach (var r in oldRecords)
         {
             var data = RowMap(r.Data);
+            data["pk"] = (r.Pk ?? r.RowIndex).ToString(System.Globalization.CultureInfo.InvariantCulture);
             oldByRow.TryAdd(r.RowIndex, data);
+            oldByKey.TryAdd(data["pk"], data);
             if (oldNationalRaw is not null
                 && data.TryGetValue(oldNationalRaw, out var nv)
                 && ArabicNormalizer.NationalIdDigits(nv) is string digits)
@@ -69,17 +71,27 @@ public static class KeepOldApplier
                 byRow[rowKey] = cells = new Dictionary<string, string>(StringComparer.Ordinal);
             cells[newRaw] = oldValue ?? "";
         }
-        return new KeepOldPlan(byRow, newNationalRaw);
+        return new KeepOldPlan(byRow, newColumns.FirstOrDefault(c =>
+            string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase))?.HeaderRaw ?? newNationalRaw);
     }
 
     public static void Apply(KeepOldPlan plan, Dictionary<string, string> data, int excelRowIndex)
     {
+        // Exclusive identity (mirrors the preview): a national-id key hit
+        // wins and returns immediately, otherwise fall back to the row index.
+        // Applying both would let a stale positional entry overwrite the
+        // correct keyed value when the workbook is reordered.
         if (plan.NationalHeader is not null
             && data.TryGetValue(plan.NationalHeader, out var nv)
             && ArabicNormalizer.NationalIdDigits(nv) is string digits
             && plan.ByRow.TryGetValue("k:" + digits, out var byKey))
+        {
             foreach (var (header, value) in byKey)
                 data[header] = value;
+            return;
+        }
+        if (string.Equals(plan.NationalHeader, "pk", StringComparison.OrdinalIgnoreCase))
+            return;
         if (plan.ByRow.TryGetValue("r:" + excelRowIndex, out var byRow))
             foreach (var (header, value) in byRow)
                 data[header] = value;

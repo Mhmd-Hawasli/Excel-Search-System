@@ -16,6 +16,8 @@ const labels: Record<string, string> = {
   DUPLICATE_NATIONAL_ID: "رقم وطني مكرر",
   INVALID_PHONE: "رقم هاتف غير صالح",
   INVALID_SHAM_CASH: "رقم شام كاش غير صالح",
+  DUPLICATE_SHAM_CASH: "الشام كاش مكرر داخل الملف",
+  DUPLICATE_FULL_NAME_MOTHER: "الاسم الثلاثي مع اسم الأم مكرر داخل الملف",
   INVALID_FUNCTIONAL_CATEGORY: "فئة وظيفية غير معروفة",
   EMPTY_ROW: "صف فارغ",
 };

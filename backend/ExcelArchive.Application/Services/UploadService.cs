@@ -31,6 +31,10 @@ public class UploadService(
             throw new KeyNotFoundException("المجموعة المحددة غير موجودة.");
         if (request.Columns is null || request.Columns.Count == 0)
             throw new InvalidDataException("إعدادات الاستيراد غير مكتملة. راجع خطوات المعالج.");
+        var primaryKeys = request.Columns.Where(c => string.Equals(c.HeaderRaw?.Trim(), "pk", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (primaryKeys.Count != 1
+            || !string.IsNullOrWhiteSpace(primaryKeys[0].StandardField) || primaryKeys[0].CategoryId is not null)
+            throw new InvalidDataException("يجب أن يحتوي ملف Excel على عمود pk واحد (يمكن أن يكون في أي موقع)، دون فئة أو ربط قياسي.");
 
         var seen = new HashSet<StandardField>();
         foreach (var c in request.Columns)
@@ -89,13 +93,25 @@ public class UploadService(
         return new CreateUploadJobResponse(job.Id);
     }
 
-    public async Task<UploadJobDto?> GetJobAsync(Guid id, CancellationToken ct = default)
+    public async Task<UploadJobDto?> GetJobAsync(Guid id, DataScopeDto scope, CancellationToken ct = default)
     {
         var job = await uow.UploadJobs.FindAsync(id, ct);
-        return job is null ? null : ToDto(job);
+        if (job is null) return null;
+        // Scope enforcement (mirrors Create + ListTemplates): a scoped caller
+        // must see the job's group, otherwise hide it as not-found. Null
+        // GroupIds means unrestricted (global viewer with private access).
+        if (scope.GroupIds is not null)
+        {
+            var payload = job.Payload.RootElement;
+            if (!payload.TryGetProperty("groupId", out var gid)
+                || !gid.TryGetGuid(out var groupId)
+                || !scope.GroupIds.Contains(groupId))
+                return null;
+        }
+        return ToDto(job);
     }
 
-    public async Task<SaveTemplateResponse> SaveTemplateAsync(Guid jobId, SaveTemplateRequest request, string actorUsername, CancellationToken ct = default)
+    public async Task<SaveTemplateResponse> SaveTemplateAsync(Guid jobId, SaveTemplateRequest request, string actorUsername, DataScopeDto scope, CancellationToken ct = default)
     {
         var tname = request.Name?.Trim() ?? "";
         if (tname.Length < 2 || tname.Length > 120)
@@ -106,6 +122,11 @@ public class UploadService(
         var payload = job.Payload.RootElement;
         if (!payload.TryGetProperty("groupId", out var gid) || !gid.TryGetGuid(out var groupId))
             throw new InvalidDataException("لا يمكن حفظ قالب قبل اكتمال الاستيراد.");
+        // Scope enforcement before any read/write: the caller must see the
+        // job's group, otherwise hide it as not-found (same as Create).
+        // This blocks cross-tenant template writes via a foreign job id.
+        if (scope.GroupIds is not null && !scope.GroupIds.Contains(groupId))
+            throw new KeyNotFoundException("مهمة الرفع غير موجودة.");
         var signature = payload.TryGetProperty("columnSignature", out var sig) ? sig.GetString() ?? "" : "";
         if (!payload.TryGetProperty("columns", out var columns) || columns.ValueKind != JsonValueKind.Array)
             throw new InvalidDataException("لا يمكن حفظ قالب قبل اكتمال الاستيراد.");
