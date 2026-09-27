@@ -47,7 +47,7 @@ public class EditsService(IUnitOfWork uow, IActivityService activity) : IEditsSe
         string? sortDir = "desc", IReadOnlyList<string>? columns = null,
         IReadOnlyList<string>? users = null, string? source = null, CancellationToken ct = default)
     {
-        page = Math.Max(1, page);
+        page = Math.Clamp(page, 1, 1_000_000);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var (rows, total, manual, upload, formatting) = await uow.RecordEdits.ListPagedAsync(fileId, scope.FileIds, page, pageSize, person, column, oldValue, newValue, version, fromDate, toDate, user, sortBy, sortDir, columns, users, source, ct);
         // Person full name for the history table (V1 UI-12): one lookup for

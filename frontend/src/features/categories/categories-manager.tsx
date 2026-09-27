@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LoadingScreen } from "@/components/loading-screen";
 import { PageHeader } from "@/components/page-header";
 import { TypedDeleteButton } from "@/components/typed-delete-button";
 import { CategoryColumnBoard } from "@/features/categories/category-column-board";
@@ -161,7 +162,7 @@ export function CategoriesManager() {
           {notice.text}
         </p>
       ) : null}
-      {loading ? <p className="text-sm text-muted-foreground">جارٍ التحميل…</p> : null}
+      {loading ? <LoadingScreen message="جارٍ تحميل الفئات…" /> : null}
 
       {!loading && !error ? (
         <>

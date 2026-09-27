@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { DataTableViewport } from "@/components/data-table";
+import { LoadingScreen } from "@/components/loading-screen";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { LogsFilter, type LogsFilters } from "@/features/activity/logs-filter";
@@ -323,7 +324,7 @@ export default function LogsPage() {
               {error}
             </p>
           ) : loading || !items ? (
-            <p className="text-sm text-muted-foreground">جارٍ تحميل كامل السجل…</p>
+            <LoadingScreen message="جارٍ تحميل كامل السجل…" />
           ) : items.length === 0 ? (
             <EmptyState
               title="لا يوجد نشاط مسجل"
@@ -336,8 +337,7 @@ export default function LogsPage() {
             />
           ) : (
             <>
-              <Card>
-                <CardContent className="overflow-x-auto p-0">
+              <DataTableViewport label="سجل النشاط">
                   <table className="w-full min-w-[860px] text-sm">
                     <thead className="bg-muted">
                       <tr>
@@ -395,12 +395,12 @@ export default function LogsPage() {
                                 {actionLabel(log)}
                               </Badge>
                             </td>
-                            <td className="p-4">
+                            <td className="max-w-64 break-words p-4">
                               {visit?.recordId ? (
                                 <Link
                                   href={`/records/${visit.recordId}`}
                                   prefetch={false}
-                                  className="font-semibold text-primary hover:underline"
+                                  className="break-words font-semibold text-primary hover:underline"
                                 >
                                   {log.targetName}
                                 </Link>
@@ -479,8 +479,7 @@ export default function LogsPage() {
                       })}
                     </tbody>
                   </table>
-                </CardContent>
-              </Card>
+              </DataTableViewport>
               {totalPages > 1 ? (
                 <nav aria-label="التنقل بين صفحات السجل" className="flex flex-wrap items-center justify-center gap-2">
                   <Button

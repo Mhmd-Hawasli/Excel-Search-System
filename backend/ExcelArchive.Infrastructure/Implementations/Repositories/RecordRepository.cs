@@ -127,6 +127,48 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
         return false;
     }
 
+    public async Task<IReadOnlyList<DuplicateScanRow>> ListDuplicateScanRowsAsync(Guid fileId,
+        string? shamHeader, string? fullHeader, string? firstHeader, string? fatherHeader,
+        string? lastHeader, string? motherHeader, CancellationToken ct = default)
+    {
+        // SQL-side projection of row_index + six jsonb values on PostgreSQL
+        // (previously whole Record entities incl. full jsonb documents plus all
+        // shadow columns were materialized); portable Data-only scan for
+        // non-relational providers (InMemory unit tests).
+        if (Db.Database.IsNpgsql())
+        {
+            // Note: result aliases must be snake_case — the model-wide naming
+            // convention maps RowIndex to the "row_index" result column.
+            return await Db.Database.SqlQueryRaw<DuplicateScanRow>(
+                "SELECT \"row_index\" AS \"row_index\", " +
+                "COALESCE(\"data\" ->> {1}, '') AS \"sham\", COALESCE(\"data\" ->> {2}, '') AS \"full\", " +
+                "COALESCE(\"data\" ->> {3}, '') AS \"first\", COALESCE(\"data\" ->> {4}, '') AS \"father\", " +
+                "COALESCE(\"data\" ->> {5}, '') AS \"last\", COALESCE(\"data\" ->> {6}, '') AS \"mother\" " +
+                "FROM \"records\" WHERE \"file_id\" = {0} ORDER BY \"row_index\"",
+                fileId, shamHeader ?? "", fullHeader ?? "", firstHeader ?? "",
+                fatherHeader ?? "", lastHeader ?? "", motherHeader ?? "").ToListAsync(ct);
+        }
+        var docs = await Db.Records.AsNoTracking()
+            .Where(r => r.FileId == fileId)
+            .OrderBy(r => r.RowIndex)
+            .Select(r => new { r.RowIndex, r.Data })
+            .ToListAsync(ct);
+        string Value(System.Text.Json.JsonDocument? doc, string? header)
+        {
+            if (doc is null || header is null) return "";
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object) return "";
+            if (!doc.RootElement.TryGetProperty(header, out var prop)) return "";
+            return prop.ValueKind == System.Text.Json.JsonValueKind.String
+                ? prop.GetString() ?? ""
+                : prop.ValueKind is System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.Undefined
+                    ? "" : prop.GetRawText();
+        }
+        return docs.Select(d => new DuplicateScanRow(d.RowIndex,
+            Value(d.Data, shamHeader), Value(d.Data, fullHeader), Value(d.Data, firstHeader),
+            Value(d.Data, fatherHeader), Value(d.Data, lastHeader), Value(d.Data, motherHeader)))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<string>> ListDistinctValuesAsync(Guid fileId, string headerRaw, int take, CancellationToken ct = default)
     {
         var limit = Math.Clamp(take, 1, 200);

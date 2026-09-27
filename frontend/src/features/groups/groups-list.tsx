@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
@@ -72,7 +72,7 @@ export function GroupsList() {
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
-        <div className="grid gap-4"><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div>
+        <LoadingScreen message="جارٍ تحميل المجموعات…" />
       ) : !groups?.length ? (
         <EmptyState title="لا توجد مجموعات بعد" description="أنشئ المجموعة الأولى، وبعدها ستتمكن من رفع ملفات Excel إليها." />
       ) : (

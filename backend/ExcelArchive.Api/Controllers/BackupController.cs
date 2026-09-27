@@ -11,6 +11,7 @@ public class BackupController(IBackupService backup, IAuthService auth) : ApiCon
         var user = await RequirePermissionAsync(Permissions.BackupExport);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
         var bytes = await backup.ExportAsync();
+        Response.Headers.CacheControl = "no-store";
         Response.Headers.ContentDisposition =
             $"attachment; filename=\"excel-archive-backup-{DateTime.UtcNow:yyyy-MM-dd}.json\"";
         return File(bytes, "application/json; charset=utf-8");
@@ -45,6 +46,7 @@ public class BackupController(IBackupService backup, IAuthService auth) : ApiCon
         var user = await RequirePermissionAsync(Permissions.BackupExport);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
         var bytes = await backup.ExportAccountsAsync();
+        Response.Headers.CacheControl = "no-store";
         Response.Headers.ContentDisposition =
             $"attachment; filename=\"excel-archive-accounts-{DateTime.UtcNow:yyyy-MM-dd}.json\"";
         return File(bytes, "application/json; charset=utf-8");

@@ -39,6 +39,11 @@ CREATE TRIGGER files_conflict_cache_changed
 AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON files
 FOR EACH STATEMENT EXECUTE FUNCTION public.invalidate_conflict_query_cache();
 
+DROP TRIGGER IF EXISTS groups_conflict_cache_changed ON groups;
+CREATE TRIGGER groups_conflict_cache_changed
+AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON groups
+FOR EACH STATEMENT EXECUTE FUNCTION public.invalidate_conflict_query_cache();
+
 DROP TRIGGER IF EXISTS file_columns_conflict_cache_changed ON file_columns;
 CREATE TRIGGER file_columns_conflict_cache_changed
 AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON file_columns

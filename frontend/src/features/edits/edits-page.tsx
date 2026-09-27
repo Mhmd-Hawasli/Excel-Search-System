@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, FileSpreadsheet, PencilLine } from "lucide-react";
+import { FileSpreadsheet, PencilLine } from "lucide-react";
+import { ExportButton } from "@/components/export-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
+import { LoadingScreen } from "@/components/loading-screen";
 import { PageHeader } from "@/components/page-header";
 import { hasPermission } from "@/lib/permissions";
+import { formatIsoDateTime } from "@/lib/format/date";
 import { authService } from "@/services/auth.service";
 import { editsService, type EditedFileSummary } from "@/services/edits.service";
 import { cn } from "@/lib/cn";
@@ -68,7 +71,7 @@ export function EditsPage() {
         </p>
       ) : null}
 
-      {loading ? <p className="text-sm text-muted-foreground">جارٍ التحميل…</p> : null}
+      {loading ? <LoadingScreen message="جارٍ تحميل التعديلات…" /> : null}
 
       {!loading && !error ? (
         <Card className="border-2 shadow-sm">
@@ -133,7 +136,10 @@ export function EditsPage() {
                             ) : null}
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {file.groupName} • {file.editCount} تعديل • آخر تعديل {file.lastEditAt}
+                            {file.groupName} • {file.editCount} تعديل • آخر تعديل{" "}
+                            <time className="ltr-numbers" dateTime={file.lastEditAt}>
+                              {formatIsoDateTime(file.lastEditAt)}
+                            </time>
                           </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap gap-2">
@@ -141,12 +147,7 @@ export function EditsPage() {
                             <Link href={`/edits/${file.fileId}`}>عرض السجل</Link>
                           </Button>
                           {canExport ? (
-                            <Button type="button" variant="outline" size="sm" asChild>
-                              <a href={editsService.exportUrl(file.fileId, markEdits)}>
-                                <Download className="size-4" />
-                                تصدير الملف
-                              </a>
-                            </Button>
+                            <ExportButton href={editsService.exportUrl(file.fileId, markEdits)} label="تصدير الملف" size="sm" />
                           ) : null}
                         </div>
                       </div>

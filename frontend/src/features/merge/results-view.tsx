@@ -12,6 +12,8 @@ import {
   RotateCcw,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useExportLock } from "@/lib/export-lock";
 import { mergeService, type MergeRunResult, type MergeRuleStat } from "@/services/misc.service";
 
 export type MergeClientResult = MergeRunResult;
@@ -183,9 +185,14 @@ export function ResultsView({
   const [exportProgress, setExportProgress] = useState(0);
   const [exportDetail, setExportDetail] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const { blocked: exportBlocked, tryAcquire: tryAcquireExport, release: releaseExport } = useExportLock();
 
   async function downloadExport(scope: "confirmed" | "all") {
     if (exporting) return;
+    if (!tryAcquireExport()) {
+      toast.info("يوجد تصدير جارٍ — انتظر انتهاءه ثم أعد المحاولة.");
+      return;
+    }
     setExporting(scope);
     setExportError(null);
     setExportProgress(0);
@@ -205,6 +212,7 @@ export function ResultsView({
       setExportError(error instanceof Error ? error.message : "تعذر تصدير الملف.");
     } finally {
       setExporting(null);
+      releaseExport();
     }
   }
 
@@ -228,8 +236,8 @@ export function ResultsView({
           <Button
             variant="default"
             onClick={() => void downloadExport("confirmed")}
-            disabled={exporting !== null}
-            title="ملف Excel بالحالات المرتبطة المؤكدة فقط"
+            disabled={exporting !== null || exportBlocked}
+            title={exportBlocked && exporting === null ? "يوجد تصدير جارٍ — انتظر انتهاءه" : "ملف Excel بالحالات المرتبطة المؤكدة فقط"}
           >
             {exporting === "confirmed" ? (
               <LoaderCircle className="size-4 animate-spin" />
@@ -241,8 +249,8 @@ export function ResultsView({
           <Button
             variant="outline"
             onClick={() => void downloadExport("all")}
-            disabled={exporting !== null}
-            title="ملف Excel: صفحة الدمج تحوي الأزواج المرتبطة فقط (inner join) وصفحتا الجدولين تحويان جميع الصفوف مع عمود التأكد"
+            disabled={exporting !== null || exportBlocked}
+            title={exportBlocked && exporting === null ? "يوجد تصدير جارٍ — انتظر انتهاءه" : "ملف Excel: صفحة الدمج تحوي الأزواج المرتبطة فقط (inner join) وصفحتا الجدولين تحويان جميع الصفوف مع عمود التأكد"}
           >
             {exporting === "all" ? (
               <LoaderCircle className="size-4 animate-spin" />

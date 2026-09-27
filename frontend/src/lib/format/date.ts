@@ -86,3 +86,11 @@ export function formatUploadDateTime(value: Date) {
   const hour12 = hour % 12 || 12;
   return `${pad(value.getDate())}/${pad(value.getMonth() + 1)}/${value.getFullYear()} ${pad(hour12)}:${pad(value.getMinutes())} ${period}`;
 }
+
+/** VA-04: تنسيق عربي موحد لسلاسل ISO — يعيد النص الأصلي عند القيمة الفاسدة. */
+export function formatIsoDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return formatUploadDateTime(date);
+}

@@ -22,7 +22,7 @@ public static class ExcelCellReader
     public static string CellText(IXLCell cell)
     {
         var sheet = cell.Worksheet?.Name ?? "غير معروف";
-        var address = cell.Address.ToString();
+        var address = "غير معروف";
         try { address = cell.Address.ToString() ?? address; }
         catch { /* keep fallback */ }
 
@@ -34,7 +34,7 @@ public static class ExcelCellReader
         }
 
         if (cell.HasRichText)
-            return cell.GetRichText().Text;
+            return cell.GetRichText().Text ?? "";
 
         return ScalarText(cell, cell.Value, sheet, address);
     }

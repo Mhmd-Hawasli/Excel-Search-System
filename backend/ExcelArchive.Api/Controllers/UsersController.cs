@@ -46,11 +46,16 @@ public class UsersController(IUserService users, IAuthService auth) : ApiControl
         if (body.ValueKind != JsonValueKind.Object) return Bad("بيانات المستخدم غير صالحة.");
         var hasDisplay = body.TryGetProperty("displayName", out var displayProp)
             || body.TryGetProperty("displayname", out displayProp);
+        if (hasDisplay && displayProp.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+            return Bad("اسم العرض غير صالح.");
         string? display = hasDisplay
             ? (displayProp.ValueKind == JsonValueKind.Null ? null : displayProp.GetString())
             : null;
-        bool? isActive = body.TryGetProperty("isActive", out var activeProp) ||
-            body.TryGetProperty("isactive", out activeProp)
+        var hasActive = body.TryGetProperty("isActive", out var activeProp)
+            || body.TryGetProperty("isactive", out activeProp);
+        if (hasActive && activeProp.ValueKind is not (JsonValueKind.True or JsonValueKind.False or JsonValueKind.Null))
+            return Bad("حالة المستخدم غير صالحة.");
+        bool? isActive = hasActive
             ? activeProp.ValueKind switch
             {
                 JsonValueKind.True => true,
@@ -58,8 +63,10 @@ public class UsersController(IUserService users, IAuthService auth) : ApiControl
                 _ => (bool?)null,
             }
             : null;
-        string? password = body.TryGetProperty("password", out var passwordProp) &&
-            passwordProp.ValueKind == JsonValueKind.String
+        var hasPassword = body.TryGetProperty("password", out var passwordProp);
+        if (hasPassword && passwordProp.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+            return Bad("كلمة المرور غير صالحة.");
+        string? password = hasPassword && passwordProp.ValueKind == JsonValueKind.String
             ? passwordProp.GetString()
             : null;
         var request = new UpdateUserRequest(display, hasDisplay, isActive, password);

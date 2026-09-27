@@ -43,7 +43,7 @@ public sealed class SearchRepository(IConfiguration config) : ISearchRepository
             .Select(b => $"WHEN {b.Sql} THEN {DisplayColumn(plan.Fields.First(f => f.Key == b.Key))}").ToList();
         var rank = $"CASE WHEN ({string.Join(" OR ", exact)}) THEN 0 WHEN ({string.Join(" OR ", prefix)}) THEN 1 " +
             $"WHEN ({string.Join(" OR ", conditions)}) THEN 2 WHEN ({string.Join(" OR ", fuzzy)}) THEN 3 ELSE 4 END";
-        var offset = (page - 1) * pageSize;
+        var offset = ((long)page - 1) * pageSize;
 
         using var conn = new NpgsqlConnection(ConnectionString);
         await conn.OpenAsync(ct);

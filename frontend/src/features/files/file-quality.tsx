@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { filesService } from "@/services/files.service";
 
@@ -25,14 +25,8 @@ const labels: Record<string, string> = {
 export function FileQuality({ groupId, fileId }: { groupId: string; fileId: string }) {
   const { data, loading, error } = useApiQuery(() => filesService.quality(fileId, groupId), [fileId, groupId]);
 
-  if (loading || !data) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
+  if (loading && !data) {
+    return <LoadingScreen message="جارٍ تحميل تقرير الجودة…" />;
   }
   if (error) {
     return (
@@ -47,6 +41,7 @@ export function FileQuality({ groupId, fileId }: { groupId: string; fileId: stri
       </div>
     );
   }
+  if (!data) return <p role="alert" className="text-sm text-destructive">تعذر تحميل تقرير الجودة.</p>;
 
   return (
     <div className="space-y-7">

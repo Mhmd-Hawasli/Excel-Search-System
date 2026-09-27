@@ -16,6 +16,8 @@ public class ActivityController(IActivityService activity, IAuthService auth) : 
         // and groups.viewPrivate holders keep seeing their rows).
         var user = await RequirePermissionAsync(Permissions.ActivityBrowse);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 1000)
+            return Bad("رقم الصفحة أو حجمها خارج النطاق.");
         var visibility = new ActivityVisibility(user.Id,
             Auth.HasPermission(user, Permissions.GroupsViewPrivate));
         return Ok(await activity.ListAsync(new ActivityFilterRequest(page, pageSize, action, search, visibility)));

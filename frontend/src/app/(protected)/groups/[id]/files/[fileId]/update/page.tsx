@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { FileUpdateWizard } from "@/features/files/file-update-wizard";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
@@ -35,12 +35,7 @@ export default function FileUpdatePage() {
   }
 
   if (loadingFile || !detail) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-40 w-full" />
-      </div>
-    );
+    return <LoadingScreen message="جارٍ تحميل بيانات التحديث…" />;
   }
 
   return (

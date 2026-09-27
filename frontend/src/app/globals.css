@@ -481,6 +481,13 @@
     }
   }
   @media (max-width: 639px) {
+    .dashboard-shell,
+    .dashboard-shell[data-collapsed="true"] {
+      --sidebar-width: 0px;
+    }
+    .dashboard-sidebar {
+      display: none;
+    }
     .dashboard-topbar {
       grid-template-columns: 1fr auto;
       gap: 10px;

@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowUp, ArrowUpDown, ExternalLink, Loader2, Search } from "lucide-react";
+import { ExternalLink, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
 import { Pager } from "@/components/pager";
+import { DataTableViewport, SortableTableHeader } from "@/components/data-table";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatFunctionalCategory, formatNationalId, formatShamCash } from "@/lib/conflict-format";
 import { computeHighlightRanges } from "@/lib/highlight";
@@ -314,7 +315,7 @@ export function SearchResults() {
               role="tab"
               aria-selected={filters.mode === "full"}
               className={cn(
-                "flex-1 rounded-md px-4 py-2 text-sm font-bold",
+                "min-w-0 flex-1 whitespace-nowrap rounded-md px-2 py-2 text-xs font-bold sm:px-4 sm:text-sm",
                 filters.mode === "full" ? "bg-background shadow-sm" : "text-muted-foreground",
               )}
               onClick={() => update({ mode: "full" }, true)}
@@ -326,7 +327,7 @@ export function SearchResults() {
               role="tab"
               aria-selected={filters.mode === "custom"}
               className={cn(
-                "flex-1 rounded-md px-4 py-2 text-sm font-bold",
+                "min-w-0 flex-1 whitespace-nowrap rounded-md px-2 py-2 text-xs font-bold sm:px-4 sm:text-sm",
                 filters.mode === "custom" ? "bg-background shadow-sm" : "text-muted-foreground",
               )}
               onClick={() => update({ mode: "custom", field: filters.field || "full_name" }, true)}
@@ -338,7 +339,7 @@ export function SearchResults() {
               role="tab"
               aria-selected={filters.mode === "bulk"}
               className={cn(
-                "flex-1 rounded-md px-4 py-2 text-sm font-bold",
+                "min-w-0 flex-1 whitespace-nowrap rounded-md px-2 py-2 text-xs font-bold sm:px-4 sm:text-sm",
                 filters.mode === "bulk" ? "bg-background shadow-sm" : "text-muted-foreground",
               )}
               onClick={() => update({ mode: "bulk" }, true)}
@@ -469,29 +470,13 @@ export function SearchResults() {
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto rounded-xl border bg-card">
+                <DataTableViewport>
                   <table className="w-full min-w-[1450px] text-sm">
                     <thead className="bg-muted/70">
                       <tr>
                         {SORT_COLUMNS.map((column) => {
                           const active = filters.sortBy === column.key;
-                          return (
-                            <th key={column.key} scope="col" className="p-0 text-right font-bold" aria-sort={active ? (filters.sortDir === "asc" ? "ascending" : "descending") : "none"}>
-                              <button
-                                type="button"
-                                onClick={() => toggleSort(column.key)}
-                                className="group flex w-full items-center gap-2 p-3 text-right transition hover:bg-muted"
-                                title={active && filters.sortDir === "asc" ? "ترتيب تنازلي" : "ترتيب تصاعدي"}
-                              >
-                                <span>{column.label}</span>
-                                {active ? (
-                                  <ArrowUp aria-hidden="true" className={cn("size-4 shrink-0 text-primary", filters.sortDir === "desc" && "rotate-180")} />
-                                ) : (
-                                  <ArrowUpDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/60 transition group-hover:text-foreground" />
-                                )}
-                              </button>
-                            </th>
-                          );
+                          return <SortableTableHeader key={column.key} label={column.label} active={active} direction={filters.sortDir} onSort={() => toggleSort(column.key)} />;
                         })}
                         <th scope="col" className="p-3 text-right font-bold">
                           المطابقة
@@ -577,7 +562,7 @@ export function SearchResults() {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </DataTableViewport>
                 <div className="flex flex-wrap items-center gap-3">
                   <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => update({ page })} />
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">

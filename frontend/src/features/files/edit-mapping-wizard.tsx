@@ -10,6 +10,7 @@ import { STANDARD_FIELD_KEYS, STANDARD_FIELD_LABELS } from "@/lib/standard-field
 import { CategorySelector } from "@/features/categories/category-selector";
 import { FieldMappingSelect } from "@/features/fields/field-mapping-select";
 import { Button } from "@/components/ui/button";
+import { DataTableViewport } from "@/components/data-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ApiError } from "@/services/api-client";
@@ -188,12 +189,12 @@ export function EditMappingWizard({
         <CardContent className="space-y-5">
           {step === 0 ? (
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-lg border">
+              <DataTableViewport label="ربط أعمدة Excel">
                 <table className="w-full min-w-[560px] text-sm">
                   <thead className="bg-muted">
                     <tr>
-                      <th className="w-2/5 p-3 text-right">الحقل القياسي في النظام</th>
-                      <th className="p-3 text-right">عمود Excel المرتبط</th>
+                      <th className="w-2/5 whitespace-nowrap p-3 text-right">الحقل القياسي في النظام</th>
+                      <th className="whitespace-nowrap p-3 text-right">عمود Excel المرتبط</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -253,7 +254,7 @@ export function EditMappingWizard({
                     })}
                   </tbody>
                 </table>
-              </div>
+              </DataTableViewport>
               {pkChanged ? (
                 <div
                   role="alert"

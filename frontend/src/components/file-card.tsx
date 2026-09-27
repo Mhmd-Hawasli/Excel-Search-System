@@ -54,7 +54,7 @@ export function FileCard({
           {hasEdits && (
             <Badge
               variant="outline"
-              className="gap-1 border-amber-500/25 bg-amber-500/10 px-1.5 text-amber-700 dark:text-amber-300"
+              className="gap-1 whitespace-nowrap border-amber-500/25 bg-amber-500/10 px-1.5 text-amber-700 dark:text-amber-300"
             >
               <PencilLine className="size-3" />
               معدّل
@@ -80,7 +80,7 @@ export function FileCard({
           {!compact && (
             <>
               <span aria-hidden="true">·</span>
-              <time className="ltr-numbers" dateTime={uploadedAt.toISOString()}>
+              <time className="whitespace-nowrap ltr-numbers" dateTime={uploadedAt.toISOString()}>
                 {formatUploadDateTime(uploadedAt)}
               </time>
             </>
@@ -99,7 +99,7 @@ export function FileCard({
           </Badge>
           {compact && (
             <time
-              className="block text-[12px] text-muted-foreground ltr-numbers"
+              className="block whitespace-nowrap text-[12px] text-muted-foreground ltr-numbers"
               dateTime={uploadedAt.toISOString()}
             >
               {formatUploadDateTime(uploadedAt)}

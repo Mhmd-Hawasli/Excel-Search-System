@@ -269,9 +269,7 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
             DisplayName = ArchivePlan.OptText(el, "displayName"),
             IsActive = el.TryGetProperty("isActive", out var active) && active.ValueKind == JsonValueKind.True,
             CreatedAt = ArchivePlan.ReqDate(el, "createdAt"),
-            UpdatedAt = el.TryGetProperty("updatedAt", out var updated) && updated.ValueKind == JsonValueKind.String
-                && DateTime.TryParse(updated.GetString(), out var date)
-                ? DateTime.SpecifyKind(date, DateTimeKind.Utc) : ArchivePlan.ReqDate(el, "createdAt"),
+            UpdatedAt = ArchivePlan.OptDate(el, "updatedAt") ?? ArchivePlan.ReqDate(el, "createdAt"),
         };
 
         static (Guid Id, Guid UserId, string Permission, Guid? GroupId, Guid? FileId, DateTime CreatedAt)

@@ -7,6 +7,7 @@ import { useLocalStorageFlag } from "@/hooks/use-local-storage-flag";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Archive,
+  BarChart3,
   ChevronLeft,
   DatabaseBackup,
   Download,
@@ -38,6 +39,7 @@ const fullNavigation: NavigationSection[] = [
     label: "مساحة العمل",
     links: [
       { href: "/", label: "الرئيسية", icon: LayoutDashboard },
+      { href: "/stats", label: "الاحصائيات", icon: BarChart3 },
       { href: "/search", label: "البحث", icon: Search, permission: "search.view" },
       { href: "/groups", label: "المجموعات", icon: FolderKanban, permission: "groups.browse" },
       { href: "/settings/categories", label: "الفئات", icon: Settings2, permission: "categories.view" },
@@ -217,8 +219,28 @@ export function AppShell({
   const currentSection = navigation.find((section) =>
     section.links.some((link) => isActive(pathname, link.href)),
   );
-  const currentPage =
-    currentSection?.links.find((link) => isActive(pathname, link.href))?.label ?? "تفاصيل السجل";
+  const currentLink = currentSection?.links.find((link) => isActive(pathname, link.href));
+  const currentPage = currentLink?.label ?? "تفاصيل السجل";
+
+  // الصفحات الفرعية للإحصائيات ليست في القائمة الجانبية (تُفتح من البطاقات)،
+  // فنحدد مسار تنقلها صراحةً وإلا ظهرت باسم رابط الأب فقط.
+  const statsChildLabel: Record<string, string> = {
+    "/stats/conflicts": "احصائيات تضارب البيانات",
+    "/stats/edits": "احصائيات تعديل السجلات",
+    "/stats/files": "احصائيات الملفات",
+  };
+  const statsChild = statsChildLabel[pathname];
+  const crumb =
+    statsChild !== undefined
+      ? { sectionLabel: "الاحصائيات", sectionHref: "/stats", pageLabel: statsChild, pageHref: pathname }
+      : currentLink && currentSection
+        ? {
+            sectionLabel: currentSection.label,
+            sectionHref: currentSection.links[0]?.href ?? "/",
+            pageLabel: currentPage,
+            pageHref: currentLink.href,
+          }
+        : null;
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
@@ -291,16 +313,38 @@ export function AppShell({
                   <PanelRightOpen className="size-5" />
                 </Button>
               </Dialog.Trigger>
-              <div className="topbar-breadcrumb" aria-label="الموقع الحالي">
-                <span className="hidden text-muted-foreground xl:inline">
-                  {currentSection?.label ?? "الأرشيف"}
-                </span>
-                <ChevronLeft
-                  className="hidden size-3.5 text-muted-foreground xl:block"
-                  aria-hidden="true"
-                />
-                <span className="truncate font-semibold">{currentPage}</span>
-              </div>
+              <nav className="topbar-breadcrumb" aria-label="الموقع الحالي">
+                {crumb ? (
+                  <>
+                    <Link
+                      href={crumb.sectionHref}
+                      className="hidden shrink-0 text-muted-foreground transition hover:text-foreground xl:inline"
+                    >
+                      {crumb.sectionLabel}
+                    </Link>
+                    <ChevronLeft
+                      className="hidden size-3.5 shrink-0 text-muted-foreground xl:block"
+                      aria-hidden="true"
+                    />
+                    <Link
+                      href={crumb.pageHref}
+                      className="truncate font-semibold transition hover:text-primary"
+                      aria-current="page"
+                    >
+                      {crumb.pageLabel}
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden shrink-0 text-muted-foreground xl:inline">الأرشيف</span>
+                    <ChevronLeft
+                      className="hidden size-3.5 shrink-0 text-muted-foreground xl:block"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate font-semibold">{currentPage}</span>
+                  </>
+                )}
+              </nav>
             </div>
             {canSearch ? (
               <form action="/search" role="search" className="global-search">

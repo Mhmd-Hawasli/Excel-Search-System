@@ -70,6 +70,21 @@ public sealed class ScopedArchiveQuery(IUnitOfWork uow) : IScopedArchiveQuery
             foreach (var id in await uow.Files.GroupIdsByFileIdsAsync(files, ct)) groups.Add(id);
         }
 
+        if (!canViewPrivate && groups.Count > 0)
+        {
+            // An older scoped grant may still point to a group that was later
+            // made private or transferred. Ownership, not the stale grant,
+            // controls visibility of that group's records and files.
+            var visibleGroupIds = (await uow.Groups.ListAsync(
+                g => !g.IsPrivate || g.OwnerUserId == user.Id, ct))
+                .Select(g => g.Id).ToHashSet();
+            groups.IntersectWith(visibleGroupIds);
+            var visibleFileIds = groups.Count > 0
+                ? (await uow.Files.FileIdsByGroupIdsAsync(groups.ToList(), ct)).ToHashSet()
+                : new HashSet<Guid>();
+            files.IntersectWith(visibleFileIds);
+        }
+
         return new DataScopeDto { GroupIds = groups.ToList(), FileIds = files.ToList() };
     }
 

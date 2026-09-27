@@ -89,36 +89,35 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         if (sham is null && (mother is null || (full is null && first is null))) return [];
         var shamRows = new Dictionary<string, List<(int Row, string Raw)>>(StringComparer.Ordinal);
         var personRows = new Dictionary<string, List<(int Row, string Raw)>>(StringComparer.Ordinal);
-        foreach (var record in await uow.Records.ListExportRowsAsync(fileId, ct))
+        // Narrow SQL projection (row_index + six raw values) instead of full
+        // Record entities — same grouping logic, far less I/O.
+        foreach (var row in await uow.Records.ListDuplicateScanRowsAsync(
+            fileId, sham, full, first, father, last, mother, ct))
         {
             ct.ThrowIfCancellationRequested();
-            if (record.Data?.RootElement.ValueKind != JsonValueKind.Object) continue;
-            var data = record.Data.RootElement;
-            string Value(string? header) => header is not null && data.TryGetProperty(header, out var v)
-                ? v.ToString().Trim() : "";
             if (sham is not null)
             {
-                var raw = Value(sham);
+                var raw = row.Sham.Trim();
                 var key = ShamCash.Normalize(raw);
                 if (key is not null)
                 {
                     if (!shamRows.TryGetValue(key, out var rows)) shamRows[key] = rows = [];
-                    rows.Add((record.RowIndex, raw));
+                    rows.Add((row.RowIndex, raw));
                 }
             }
             if (mother is not null)
             {
-                var name = full is not null ? Value(full)
-                    : string.Join(" ", new[] { Value(first), Value(father), Value(last) }
+                var name = full is not null ? row.Full.Trim()
+                    : string.Join(" ", new[] { row.First.Trim(), row.Father.Trim(), row.Last.Trim() }
                         .Where(s => s.Length > 0));
-                var motherName = Value(mother);
+                var motherName = row.Mother.Trim();
                 var nameKey = ArabicNormalizer.NormalizeStored(name);
                 var motherKey = ArabicNormalizer.NormalizeStored(motherName);
                 if (nameKey.Length > 0 && motherKey.Length > 0)
                 {
                     var key = nameKey + "\u001f" + motherKey;
                     if (!personRows.TryGetValue(key, out var rows)) personRows[key] = rows = [];
-                    rows.Add((record.RowIndex, name + " | " + motherName));
+                    rows.Add((row.RowIndex, name + " | " + motherName));
                 }
             }
         }
@@ -740,15 +739,14 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
             await uow.SaveChangesAsync(ct);
             existing = await uow.FileVersions.ListByFileAsync(fileId, ct);
         }
-        var edits = await uow.RecordEdits.ListAsync(e => e.FileId == fileId, ct);
-        var counts = edits.GroupBy(e => e.FileVersion).ToDictionary(g => g.Key, g => (long)g.Count());
-        var pending = edits.Count(e => e.RecordId != null && !e.IsBulk);
+        var counts = await uow.RecordEdits.CountByVersionAsync(fileId, ct);
+        var pending = await uow.RecordEdits.CountPendingAsync(fileId, ct);
         var versions = existing
             .OrderByDescending(v => v.Version)
             .Select(v => new FileVersionDto(v.Id, v.FileId, v.Version, v.Note, v.Kind,
                 v.CreatedBy, v.CreatedAt, counts.TryGetValue(v.Version, out var c) ? c : 0,
                 v.Version == file.Version || v.SnapshotGzip is not null))
             .ToList();
-        return new FileVersionsResponse(fileId, file.Version, pending, versions);
+        return new FileVersionsResponse(fileId, file.Version, (int)Math.Min(pending, int.MaxValue), versions);
     }
 }

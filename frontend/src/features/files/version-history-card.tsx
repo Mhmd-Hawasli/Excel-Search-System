@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Download, History, PencilLine } from "lucide-react";
+import { History, PencilLine } from "lucide-react";
+import { ExportButton } from "@/components/export-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useApiQuery } from "@/hooks/use-api-query";
+import { LoadingScreen } from "@/components/loading-screen";
 import { formatUploadDateTime } from "@/lib/format/date";
-import { filesService } from "@/services/files.service";
+import type { FileVersions } from "@/services/files.service";
 
 const KIND_LABELS: Record<string, string> = {
   manual: "رفع يدوي",
@@ -18,13 +18,19 @@ const KIND_LABELS: Record<string, string> = {
   seed: "إصدار سابق",
 };
 
-export function VersionHistoryCard({ fileId, canExport, canViewHistory = true }: { fileId: string; canExport: boolean; canViewHistory?: boolean }) {
-  const { data, loading } = useApiQuery(() => filesService.listVersions(fileId), [fileId]);
+export function VersionHistoryCard({ fileId, versions, loading, canExport, canViewHistory = true }: {
+  fileId: string;
+  versions: FileVersions | null;
+  loading: boolean;
+  canExport: boolean;
+  canViewHistory?: boolean;
+}) {
   const [markEdits, setMarkEdits] = useState(false);
 
   if (loading) {
-    return <Skeleton className="h-32 w-full" />;
+    return <LoadingScreen message="جارٍ تحميل سجل الإصدارات…" />;
   }
+  const data = versions;
   if (!data || data.versions.length === 0) return null;
 
   return (
@@ -76,12 +82,11 @@ export function VersionHistoryCard({ fileId, canExport, canViewHistory = true }:
                   </Button>
                 ) : null}
                 {canExport && entry.canExport ? (
-                  <Button asChild size="sm" variant="outline" title={`تنزيل نسخة الإصدار ${entry.version}`}>
-                    <a href={`/api/files/${fileId}/export?version=${entry.version}${markEdits ? "&markEdits=true" : ""}`}>
-                      <Download className="size-4" />
-                      تصدير الإصدار {entry.version}
-                    </a>
-                  </Button>
+                  <ExportButton
+                    href={`/api/files/${fileId}/export?version=${entry.version}${markEdits ? "&markEdits=true" : ""}`}
+                    label={`تصدير الإصدار ${entry.version}`}
+                    size="sm"
+                  />
                 ) : canExport ? <span className="text-xs text-muted-foreground">لا تتوفر نسخة دقيقة محفوظة لهذا الإصدار</span> : null}
               </div>
             </li>

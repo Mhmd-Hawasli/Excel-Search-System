@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
+import { useExportLock } from "@/lib/export-lock";
 import {
   sheetMergeService,
   type SheetMergeRunResult,
@@ -190,10 +192,16 @@ export function SheetMergeResults({
   const [exportProgress, setExportProgress] = useState(0);
   const [exportDetail, setExportDetail] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const { blocked: exportBlocked, tryAcquire: tryAcquireExport, release: releaseExport } = useExportLock();
   const unlinkedTotal = result.sheets.reduce((sum, sheet) => sum + sheet.unlinkedTotal, 0);
   const complete = result.linkPercent >= 100;
 
   async function exportFile() {
+    if (exporting) return;
+    if (!tryAcquireExport()) {
+      toast.info("يوجد تصدير جارٍ — انتظر انتهاءه ثم أعد المحاولة.");
+      return;
+    }
     setExporting(true);
     setExportError(null);
     setExportProgress(0);
@@ -211,6 +219,7 @@ export function SheetMergeResults({
       setExportError(error instanceof Error ? error.message : "تعذر تصدير الملف.");
     } finally {
       setExporting(false);
+      releaseExport();
     }
   }
 
@@ -243,7 +252,11 @@ export function SheetMergeResults({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => void exportFile()} disabled={exporting}>
+          <Button
+            onClick={() => void exportFile()}
+            disabled={exporting || exportBlocked}
+            title={exportBlocked && !exporting ? "يوجد تصدير جارٍ — انتظر انتهاءه" : undefined}
+          >
             {exporting ? (
               <LoaderCircle className="size-4 animate-spin" />
             ) : (

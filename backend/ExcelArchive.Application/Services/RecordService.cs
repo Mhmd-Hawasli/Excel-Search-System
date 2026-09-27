@@ -211,8 +211,11 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
         var (data, byField) = ParseManualValues(columns, request?.Values);
         await EnsureUniqueInFileAsync(fileId, columns, data, byField, ct);
         var pkColumn = columns.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
-        if (pkColumn is not null)
+        if (pkColumn is not null
+            && data.TryGetValue(pkColumn.HeaderRaw, out var rawPk)
+            && !string.IsNullOrWhiteSpace(rawPk))
             await ValidatePkAsync(file, data, pkColumn.HeaderRaw, ct);
+        // غياب pk يعني توليدًا تلقائيًا (n+1) عند الإنشاء — لا خطأ هنا.
     }
 
     public async Task<ManualRecordCreatedDto> CreateManualAsync(Guid fileId, CreateManualRecordRequest request, CurrentUserDto user, CancellationToken ct = default)
@@ -240,28 +243,42 @@ public class RecordService(IUnitOfWork uow, IAuthService auth, IActivityService 
         var rowIndex = await uow.Records.GetMaxRowIndexAsync(fileId, ct) + 1;
         long? pk = null;
         var pkColumn = columns.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
-        if (pkColumn is not null)
+        // pk الغائب أو الفارغ يُولّد تلقائيًا (n+1) داخل المعاملة من NextPk الطازج.
+        var pkAuto = pkColumn is null
+            || !data.TryGetValue(pkColumn.HeaderRaw, out var rawPk)
+            || string.IsNullOrWhiteSpace(rawPk);
+        if (!pkAuto)
         {
-            pk = await ValidatePkAsync(file, data, pkColumn.HeaderRaw, ct);
+            pk = await ValidatePkAsync(file, data, pkColumn!.HeaderRaw, ct);
             data[pkColumn.HeaderRaw] = pk.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
-
-        var record = new Record
-        {
-            FileId = fileId,
-            RowIndex = rowIndex,
-            Pk = pk,
-            Data = System.Text.Json.JsonSerializer.SerializeToDocument(data),
-        };
-        RecordShadowMapper.Apply(record, byField);
 
         Record? created = null;
         await uow.ExecuteInTransactionAsync(async () =>
         {
+            var trackedFile = await uow.Files.FindAsync(fileId, ct);
+            if (pkAuto && pkColumn is not null)
+            {
+                var nextPk = trackedFile?.NextPk ?? file.NextPk;
+                var existing = await uow.Records.ListExportRowsAsync(fileId, ct);
+                var used = new HashSet<long>(existing.Select(r => r.Pk ?? r.RowIndex));
+                while (used.Contains(nextPk)) nextPk++;
+                pk = nextPk;
+                data[pkColumn.HeaderRaw] = pk.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            var record = new Record
+            {
+                FileId = fileId,
+                RowIndex = rowIndex,
+                Pk = pk,
+                Data = System.Text.Json.JsonSerializer.SerializeToDocument(data),
+            };
+            RecordShadowMapper.Apply(record, byField);
+
             uow.Records.Add(record);
             await uow.SaveChangesAsync(ct);
 
-            var trackedFile = await uow.Files.FindAsync(fileId, ct);
             if (trackedFile is not null)
             {
                 trackedFile.RowCount += 1;

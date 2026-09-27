@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using ExcelArchive.Application.DTOs.ActivityDto;
 using ExcelArchive.Application.Interfaces;
+using ExcelArchive.Application.Interfaces.Repositories;
 using ExcelArchive.Domain.Entities;
 using ExcelArchive.Domain.Enums;
 using ExcelArchive.Application.Interfaces.Services;
@@ -11,7 +12,7 @@ public class ActivityService(IUnitOfWork uow) : IActivityService
 {
     public async Task<ActivityResult> ListAsync(ActivityFilterRequest request, CancellationToken ct = default)
     {
-        var page = Math.Max(1, request.Page);
+        var page = Math.Clamp(request.Page, 1, 1_000_000);
         // Logs page loads the full history (client paginates 100/page):
         // rows are small, so a 1000-row window keeps full loads to a few
         // requests. Unknown actions fall back to no filter, never empty.
@@ -24,20 +25,16 @@ public class ActivityService(IUnitOfWork uow) : IActivityService
         ActivityAction? searched = null;
         if (!string.IsNullOrWhiteSpace(request.Search) && TryParseAction(request.Search.Trim(), out var parsedTerm))
             searched = parsedTerm;
-        var (rows, total) = await uow.ActivityLogs.SearchAsync(action, request.Search, searched, page, pageSize, ct);
-
         // Private-group gate: rows leaking foreign private groups (their
         // files, names, or "header — file" targets) are dropped unless the
         // reader owns them or holds groups.viewPrivate. Internal callers
         // pass no visibility and keep the legacy unfiltered behavior.
         // Old rows need no migration: the check reads live group/file ids.
-        PrivateGate? gate = null;
+        ActivityPrivateExclusion? exclusion = null;
         if (request.Visibility is not null && !request.Visibility.CanViewPrivate)
-            gate = await BuildPrivateGateAsync(request.Visibility.UserId, ct);
-        // Hidden rows never reach mapping/enrichment. Note: total stays the
-        // stored count (hidden rows are rare and page-local); the UI counts
-        // what it received.
-        var visible = ApplyPrivateGate(rows, gate);
+            exclusion = await BuildPrivateExclusionAsync(request.Visibility.UserId, ct);
+        var (visible, total) = await uow.ActivityLogs.SearchAsync(
+            action, request.Search, searched, page, pageSize, exclusion, ct);
 
         // Enrich file context for old rows: RECORD_EDITED history never
         // stored fileName/fileVersion (only fileId), while RECORD_VISITED /
@@ -83,47 +80,18 @@ public class ActivityService(IUnitOfWork uow) : IActivityService
             total, page, pageSize);
     }
 
-    /// <summary>Rows leaking a foreign private group are dropped in memory
-    /// (JSON matching is provider-portable, unlike SQL jsonb operators, and
-    /// mirrors ExistsRecentVisitAsync). Filtering happens before mapping so
-    /// hidden rows never reach the API response.</summary>
-    private static IReadOnlyList<ActivityLog> ApplyPrivateGate(
-        IReadOnlyList<ActivityLog> rows, PrivateGate? gate)
-        => gate is null ? rows : rows.Where(r =>
-            !gate.Hides(r.TargetName, FileIdFrom(r.Details), GroupIdFrom(r.Details))).ToList();
-
-    /// <summary>Invisible foreign private groups for one reader: their ids,
-    /// names, file ids and file names (for "header — file" column targets).</summary>
-    private sealed class PrivateGate(
-        HashSet<Guid> GroupIds, HashSet<string> GroupNames,
-        HashSet<Guid> FileIds, HashSet<string> FileNames)
-    {
-        public bool Hides(string targetName, Guid? fileId, Guid? groupId)
-        {
-            if (fileId.HasValue && FileIds.Contains(fileId.Value)) return true;
-            if (groupId.HasValue && GroupIds.Contains(groupId.Value)) return true;
-            if (GroupNames.Contains(targetName)) return true;
-            // Column events target "header — fileName" with no file link in
-            // details; match the exact file suffix.
-            foreach (var name in FileNames)
-            {
-                if (targetName.EndsWith(" — " + name, StringComparison.Ordinal)) return true;
-            }
-            return false;
-        }
-    }
-
-    private async Task<PrivateGate?> BuildPrivateGateAsync(Guid userId, CancellationToken ct)
+    private async Task<ActivityPrivateExclusion?> BuildPrivateExclusionAsync(Guid userId, CancellationToken ct)
     {
         var foreign = await uow.Groups.ListAsync(
             g => g.IsPrivate && g.OwnerUserId != userId, ct);
         if (foreign.Count == 0) return null;
         var groupIds = foreign.Select(g => g.Id).ToHashSet();
-        var groupNames = foreign.Select(g => g.Name).ToHashSet(StringComparer.Ordinal);
         var files = await uow.Files.ListAsync(f => groupIds.Contains(f.GroupId), ct);
-        return new PrivateGate(groupIds, groupNames,
-            files.Select(f => f.Id).ToHashSet(),
-            files.Select(f => f.Name).ToHashSet(StringComparer.Ordinal));
+        return new ActivityPrivateExclusion(
+            groupIds.Select(id => id.ToString("D")).ToArray(),
+            foreign.Select(g => g.Name).Distinct(StringComparer.Ordinal).ToArray(),
+            files.Select(f => f.Id.ToString("D")).Distinct().ToArray(),
+            files.Select(f => " — " + f.Name).Distinct(StringComparer.Ordinal).ToArray());
     }
 
     private static bool IsFileAction(ActivityAction action) => action is
@@ -138,21 +106,6 @@ public class ActivityService(IUnitOfWork uow) : IActivityService
         if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return null;
         var root = doc.RootElement;
         foreach (var key in new[] { "fileId", "previousFileId" })
-        {
-            if (root.TryGetProperty(key, out var prop) && prop.ValueKind == JsonValueKind.String
-                && Guid.TryParse(prop.GetString(), out var id))
-                return id;
-        }
-        return null;
-    }
-
-    /// <summary>Historical groupId from the details JSON ("groupId",
-    /// "movedToGroupId"); null when the event has no group link.</summary>
-    private static Guid? GroupIdFrom(System.Text.Json.JsonDocument? doc)
-    {
-        if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object) return null;
-        var root = doc.RootElement;
-        foreach (var key in new[] { "groupId", "movedToGroupId" })
         {
             if (root.TryGetProperty(key, out var prop) && prop.ValueKind == JsonValueKind.String
                 && Guid.TryParse(prop.GetString(), out var id))

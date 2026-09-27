@@ -19,4 +19,8 @@ public interface IRecordEditRepository : IRepositoryBase<RecordEdit>
     Task<long> CountByFileAsync(Guid fileId, CancellationToken ct = default);
     Task<IReadOnlyList<Guid>> EditedFileIdsAsync(IReadOnlyList<Guid> fileIds, CancellationToken ct = default);
     Task<IReadOnlyList<RecordEdit>> ListByFileAsync(Guid fileId, CancellationToken ct = default);
+    // SQL-side aggregates for the versions endpoint (previously the whole
+    // file's edits were materialized to count per version in memory).
+    Task<Dictionary<int, long>> CountByVersionAsync(Guid fileId, CancellationToken ct = default);
+    Task<long> CountPendingAsync(Guid fileId, CancellationToken ct = default);
 }

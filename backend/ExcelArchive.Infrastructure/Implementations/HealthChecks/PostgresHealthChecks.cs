@@ -57,6 +57,16 @@ public sealed class SearchSchemaHealthCheck(IConfiguration configuration) : IHea
             if (cache < 2)
                 return Task.FromResult(HealthCheckResult.Unhealthy(description:
                     "missing conflict cache tables (conflict_cache_state/conflict_query_cache)"));
+            // Search results share this revision. Every source that changes
+            // their rows, labels, or visibility must invalidate cached pages.
+            var triggers = Scalar(conn,
+                "SELECT COUNT(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN (" +
+                "'records_conflict_cache_changed','files_conflict_cache_changed'," +
+                "'groups_conflict_cache_changed','file_columns_conflict_cache_changed'," +
+                "'upload_jobs_conflict_cache_changed','ignored_conflicts_cache_changed')");
+            if (triggers < 6)
+                return Task.FromResult(HealthCheckResult.Unhealthy(description:
+                    $"missing cache invalidation triggers (found {triggers}/6)"));
             return Task.FromResult(HealthCheckResult.Healthy());
         }
         catch (Exception ex) { return Task.FromResult(HealthCheckResult.Unhealthy(exception: ex)); }

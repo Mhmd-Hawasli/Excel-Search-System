@@ -1,4 +1,4 @@
-﻿using ExcelArchive.Api.Common.Http;
+using ExcelArchive.Api.Common.Http;
 using ExcelArchive.Application.DTOs.AuthDto;
 using ExcelArchive.Application.Common;
 using ExcelArchive.Application.Interfaces.Services;
@@ -21,12 +21,14 @@ public class AuthController(IAuthService auth) : ApiControllerBase(auth)
             return Unauthorized(ApiResponse.Failure("اسم المستخدم أو كلمة المرور غير صحيحة."));
 
         var (user, token) = result.Value;
-        var secure = Request.IsHttps || Request.Headers["X-Forwarded-Proto"].ToString().StartsWith("https");
+
+        // LAN HTTP must keep working: Secure follows the actual request scheme
+        // (false on http://<lan-ip>, true on https). Do NOT hardcode Secure=true.
         Response.Cookies.Append(SessionCookie.Name, token, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Lax,
-            Secure = secure,
+            Secure = Request.IsHttps,
             Path = "/",
             MaxAge = TimeSpan.FromHours(12),
         });
@@ -62,11 +64,12 @@ public class AuthController(IAuthService auth) : ApiControllerBase(auth)
 
     private void ClearSessionCookie()
     {
+        // Same LAN-HTTP rule as login: Secure must mirror Request.IsHttps.
         Response.Cookies.Delete(SessionCookie.Name, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Lax,
-            Secure = Request.IsHttps || Request.Headers["X-Forwarded-Proto"].ToString().StartsWith("https"),
+            Secure = Request.IsHttps,
             Path = "/",
         });
     }

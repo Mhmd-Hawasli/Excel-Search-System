@@ -1,4 +1,4 @@
-import { apiFetchBinary, apiFetchNDJSON, apiPost, buildQuery } from "./api-client";
+import { apiFetchBinary, apiFetchNDJSON, apiPost, apiUploadForm, buildQuery } from "./api-client";
 
 export const backupService = {
   exportUrl: "/api/backup/export",
@@ -107,32 +107,11 @@ export type NdjsonEvent<T> =
   | { type: "error"; error: string };
 
 async function uploadInspection(url: string, file: File, onProgress?: (percent: number) => void): Promise<MergeInspection> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(Math.min(99, Math.round(event.loaded / event.total * 100)));
-    };
-    xhr.upload.onload = () => onProgress?.(100);
-    xhr.onload = () => {
-      try {
-        const body = JSON.parse(xhr.responseText);
-        if (xhr.status < 200 || xhr.status >= 300) {
-          reject(new Error(body?.error ?? "تعذر فحص الملف."));
-          return;
-        }
-        resolve(body.data ?? body);
-      } catch {
-        reject(new Error("تعذر فحص الملف."));
-      }
-    };
-    xhr.onerror = () => reject(new Error("تعذر الاتصال بالخادم."));
-    xhr.onabort = () => reject(new Error("تم إلغاء رفع الملف."));
-    xhr.send(form);
-  });
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiUploadForm<{ data?: MergeInspection } & Partial<MergeInspection>>(
+    url, form, onProgress);
+  return (response.data ?? response) as MergeInspection;
 }
 
 export const mergeService = {
@@ -214,39 +193,10 @@ export async function downloadBinaryFile(
   filename: string,
   onProgress: (percent: number) => void,
 ): Promise<void> {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
-    throw new Error(payload?.error ?? payload?.message ?? "تعذر تنزيل الملف.");
-  }
-  const total = Number(response.headers.get("content-length") ?? 0);
-  const reader = response.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  if (reader) {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      chunks.push(value);
-      received += value.length;
-      if (total) onProgress(Math.min(99, Math.round((received / total) * 100)));
-    }
-  } else {
-    const whole = new Uint8Array(await response.arrayBuffer());
-    chunks.push(whole);
-    received = whole.length;
-  }
-  onProgress(100);
-  const combined = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.length;
-  }
-  const blob = new Blob([combined.buffer as ArrayBuffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  const { blob } = await apiFetchBinary(url, {}, (received, total) => {
+    if (total) onProgress(Math.min(99, Math.round((received / total) * 100)));
   });
+  onProgress(100);
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;
@@ -416,48 +366,10 @@ export const sheetMergeService = {
     return ndjsonPost<SheetMergeExportReady>("/api/sheet-merge/export", { sessionId }, onProgress);
   },
   async download(downloadId: string, filename: string, onProgress: (percent: number) => void): Promise<void> {
-    const response = await fetch(`/api/sheet-merge/download?id=${encodeURIComponent(downloadId)}`, {
-      credentials: "include",
-    });
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(payload?.error ?? "تعذر تنزيل الملف.");
-    }
-    const total = Number(response.headers.get("content-length") ?? 0);
-    const reader = response.body?.getReader();
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    if (reader) {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-        chunks.push(value);
-        received += value.length;
-        if (total) onProgress(Math.min(99, Math.round((received / total) * 100)));
-      }
-    } else {
-      const whole = new Uint8Array(await response.arrayBuffer());
-      chunks.push(whole);
-      received = whole.length;
-    }
-    onProgress(100);
-    const combined = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const blob = new Blob([combined.buffer as ArrayBuffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    await downloadBinaryFile(
+      `/api/sheet-merge/download?id=${encodeURIComponent(downloadId)}`,
+      filename,
+      onProgress,
+    );
   },
 };

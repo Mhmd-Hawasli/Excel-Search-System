@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -16,7 +16,7 @@ namespace ExcelArchive.Infrastructure.Implementations.Caching;
 /// (ConflictCacheState id=1 + ConflictQueryCache), which the
 /// Api/Data/ConflictCache.sql triggers keep revisioned on PostgreSQL.
 /// Protocol: single-statement read (revision join + checked date); on miss
-/// a per-key lock coalesces simultaneous builders, the pre-query
+/// a bounded striped lock coalesces simultaneous builders, the pre-query
 /// revision/date is kept, and the insert is skipped when a mutation
 /// committed mid-computation. Oversized payloads are computed but never
 /// persisted. Stale data is never served as a fallback.
@@ -26,7 +26,9 @@ public class ConflictCacheService(AppDbContext db) : IConflictCacheService
     public const int MaxEntries = 128;
     public const int MaxPayloadBytes = 2 * 1024 * 1024;
 
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> Locks = new();
+    // Fixed stripes bound memory even for many distinct filter keys.
+    private static readonly SemaphoreSlim[] Locks = Enumerable.Range(0, 128)
+        .Select(_ => new SemaphoreSlim(1, 1)).ToArray();
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -70,7 +72,7 @@ public class ConflictCacheService(AppDbContext db) : IConflictCacheService
         var hit = await GetAsync<T>(key, today, ct);
         if (hit is not null) return hit;
 
-        var gate = Locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        var gate = Locks[(uint)key.GetHashCode() % (uint)Locks.Length];
         await gate.WaitAsync(ct);
         try
         {

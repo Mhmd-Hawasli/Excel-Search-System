@@ -214,13 +214,11 @@ function PermissionMatrix({
 }
 
 function permissionSummary(user: ManagedUser) {
-  const global = user.permissions.filter((row) => !row.groupId && !row.fileId).length;
-  const scoped = user.permissions.length - global;
-  if (global === 0 && scoped === 0) return "بلا صلاحيات";
-  const parts = [];
-  if (global > 0) parts.push(`${global} عامة`);
-  if (scoped > 0) parts.push(`${scoped} مخصصة`);
-  return parts.join(" + ");
+  const total = user.permissions.length;
+  if (total === 0) return "بلا صلاحيات";
+  if (total === 1) return "صلاحية واحدة";
+  if (total === 2) return "صلاحيتان";
+  return `${total} صلاحية`;
 }
 
 export function UsersManager({

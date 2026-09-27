@@ -10,7 +10,7 @@ import { MoveFileButton } from "@/components/move-file-button";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
@@ -41,13 +41,7 @@ export function GroupDetail({ groupId }: { groupId: string }) {
   }
 
   if (loading || !data) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-20 w-full" />
-      </div>
-    );
+    return <LoadingScreen message="جارٍ تحميل المجموعة…" />;
   }
 
   const { group, files } = data;
@@ -97,8 +91,8 @@ export function GroupDetail({ groupId }: { groupId: string }) {
       ) : (
         <div className="grid gap-3">
           {files.map((file) => (
-            <div key={file.id} className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
+            <div key={file.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="w-full min-w-0 flex-1">
                 <FileCard
                   href={`/groups/${group.id}/files/${file.id}`}
                   name={file.name}
@@ -112,13 +106,15 @@ export function GroupDetail({ groupId }: { groupId: string }) {
                 />
               </div>
               {canMoveFiles ? (
-                <MoveFileButton
-                  fileId={file.id}
-                  fileName={file.name}
-                  currentGroupId={group.id}
-                  label="نقل"
-                  aria-label={`نقل ${file.name} إلى مجموعة أخرى`}
-                />
+                <div className="flex justify-start sm:shrink-0 sm:justify-end">
+                  <MoveFileButton
+                    fileId={file.id}
+                    fileName={file.name}
+                    currentGroupId={group.id}
+                    label="نقل"
+                    aria-label={`نقل ${file.name} إلى مجموعة أخرى`}
+                  />
+                </div>
               ) : null}
             </div>
           ))}

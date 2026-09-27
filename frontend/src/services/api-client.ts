@@ -67,6 +67,51 @@ export async function apiFetch<T>(
   return body as T;
 }
 
+/** Uploads a form with real byte progress; server processing may continue
+ * after the upload reaches 100%. */
+export function apiUploadForm<T>(
+  path: string,
+  form: FormData,
+  onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", path);
+    xhr.withCredentials = true;
+    const abort = () => xhr.abort();
+    if (signal?.aborted) {
+      reject(new DOMException("تم إلغاء رفع الملف.", "AbortError"));
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
+    xhr.onloadend = () => signal?.removeEventListener("abort", abort);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0)
+        onProgress?.(Math.min(99, Math.round(event.loaded / event.total * 100)));
+    };
+    xhr.upload.onload = () => onProgress?.(100);
+    xhr.onload = () => {
+      let body: unknown;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        reject(new ApiError("استجابة غير صالحة من الخادم.", xhr.status));
+        return;
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const error = body as ErrorBody | null;
+        reject(new ApiError(error?.error ?? `تعذر إكمال الطلب (${xhr.status}).`, xhr.status));
+        return;
+      }
+      resolve(body as T);
+    };
+    xhr.onerror = () => reject(new Error("تعذر الاتصال بالخادم."));
+    xhr.onabort = () => reject(new DOMException("تم إلغاء رفع الملف.", "AbortError"));
+    xhr.send(form);
+  });
+}
+
 /**
  * Binary download reader (XLSX export, backup JSON). Ordinary JSON parsers
  * cannot consume these routes: assert type/disposition and parse content
@@ -76,6 +121,7 @@ export async function apiFetch<T>(
 export async function apiFetchBinary(
   path: string,
   init: RequestInit = {},
+  onProgress?: (receivedBytes: number, totalBytes: number | null) => void,
 ): Promise<{ blob: Blob; filename: string | null }> {
   const response = await fetch(path, { credentials: "include", ...init });
   const contentType = response.headers.get("content-type") ?? "";
@@ -87,10 +133,33 @@ export async function apiFetchBinary(
       `تعذر إكمال الطلب (${response.status}).`;
     throw new ApiError(message, response.status);
   }
-  if (contentType.includes("application/json")) {
+  // A backup is deliberately an application/json attachment. Treat JSON as
+  // an unexpected API envelope only when no attachment disposition exists.
+  if (contentType.includes("application/json") &&
+      !response.headers.get("content-disposition")?.toLowerCase().includes("attachment")) {
     throw new ApiError("استجابة غير متوقعة: expected binary download.", response.status);
   }
-  const blob = await response.blob();
+  let blob: Blob;
+  if (onProgress && response.body) {
+    const reader = response.body.getReader();
+    const totalHeader = Number(response.headers.get("content-length"));
+    const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : null;
+    const chunks: ArrayBuffer[] = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const copy = new Uint8Array(new ArrayBuffer(value.byteLength));
+      copy.set(value);
+      chunks.push(copy.buffer);
+      received += value.byteLength;
+      onProgress(received, total);
+    }
+    blob = new Blob(chunks, { type: contentType });
+  } else {
+    blob = await response.blob();
+    onProgress?.(blob.size, blob.size);
+  }
   const disposition = response.headers.get("content-disposition");
   const match = disposition?.match(/filename\*?=(?:UTF-8''?)?"?([^";]+)"?/i);
   return { blob, filename: match?.[1] ? decodeURIComponent(match[1]) : null };

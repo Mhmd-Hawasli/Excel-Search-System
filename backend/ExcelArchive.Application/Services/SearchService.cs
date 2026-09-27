@@ -31,7 +31,7 @@ public class SearchService(ISearchRepository search) : ISearchService
 
     public async Task<SearchResultSet> SearchAsync(SearchQuery query, CancellationToken ct = default)
     {
-        var page = Math.Max(1, query.Page);
+        var page = Math.Clamp(query.Page, 1, 1_000_000);
         var pageSize = Math.Min(100, Math.Max(10, query.PageSize));
         var plan = BuildPlan(query);
         if (string.IsNullOrWhiteSpace(query.Query) || plan.Fields.Count == 0

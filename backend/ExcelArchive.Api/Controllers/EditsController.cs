@@ -20,6 +20,8 @@ public class EditsController(IEditsService edits, IAuthService auth) : ApiContro
     {
         var currentUser = await RequirePermissionAsync(Permissions.EditsView);
         if (currentUser is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100)
+            return Bad("رقم الصفحة أو حجمها خارج النطاق.");
         Response.Headers.CacheControl = "no-store";
         var scope = await Auth.ResolveDataScope(currentUser);
         if (view == "summary")

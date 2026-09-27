@@ -1,3 +1,4 @@
+using System.Globalization;
 using ExcelArchive.Application.Interfaces.Repositories;
 using ExcelArchive.Domain.Entities;
 using ExcelArchive.Domain.Repositories;
@@ -12,11 +13,11 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
     {
         var query = Db.RecordEdits.AsNoTracking().AsQueryable();
         if (fileIds is not null) query = query.Where(e => fileIds.Contains(e.FileId));
-        return await query
+        var rows = await query
             .GroupBy(e => new { e.FileId })
             .Select(g => new { g.Key.FileId, Count = g.Count(), Last = g.Max(x => x.CreatedAt) })
-            .ToListAsync(ct)
-            .ContinueWith(t => (IReadOnlyList<(Guid, int, DateTime)>)t.Result.Select(r => (r.FileId, r.Count, r.Last)).ToList(), ct);
+            .ToListAsync(ct);
+        return rows.Select(r => (r.FileId, r.Count, r.Last)).ToList();
     }
 
     public async Task<(IReadOnlyList<RecordEdit> Rows, int Total, int Manual, int Upload, int Formatting)> ListPagedAsync(Guid? fileId, IReadOnlyList<Guid>? fileIds, int page, int pageSize,
@@ -78,13 +79,19 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         }
 
         // Filter by date range
-        if (!string.IsNullOrWhiteSpace(fromDate) && DateTime.TryParse(fromDate, out var fromDt))
+        var fromBoundary = ParseDateBoundary(fromDate, upper: false);
+        if (fromBoundary.HasValue)
         {
-            query = query.Where(e => e.CreatedAt >= fromDt);
+            var fromUtc = fromBoundary.Value.Value;
+            query = query.Where(e => e.CreatedAt >= fromUtc);
         }
-        if (!string.IsNullOrWhiteSpace(toDate) && DateTime.TryParse(toDate, out var toDt))
+        var toBoundary = ParseDateBoundary(toDate, upper: true);
+        if (toBoundary.HasValue)
         {
-            query = query.Where(e => e.CreatedAt <= toDt);
+            var toUtc = toBoundary.Value.Value;
+            query = toBoundary.Value.Exclusive
+                ? query.Where(e => e.CreatedAt < toUtc)
+                : query.Where(e => e.CreatedAt <= toUtc);
         }
 
         // Filter by user
@@ -122,7 +129,9 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         // Sorting
         query = sortBy?.ToLower() switch
         {
-            "person" => sortDir == "asc" ? query.OrderBy(e => e.Record.SfFullName) : query.OrderByDescending(e => e.Record.SfFullName),
+            "person" => sortDir == "asc"
+                ? query.OrderBy(e => e.Record == null ? null : e.Record.SfFullName)
+                : query.OrderByDescending(e => e.Record == null ? null : e.Record.SfFullName),
             "column" => sortDir == "asc" ? query.OrderBy(e => e.HeaderRaw) : query.OrderByDescending(e => e.HeaderRaw),
             "oldvalue" => sortDir == "asc" ? query.OrderBy(e => e.OldValue) : query.OrderByDescending(e => e.OldValue),
             "newvalue" => sortDir == "asc" ? query.OrderBy(e => e.NewValue) : query.OrderByDescending(e => e.NewValue),
@@ -136,6 +145,22 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
         var rows = await query
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         return (rows, total, manual, upload, formatting);
+    }
+
+    private static (DateTime Value, bool Exclusive)? ParseDateBoundary(string? raw, bool upper)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var day))
+        {
+            if (upper && day == DateOnly.MaxValue)
+                return (DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc), false);
+            return (upper ? day.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
+                : day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), upper);
+        }
+        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var timestamp)
+            ? (timestamp.UtcDateTime, false) : null;
     }
 
     public async Task<IReadOnlyList<RecordEdit>> ListByRecordAsync(Guid recordId, CancellationToken ct = default)
@@ -166,6 +191,16 @@ public class RecordEditRepository(AppDbContext db) : RepositoryBase<RecordEdit>(
     public async Task<IReadOnlyList<RecordEdit>> ListByFileAsync(Guid fileId, CancellationToken ct = default)
         => await Db.RecordEdits.AsNoTracking()
             .Where(e => e.FileId == fileId).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+
+    public async Task<Dictionary<int, long>> CountByVersionAsync(Guid fileId, CancellationToken ct = default)
+        => await Db.RecordEdits.AsNoTracking()
+            .Where(e => e.FileId == fileId)
+            .GroupBy(e => e.FileVersion)
+            .Select(g => new { Version = g.Key, Count = (long)g.Count() })
+            .ToDictionaryAsync(x => x.Version, x => x.Count, ct);
+
+    public Task<long> CountPendingAsync(Guid fileId, CancellationToken ct = default)
+        => Db.RecordEdits.LongCountAsync(e => e.FileId == fileId && e.RecordId != null && !e.IsBulk, ct);
 
     public async Task<IReadOnlyList<string>> DistinctHeadersAsync(Guid fileId, CancellationToken ct = default)
         => await Db.RecordEdits.AsNoTracking()

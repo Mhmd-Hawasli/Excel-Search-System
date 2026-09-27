@@ -307,7 +307,11 @@ export function LogsFilter({
               className="h-11"
               value={filters.dateFrom}
               onChange={(event) => onChange({ dateFrom: event.target.value })}
+              aria-describedby="logs-date-hint"
             />
+            <p id="logs-date-hint" className="text-[11px] text-muted-foreground">
+              بالتقويم الميلادي: يوم/شهر/سنة — مثال 25/09/2026. يمكن الكتابة بلوحة المفاتيح.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="logs-date-to">إلى تاريخ</Label>
@@ -317,6 +321,7 @@ export function LogsFilter({
               className="h-11"
               value={filters.dateTo}
               onChange={(event) => onChange({ dateTo: event.target.value })}
+              aria-describedby="logs-date-hint"
             />
           </div>
         </div>

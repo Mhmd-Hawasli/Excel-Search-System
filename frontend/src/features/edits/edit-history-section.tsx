@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { Undo2, X, Filter, ArrowUpDown, ArrowUp, ArrowDown, Minus, Plus } from "lucide-react";
+import { Undo2, X, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +10,10 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { MultiSelect } from "@/components/multi-select";
 import { Pager } from "@/components/pager";
+import { DataTableViewport, SortableTableHeader } from "@/components/data-table";
+import { LoadingScreen } from "@/components/loading-screen";
 import { formatShamCashStrict } from "@/lib/conflict-format";
+import { formatIsoDateTime } from "@/lib/format/date";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
 import { editsService, type EditHistoryPage, type EditOptions, type EditsFilters } from "@/services/edits.service";
@@ -20,9 +23,9 @@ const PAGE_SIZES = [10, 25, 50, 100];
 type SortableColumn = "person" | "column" | "oldvalue" | "newvalue" | "version" | "date" | "user";
 
 /**
- * جدول سجل تعديلات ملف واحد: فلاتر ذكية + ترتيب + ترقيم + تراجع.
+ * جدول سجل تعديلات ملف واحد: فلاتر ظاهرة دائمًا + ترتيب + ترقيم + تراجع.
  * - عمود «القيمة الحالية» يعرض آخر قيمة حيّة للسجل (مرتبط بالرقم الوطني لا برقم السطر).
- * - فلتر الإصدار يبدأ من الإصدار الحالي مع زرّي (−)/(+).
+ * - فلتر الإصدار قائمة منسدلة بإصدارات الملف مع زرّي السابق/التالي.
  * - العمود والمستخدم اختيار من متعدد من القيم المتاحة.
  * يُستخدم في صفحة الملف الداخلية (/edits/[fileId]).
  */
@@ -41,23 +44,24 @@ export function EditHistorySection({
   const [pageSize, setPageSize] = useState(25);
   const [canRevert, setCanRevert] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<EditsFilters>({ sortBy: "date", sortDir: "desc" });
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const historyRequestId = useRef(0);
   // القيمة الابتدائية للإصدار تُطبّق مرة واحدة فقط لكل ملف (حتى لا تعيد
   // الكتابة فوق اختيار المستخدم عند تحديث بيانات الملخص).
   const versionInitFor = useRef<string | null>(null);
 
   const loadHistory = useCallback(async (fid: string, pg: number, sz: number, flt: EditsFilters) => {
     if (!fid) return;
+    const requestId = ++historyRequestId.current;
     setHistoryLoading(true);
     try {
       const result = await editsService.history(fid, pg, sz, flt);
-      setHistory(result);
+      if (requestId === historyRequestId.current) setHistory(result);
     } catch {
-      setHistory(null);
+      if (requestId === historyRequestId.current) setHistory(null);
     } finally {
-      setHistoryLoading(false);
+      if (requestId === historyRequestId.current) setHistoryLoading(false);
     }
   }, []);
 
@@ -111,7 +115,7 @@ export function EditHistorySection({
     void Promise.resolve().then(() => {
       if (active) void loadHistory(fileId, page, pageSize, filters);
     });
-    return () => { active = false; };
+    return () => { active = false; historyRequestId.current += 1; };
   }, [fileId, page, pageSize, filters, loadHistory]);
 
   function handleSort(col: SortableColumn) {
@@ -133,10 +137,17 @@ export function EditHistorySection({
     setPage(1);
   }
 
+  const maxVersion = options?.currentVersion ?? currentVersion ?? 1;
+  const versionChoices = useMemo(
+    () => Array.from({ length: Math.max(1, maxVersion) }, (_, i) => maxVersion - i),
+    [maxVersion],
+  );
+
   function stepVersion(delta: number) {
     setFilters((prev) => {
-      const base = prev.version ?? options?.currentVersion ?? currentVersion ?? 1;
-      return { ...prev, version: Math.max(1, base + delta) };
+      // من "جميع الإصدارات" ينتقل أي اتجاه إلى الإصدار الحالي أولاً.
+      const base = prev.version ?? maxVersion;
+      return { ...prev, version: Math.min(maxVersion, Math.max(1, base + delta)) };
     });
     setPage(1);
   }
@@ -157,11 +168,6 @@ export function EditHistorySection({
     } finally {
       setRevertingId(null);
     }
-  }
-
-  function sortIcon(col: SortableColumn) {
-    if (filters.sortBy !== col) return <ArrowUpDown className="size-3 opacity-40" />;
-    return filters.sortDir === "asc" ? <ArrowUp className="size-3 text-primary" /> : <ArrowDown className="size-3 text-primary" />;
   }
 
   const hasActiveFilters =
@@ -189,51 +195,48 @@ export function EditHistorySection({
 
   return (
     <section aria-label="سجل تعديلات الملف" className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant={showFilters ? "default" : "outline"}
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="size-4" />
-          الفلترة
-          {hasActiveFilters && (
-            <Badge className="bg-white text-primary ml-1">•</Badge>
-          )}
-        </Button>
-        {hasActiveFilters && (
-          <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="size-4" />
-            مسح الفلاتر
-          </Button>
-        )}
-        <div className="mr-auto">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            حجم الصفحة
-            <select
-              aria-label="حجم الصفحة"
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
-            >
-              {PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
+      <Card className="border-primary/15 shadow-soft">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-xl border-b border-primary/10 bg-gradient-to-l from-primary/[0.07] to-transparent px-4 py-3">
+          <h3 className="flex items-center gap-2 text-sm font-black">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+              <Filter className="size-4" aria-hidden="true" />
+            </span>
+            الفلاتر
+            {hasActiveFilters ? (
+              <Badge className="bg-primary/10 text-primary">مفعّلة</Badge>
+            ) : (
+              <span className="text-xs font-normal text-muted-foreground">اختر لتصفية السجل</span>
+            )}
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasActiveFilters ? (
+              <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+                <X className="size-4" />
+                مسح الفلاتر
+              </Button>
+            ) : null}
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              حجم الصفحة
+              <select
+                aria-label="حجم الصفحة"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+              >
+                {PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
-      </div>
-
-      {showFilters ? (
-        <Card className="bg-muted/20">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <div>
                 <label className="mb-1 block text-xs font-semibold text-muted-foreground">الشخص</label>
                 <Input
@@ -275,11 +278,8 @@ export function EditHistorySection({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="edits-version">
                   الإصدار
-                  {options?.currentVersion || currentVersion ? (
-                    <span className="font-normal"> (الحالي: {options?.currentVersion ?? currentVersion})</span>
-                  ) : null}
                 </label>
                 <div className="flex items-center gap-1" dir="ltr">
                   <Button
@@ -288,42 +288,57 @@ export function EditHistorySection({
                     size="icon"
                     className="size-9 shrink-0"
                     onClick={() => stepVersion(-1)}
-                    disabled={(filters.version ?? 1) <= 1}
-                    aria-label="إنقاص الإصدار"
-                    title="إنقاص الإصدار"
+                    disabled={filters.version !== undefined && filters.version <= 1}
+                    aria-label="الإصدار السابق"
+                    title="الإصدار السابق"
                   >
-                    <Minus className="size-4" />
+                    <ChevronLeft className="size-4" />
                   </Button>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="رقم الإصدار…"
+                  <select
+                    id="edits-version"
+                    aria-label="اختر الإصدار"
+                    className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-center text-sm"
                     value={filters.version ?? ""}
-                    onChange={(e) => applyFilters({ version: e.target.value ? Number(e.target.value) : undefined })}
-                    className="h-9 text-center"
-                    aria-label="رقم الإصدار"
-                  />
+                    onChange={(e) =>
+                      applyFilters({ version: e.target.value === "" ? undefined : Number(e.target.value) })
+                    }
+                  >
+                    <option value="">جميع الإصدارات</option>
+                    {versionChoices.map((v) => (
+                      <option key={v} value={v}>
+                        الإصدار {v}{v === maxVersion ? " (الحالي)" : ""}
+                      </option>
+                    ))}
+                  </select>
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
                     className="size-9 shrink-0"
                     onClick={() => stepVersion(1)}
-                    aria-label="زيادة الإصدار"
-                    title="زيادة الإصدار"
+                    disabled={filters.version === undefined || filters.version >= maxVersion}
+                    aria-label="الإصدار التالي"
+                    title="الإصدار التالي"
                   >
-                    <Plus className="size-4" />
+                    <ChevronRight className="size-4" />
                   </Button>
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">من تاريخ</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="edits-from-date">
+                  من تاريخ
+                </label>
                 <Input
+                  id="edits-from-date"
                   type="date"
                   value={filters.fromDate || ""}
                   onChange={(e) => applyFilters({ fromDate: e.target.value })}
                   className="h-9"
+                  aria-describedby="edits-date-hint"
                 />
+                <p id="edits-date-hint" className="mt-1 text-[11px] text-muted-foreground">
+                  يوم/شهر/سنة — مثال 25/09/2026
+                </p>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold text-muted-foreground">مصدر التعديل</label>
@@ -340,12 +355,16 @@ export function EditHistorySection({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">إلى تاريخ</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground" htmlFor="edits-to-date">
+                  إلى تاريخ
+                </label>
                 <Input
+                  id="edits-to-date"
                   type="date"
                   value={filters.toDate || ""}
                   onChange={(e) => applyFilters({ toDate: e.target.value })}
                   className="h-9"
+                  aria-describedby="edits-date-hint"
                 />
               </div>
               <div>
@@ -365,60 +384,35 @@ export function EditHistorySection({
             </div>
           </CardContent>
         </Card>
-      ) : null}
 
       {history ? (
         <div className="flex flex-wrap gap-2 text-xs" aria-label="إحصائيات مصدر التعديلات">
-          <Badge variant="outline">يدوي: {history.sourceCounts.manual}</Badge>
-          <Badge variant="outline">تحديث ملف: {history.sourceCounts.upload}</Badge>
-          <Badge variant="outline">شكلي: {history.sourceCounts.formatting}</Badge>
+          <Badge className="border-primary/30 bg-primary/[0.07] text-primary">
+            يدوي: {history.sourceCounts.manual.toLocaleString("en-US")}
+          </Badge>
+          <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200">
+            تحديث ملف: {history.sourceCounts.upload.toLocaleString("en-US")}
+          </Badge>
+          <Badge variant="outline">شكلي: {history.sourceCounts.formatting.toLocaleString("en-US")}</Badge>
         </div>
       ) : null}
 
       {historyLoading && !history ? (
-        <p className="text-sm text-muted-foreground">جارٍ تحميل السجل…</p>
+        <LoadingScreen message="جارٍ تحميل السجل…" />
       ) : history && history.items.length > 0 ? (
         <>
-          <div className="overflow-x-auto rounded-xl border-2 shadow-sm bg-card">
+          <DataTableViewport className="border-primary/15 shadow-soft">
             <table className="w-full min-w-[1100px] text-sm">
-              <thead className="bg-muted/80">
+              <thead className="bg-primary/[0.06]">
                 <tr>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("person")}>
-                      الشخص {sortIcon("person")}
-                    </button>
-                  </th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("column")}>
-                      العمود {sortIcon("column")}
-                    </button>
-                  </th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("oldvalue")}>
-                      القيمة القديمة {sortIcon("oldvalue")}
-                    </button>
-                  </th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("newvalue")}>
-                      القيمة الجديدة {sortIcon("newvalue")}
-                    </button>
-                  </th>
+                  <SortableTableHeader label="الشخص" active={filters.sortBy === "person"} direction={filters.sortDir} onSort={() => handleSort("person")} />
+                  <SortableTableHeader label="العمود" active={filters.sortBy === "column"} direction={filters.sortDir} onSort={() => handleSort("column")} />
+                  <SortableTableHeader label="القيمة القديمة" active={filters.sortBy === "oldvalue"} direction={filters.sortDir} onSort={() => handleSort("oldvalue")} />
+                  <SortableTableHeader label="القيمة الجديدة" active={filters.sortBy === "newvalue"} direction={filters.sortDir} onSort={() => handleSort("newvalue")} />
                   <th scope="col" className="p-3 text-right font-bold">القيمة الحالية</th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("version")}>
-                      الإصدار {sortIcon("version")}
-                    </button>
-                  </th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("date")}>
-                      التاريخ {sortIcon("date")}
-                    </button>
-                  </th>
-                  <th scope="col" className="p-3 text-right font-bold">
-                    <button type="button" className="flex items-center gap-1 hover:text-primary transition-colors" onClick={() => handleSort("user")}>
-                      المستخدم {sortIcon("user")}
-                    </button>
-                  </th>
+                  <SortableTableHeader label="الإصدار" active={filters.sortBy === "version"} direction={filters.sortDir} onSort={() => handleSort("version")} />
+                  <SortableTableHeader label="التاريخ" active={filters.sortBy === "date"} direction={filters.sortDir} onSort={() => handleSort("date")} />
+                  <SortableTableHeader label="المستخدم" active={filters.sortBy === "user"} direction={filters.sortDir} onSort={() => handleSort("user")} />
                   <th scope="col" className="p-3 text-right font-bold">السجل</th>
                   {canRevert && <th scope="col" className="p-3 text-right font-bold">إجراء</th>}
                 </tr>
@@ -461,7 +455,9 @@ export function EditHistorySection({
                         ) : null}
                       </td>
                       <td className="p-3 text-xs text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleDateString("ar-SY", { year: "numeric", month: "2-digit", day: "2-digit" })}
+                        <time className="whitespace-nowrap ltr-numbers" dateTime={item.createdAt}>
+                          {formatIsoDateTime(item.createdAt)}
+                        </time>
                       </td>
                       <td className="p-3 font-semibold">{item.editedBy || "—"}</td>
                       <td className="p-3">
@@ -498,7 +494,7 @@ export function EditHistorySection({
                 })}
               </tbody>
             </table>
-          </div>
+          </DataTableViewport>
           <div className="flex flex-wrap items-center gap-3">
             <Pager page={history.page} pageSize={history.pageSize} total={history.total} onPage={setPage} />
           </div>

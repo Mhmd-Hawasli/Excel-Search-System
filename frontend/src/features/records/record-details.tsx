@@ -20,9 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/page-header";
+import { LoadingScreen } from "@/components/loading-screen";
 import { formatFunctionalCategory, formatNationalId, formatShamCash } from "@/lib/conflict-format";
 import { relativeArabic } from "@/lib/activity";
-import { formatUploadDateTime } from "@/lib/format/date";
+import { formatIsoDateTime, formatUploadDateTime } from "@/lib/format/date";
 import { normalizeStored } from "@/lib/normalization";
 import { hasPermission } from "@/lib/permissions";
 import { authService } from "@/services/auth.service";
@@ -330,6 +331,140 @@ export function RecordDetails({ recordId }: { recordId: string }) {
     return raw;
   }
 
+  // بطاقة عمود واحدة تُستخدم في عرض التبويبات وعرض نتائج البحث المسطح.
+  function renderColumnCards(list: RecordDetailColumn[], categoryName?: string) {
+    return list.map((column) => {
+      const editInfo = editedHeaders[column.headerRaw];
+      const isEditing = editingId === column.id;
+      const displayValue = displayFor(column, column.value);
+      const isEmpty = !column.value.trim();
+      return (
+        <div
+          key={column.id}
+          className={cn(
+            "group rounded-xl border bg-card p-4 print:rounded-lg print:p-1.5 print:shadow-none",
+            editInfo && showBadge && "border-amber-400/70",
+            editInfo && showBadge && "print:border-border",
+            // الـ PDF يتخطى الحقول الفارغة دائمًا.
+            isEmpty && "print:hidden",
+          )}
+        >
+          <dt className="flex items-center gap-2 text-xs font-bold text-muted-foreground print:gap-1 print:text-[10px]">
+            <span className="truncate">{column.headerRaw}</span>
+            {categoryName ? (
+              <Badge variant="secondary" className="shrink-0 text-[10px]">
+                {categoryName}
+              </Badge>
+            ) : null}
+            {editInfo && showBadge ? (
+              <Badge
+                variant="outline"
+                className="shrink-0 border-amber-400 bg-amber-50 text-[10px] text-amber-800 print:hidden dark:bg-amber-950/40 dark:text-amber-200"
+                title={`القيمة الأصلية من Excel: ${editInfo.originalValue || "—"}${editInfo.lastBy ? ` — آخر تعديل بواسطة: ${editInfo.lastBy}` : ""}`}
+              >
+                معدّل{editInfo.lastBy ? ` — ${editInfo.lastBy}` : ""}
+              </Badge>
+            ) : null}
+          </dt>
+          {isEditing ? (
+            <div className="mt-2 space-y-2">
+              <Input
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void saveEdit(column);
+                  if (event.key === "Escape") setEditingId(null);
+                }}
+                aria-label={`تعديل ${column.headerRaw}`}
+                dir={
+                  column.standardField === "sham_cash" ||
+                  column.standardField === "national_id" ||
+                  column.standardField === "personal_no" ||
+                  column.standardField === "phone"
+                    ? "ltr"
+                    : undefined
+                }
+                inputMode={
+                  column.standardField === "sham_cash" ||
+                  column.standardField === "national_id" ||
+                  column.standardField === "personal_no" ||
+                  column.standardField === "phone"
+                    ? "numeric"
+                    : undefined
+                }
+                className="h-9"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button type="button" size="sm" disabled={saving} onClick={() => void saveEdit(column)}>
+                  <Check className="size-4" />
+                  حفظ
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setEditingId(null)}>
+                  <X className="size-4" />
+                  إلغاء
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <dd className="mt-2 flex min-h-8 items-start justify-between gap-3 print:mt-1 print:min-h-0 print:gap-1">
+              <span className="min-w-0 flex-1">
+                <span className="ltr-numbers break-words text-right text-sm font-semibold print:text-xs">
+                  {displayValue || "—"}
+                </span>
+                {editInfo && showBadge ? (
+                  <span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground print:hidden">
+                    الأصل من Excel: {displayFor(column, editInfo.originalValue) || "—"}
+                  </span>
+                ) : null}
+              </span>
+              <span className="no-print flex shrink-0 gap-1">
+                {canEdit && column.headerRaw.toLowerCase() !== "pk" ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 opacity-60 group-hover:opacity-100"
+                    onClick={() => startEdit(column)}
+                    aria-label={`تعديل ${column.headerRaw}`}
+                    title="تعديل القيمة"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                ) : null}
+                {canEdit && column.headerRaw.toLowerCase() !== "pk" && editInfo && column.value !== editInfo.originalValue ? (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 opacity-60 group-hover:opacity-100"
+                    onClick={() => void revertEdit(column)}
+                    disabled={revertingId === column.id}
+                    aria-label={`تراجع عن آخر تعديل لـ ${column.headerRaw}`}
+                    title="تراجع عن آخر تعديل (يعيد القيمة السابقة ويُسجَّل في السجل)"
+                  >
+                    <Undo2 className="size-4" />
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 opacity-60 group-hover:opacity-100"
+                  onClick={() => void copy(column.id, displayValue)}
+                  disabled={!column.value}
+                  aria-label={`نسخ ${column.headerRaw}`}
+                >
+                  {copied === column.id ? <Check className="size-4 text-primary" /> : <Copy className="size-4" />}
+                </Button>
+              </span>
+            </dd>
+          )}
+        </div>
+      );
+    });
+  }
+
   async function handleDelete() {
     if (deleting || !canDelete || !data) return;
     setDeleting(true);
@@ -345,7 +480,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
     }
   }
 
-  if (loading) return <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>;
+  if (loading) return <LoadingScreen message="جارٍ تحميل السجل…" />;
   if (error || !data) return <p className="text-sm text-destructive">{error ?? "غير موجود."}</p>;
 
   const relatedNational = data.relatedByNationalId.rows;
@@ -369,7 +504,14 @@ export function RecordDetails({ recordId }: { recordId: string }) {
       <PageHeader
         eyebrow="سجل"
         title={data.displayName}
-        description={`${data.fileName} — ${data.groupName} — مفتاح ${data.pk} — رُفع ${data.uploadedAt}`}
+        description={
+          <>
+            {data.fileName} — {data.groupName} — مفتاح {data.pk} — رُفع{" "}
+            <time className="ltr-numbers" dateTime={data.uploadedAt}>
+              {formatIsoDateTime(data.uploadedAt)}
+            </time>
+          </>
+        }
         actions={
           <div className="no-print flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
@@ -415,10 +557,24 @@ export function RecordDetails({ recordId }: { recordId: string }) {
             type="search"
             value={columnQuery}
             onChange={(event) => setColumnQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setColumnQuery("");
+            }}
             placeholder="بحث باسم العمود…"
             aria-label="بحث باسم العمود في جميع التبويبات"
-            className="h-9 pr-9"
+            className="h-9 pl-9 pr-9"
           />
+          {columnQuery ? (
+            <button
+              type="button"
+              onClick={() => setColumnQuery("")}
+              aria-label="إلغاء البحث"
+              title="إلغاء البحث"
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
         <Button
           type="button"
@@ -438,7 +594,19 @@ export function RecordDetails({ recordId }: { recordId: string }) {
         </p>
       ) : (
         <div>
-          <div className="no-print overflow-x-auto" role="tablist" aria-label="فئات الأعمدة">
+          {hasQuery ? (
+            <section aria-label="نتائج البحث عن الأعمدة" className="mt-4">
+              <p role="status" className="mb-2 text-sm text-muted-foreground">
+                {visibleGroups.reduce((total, group) => total + group.columns.length, 0)} نتيجة مطابقة في
+                جميع الفئات — الفئات مخفية أثناء البحث.
+              </p>
+              <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 print:grid-cols-4 print:gap-1.5">
+                {visibleGroups.flatMap((group) => renderColumnCards(group.columns, group.name))}
+              </dl>
+            </section>
+          ) : (
+            <>
+              <div className="no-print overflow-x-auto" role="tablist" aria-label="فئات الأعمدة">
             <div className="inline-flex gap-1 rounded-lg bg-muted p-1">
               {visibleGroups.map((group) => (
                 <button
@@ -471,138 +639,13 @@ export function RecordDetails({ recordId }: { recordId: string }) {
                 </p>
               ) : (
                 <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 print:grid-cols-4 print:gap-1.5">
-                  {group.columns.map((column) => {
-                    const editInfo = editedHeaders[column.headerRaw];
-                    const isEditing = editingId === column.id;
-                    const displayValue = displayFor(column, column.value);
-                    const isEmpty = !column.value.trim();
-                    return (
-                      <div
-                        key={column.id}
-                        className={cn(
-                          "group rounded-xl border bg-card p-4 print:rounded-lg print:p-1.5 print:shadow-none",
-                          editInfo && showBadge && "border-amber-400/70",
-                          editInfo && showBadge && "print:border-border",
-                          // الـ PDF يتخطى الحقول الفارغة دائمًا.
-                          isEmpty && "print:hidden",
-                        )}
-                      >
-                        <dt className="flex items-center gap-2 text-xs font-bold text-muted-foreground print:gap-1 print:text-[10px]">
-                          <span className="truncate">{column.headerRaw}</span>
-                          {editInfo && showBadge ? (
-                            <Badge
-                              variant="outline"
-                              className="shrink-0 border-amber-400 bg-amber-50 text-[10px] text-amber-800 print:hidden dark:bg-amber-950/40 dark:text-amber-200"
-                              title={`القيمة الأصلية من Excel: ${editInfo.originalValue || "—"}${editInfo.lastBy ? ` — آخر تعديل بواسطة: ${editInfo.lastBy}` : ""}`}
-                            >
-                              معدّل{editInfo.lastBy ? ` — ${editInfo.lastBy}` : ""}
-                            </Badge>
-                          ) : null}
-                        </dt>
-                        {isEditing ? (
-                          <div className="mt-2 space-y-2">
-                            <Input
-                              value={draft}
-                              onChange={(event) => setDraft(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") void saveEdit(column);
-                                if (event.key === "Escape") setEditingId(null);
-                              }}
-                              aria-label={`تعديل ${column.headerRaw}`}
-                              // Numeric identifiers (sham cash first) are
-                              // always LTR so group order never reverses
-                              // while typing in the RTL page.
-                              dir={
-                                column.standardField === "sham_cash" ||
-                                column.standardField === "national_id" ||
-                                column.standardField === "personal_no" ||
-                                column.standardField === "phone"
-                                  ? "ltr"
-                                  : undefined
-                              }
-                              inputMode={
-                                column.standardField === "sham_cash" ||
-                                column.standardField === "national_id" ||
-                                column.standardField === "personal_no" ||
-                                column.standardField === "phone"
-                                  ? "numeric"
-                                  : undefined
-                              }
-                              className="h-9"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <Button type="button" size="sm" disabled={saving} onClick={() => void saveEdit(column)}>
-                                <Check className="size-4" />
-                                حفظ
-                              </Button>
-                              <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => setEditingId(null)}>
-                                <X className="size-4" />
-                                إلغاء
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <dd className="mt-2 flex min-h-8 items-start justify-between gap-3 print:mt-1 print:min-h-0 print:gap-1">
-                            <span className="min-w-0 flex-1">
-                              <span className="ltr-numbers break-words text-right text-sm font-semibold print:text-xs">
-                                {displayValue || "—"}
-                              </span>
-                              {editInfo && showBadge ? (
-                                <span className="mt-1 block break-words text-[11px] font-normal text-muted-foreground print:hidden">
-                                  الأصل من Excel: {displayFor(column, editInfo.originalValue) || "—"}
-                                </span>
-                              ) : null}
-                            </span>
-                            <span className="no-print flex shrink-0 gap-1">
-                              {canEdit && column.headerRaw.toLowerCase() !== "pk" ? (
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="size-8 opacity-60 group-hover:opacity-100"
-                                  onClick={() => startEdit(column)}
-                                  aria-label={`تعديل ${column.headerRaw}`}
-                                  title="تعديل القيمة"
-                                >
-                                  <Pencil className="size-4" />
-                                </Button>
-                              ) : null}
-                              {canEdit && column.headerRaw.toLowerCase() !== "pk" && editInfo && column.value !== editInfo.originalValue ? (
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="ghost"
-                                  className="size-8 opacity-60 group-hover:opacity-100"
-                                  onClick={() => void revertEdit(column)}
-                                  disabled={revertingId === column.id}
-                                  aria-label={`تراجع عن آخر تعديل لـ ${column.headerRaw}`}
-                                  title="تراجع عن آخر تعديل (يعيد القيمة السابقة ويُسجَّل في السجل)"
-                                >
-                                  <Undo2 className="size-4" />
-                                </Button>
-                              ) : null}
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="size-8 opacity-60 group-hover:opacity-100"
-                                onClick={() => void copy(column.id, displayValue)}
-                                disabled={!column.value}
-                                aria-label={`نسخ ${column.headerRaw}`}
-                              >
-                                {copied === column.id ? <Check className="size-4 text-primary" /> : <Copy className="size-4" />}
-                              </Button>
-                            </span>
-                          </dd>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {renderColumnCards(group.columns)}
                 </dl>
               )}
             </section>
           ))}
+            </>
+          )}
         </div>
       )}
 
@@ -617,7 +660,7 @@ export function RecordDetails({ recordId }: { recordId: string }) {
               <span className="text-xs text-muted-foreground">مرتبة من الأحدث إلى الأقدم</span>
             </div>
             {historyLoading && history.length === 0 ? (
-              <p className="text-sm text-muted-foreground">جارٍ تحميل سجل التغييرات…</p>
+              <LoadingScreen message="جارٍ تحميل سجل التغييرات…" />
             ) : history.length === 0 ? (
               <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
                 لم يتم تعديل هذا السجل بعد.

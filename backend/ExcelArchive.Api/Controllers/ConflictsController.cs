@@ -55,6 +55,7 @@ public class ConflictsController(IConflictService conflicts, IAuthService auth) 
             ? parsed
             : parsed with { Category = "invalid", Field = "all", Rule = "all" };
         var bytes = await conflicts.ExportAsync(effective, scope);
+        Response.Headers.CacheControl = "no-store";
         var filename = $"تضارب-البيانات-{effective.Category}-{DateTime.UtcNow:yyyy-MM-dd}.xlsx";
         var encoded = Uri.EscapeDataString(filename);
         Response.Headers.ContentDisposition = $"attachment; filename=\"conflicts.xlsx\"; filename*=UTF-8''{encoded}";

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { UploadWizard } from "@/features/upload/upload-wizard";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
@@ -39,12 +39,7 @@ export default function UploadPage() {
   }
 
   if (!groups || !categories || !templates) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <LoadingScreen message="جارٍ تحميل بيانات الرفع…" />;
   }
 
   if (groups.length === 0) {

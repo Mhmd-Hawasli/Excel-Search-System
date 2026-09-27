@@ -29,11 +29,13 @@ public class FileColumnRepository(AppDbContext db) : RepositoryBase<FileColumn>(
         => await Db.FileColumns.AsNoTracking().Where(c => c.FileId == fileId).ToListAsync(ct);
 
     public async Task<IReadOnlyList<(Guid Id, StandardField? Standard)>> ListKeysByCategoryAsync(Guid? categoryId, CancellationToken ct = default)
-        => await Db.FileColumns
+    {
+        var rows = await Db.FileColumns
             .Where(c => c.CategoryId == categoryId)
             .Select(c => new { c.Id, c.StandardField })
-            .ToListAsync(ct)
-            .ContinueWith(t => (IReadOnlyList<(Guid, StandardField?)>)t.Result.Select(x => (x.Id, x.StandardField)).ToList(), ct);
+            .ToListAsync(ct);
+        return rows.Select(x => (x.Id, x.StandardField)).ToList();
+    }
 
     public Task<int?> MaxSortOrderAsync(Guid? categoryId, CancellationToken ct = default)
         => Db.FileColumns.Where(c => c.CategoryId == categoryId).MaxAsync(c => (int?)c.SortOrder, ct);

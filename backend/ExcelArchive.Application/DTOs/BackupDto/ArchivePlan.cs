@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using ExcelArchive.Application.Common.Backup;
 using ExcelArchive.Application.Services;
 using ExcelArchive.Domain.Conflicts;
@@ -381,16 +382,20 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
         public static DateTime ReqDate(JsonElement el, string name)
         {
             var prop = Prop(el, name);
-            if (prop.ValueKind == JsonValueKind.String && DateTime.TryParse(prop.GetString(), out var date))
-                return DateTime.SpecifyKind(date, DateTimeKind.Utc);
+            if (prop.ValueKind == JsonValueKind.String &&
+                DateTimeOffset.TryParse(prop.GetString(), CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date))
+                return date.UtcDateTime;
             throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
         }
 
         public static DateTime? OptDate(JsonElement el, string name)
         {
             if (!el.TryGetProperty(name, out var prop) || prop.ValueKind == JsonValueKind.Null) return null;
-            if (prop.ValueKind == JsonValueKind.String && DateTime.TryParse(prop.GetString(), out var date))
-                return DateTime.SpecifyKind(date, DateTimeKind.Utc);
+            if (prop.ValueKind == JsonValueKind.String &&
+                DateTimeOffset.TryParse(prop.GetString(), CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var date))
+                return date.UtcDateTime;
             throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
         }
 

@@ -281,7 +281,7 @@ export function ScopeSelector({
           role="listbox"
           aria-label="تخصيص نطاق البحث"
           aria-multiselectable="true"
-          className="absolute end-0 top-full z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border bg-white p-1 text-card-foreground shadow-lg sm:min-w-80"
+          className="absolute end-0 top-full z-50 mt-1 max-h-80 w-full overflow-y-auto rounded-lg border bg-card p-1 text-card-foreground shadow-lg sm:min-w-80"
         >
           <button
             type="button"

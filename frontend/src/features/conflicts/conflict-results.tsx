@@ -1,21 +1,13 @@
 "use client";
 
-import { CircleCheck, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { CircleCheck } from "lucide-react";
 import { IgnoreButton } from "@/features/conflicts/ignore-button";
 import { Pager } from "@/components/pager";
+import { DataTableViewport, SortableTableHeader } from "@/components/data-table";
 import { CONFLICT_SORTABLE } from "@/lib/conflicts-catalog";
 import { formatFunctionalCategory, formatNationalId, formatShamCash, toLatinDigits } from "@/lib/conflict-format";
 import type { ConflictsResult } from "@/services/conflicts.service";
 import { cn } from "@/lib/cn";
-
-function SortGlyph({ active, dir }: { active: boolean; dir: string }) {
-  if (!active) return <ChevronsUpDown className="size-4 opacity-50" aria-hidden="true" />;
-  return dir === "asc" ? (
-    <ArrowUp className="size-4" aria-hidden="true" />
-  ) : (
-    <ArrowDown className="size-4" aria-hidden="true" />
-  );
-}
 
 /**
  * Renders the already-computed conflict report: sortable grouped table
@@ -70,8 +62,105 @@ export function ConflictResults({
             </p>
           )}
         </div>
+        <div className="flex w-full flex-wrap items-center gap-2 md:hidden" aria-label="فرز نتائج التضارب">
+          <label className="text-xs font-semibold text-muted-foreground" htmlFor="conflict-sort-mobile">
+            الفرز
+          </label>
+          <select
+            id="conflict-sort-mobile"
+            className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            value={sortBy}
+            onChange={(e) => onSort(e.target.value)}
+          >
+            {CONFLICT_SORTABLE.map((column) => (
+              <option key={column.key} value={column.key}>
+                {column.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="h-9 shrink-0 rounded-md border border-input bg-background px-3 text-sm font-semibold"
+            onClick={() => onSort(sortBy)}
+            aria-label={sortDir === "asc" ? "التبديل إلى تنازلي" : "التبديل إلى تصاعدي"}
+          >
+            {sortDir === "asc" ? "تصاعدي" : "تنازلي"}
+          </button>
+        </div>
       </div>
-      <div className="overflow-x-auto rounded-xl border bg-card">
+      <p className="hidden text-xs text-muted-foreground md:block xl:hidden" aria-hidden="true">
+        اسحب الجدول أفقيًا لعرض باقي الأعمدة
+      </p>
+      <div className="grid gap-3 md:hidden">
+        {data.rows.map((row) => (
+          <article key={row.id} className="space-y-3 rounded-xl border bg-card p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "inline-flex min-w-8 justify-center rounded-full px-2 py-1 text-xs font-black",
+                  isDefaultSort && row.issueNumber % 2 === 0
+                    ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                    : "bg-primary/10 text-primary",
+                )}
+              >
+                {row.issueNumber}
+              </span>
+              <a className="min-w-0 flex-1 truncate font-semibold text-primary hover:underline" href={`/groups/${row.groupId}/files/${row.fileId}`}>
+                {row.fileName}
+              </a>
+            </div>
+            <div>
+              <a href={`/records/${row.id}`} className="font-bold hover:text-primary hover:underline">
+                {row.fullName || "فتح السجل"}
+              </a>
+              <p className="mt-1 text-xs text-muted-foreground">صف Excel: {row.rowIndex}</p>
+            </div>
+            <dl className="grid grid-cols-1 gap-2 text-sm">
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">اسم الأم</dt>
+                <dd className="font-semibold">{row.motherName || "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">الرقم الوطني</dt>
+                <dd><bdi className="break-all font-mono text-xs">{formatNationalId(row.nationalId) || "—"}</bdi></dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">الشام كاش</dt>
+                <dd><bdi className="break-all font-mono text-xs ltr-numbers" dir="ltr">{row.shamCash ? formatShamCash(row.shamCash) || row.shamCash : "—"}</bdi></dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">الرقم الذاتي</dt>
+                <dd><bdi className="break-all font-mono text-xs">{row.personalNo || "—"}</bdi></dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">الفئة الوظيفية</dt>
+                <dd>{formatFunctionalCategory(row.functionalCategory) || "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">رقم الهاتف</dt>
+                <dd><bdi className="break-all font-mono text-xs ltr-numbers" dir="ltr">{row.phone || "—"}</bdi></dd>
+              </div>
+            </dl>
+            <details className="rounded-lg border bg-muted/20 p-3">
+              <summary className="cursor-pointer text-sm font-bold text-primary">
+                المخالفات ({row.issues.length}) — اضغط للعرض
+              </summary>
+              <ul className="mt-3 space-y-3">
+                {row.issues.map((issue, index) => (
+                  <li key={`${issue.rule}-${index}`}>
+                    <p className="text-xs font-bold text-primary">{issue.label}</p>
+                    <p className="mt-1 break-words text-sm leading-7 text-muted-foreground">{toLatinDigits(issue.explanation)}</p>
+                    {canIgnore ? (
+                      <IgnoreButton recordId={row.id} rule={issue.rule} onDone={onChanged} />
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </article>
+        ))}
+      </div>
+      <DataTableViewport className="hidden md:block">
         <table className="w-full min-w-[1400px] text-sm">
           <caption className="sr-only">
             رقم المشكلة وملف المصدر والاسم الثلاثي واسم الأم والرقم الوطني والشام كاش والرقم الذاتي والفئة الوظيفية والمشكلة وشرحها
@@ -80,22 +169,7 @@ export function ConflictResults({
             <tr>
               {CONFLICT_SORTABLE.map((column) => {
                 const active = sortBy === column.key;
-                return (
-                  <th key={column.key} scope="col" className="p-0 text-right font-bold" aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
-                    <button
-                      type="button"
-                      onClick={() => onSort(column.key)}
-                      className={cn(
-                        "flex w-full items-center justify-between gap-1 p-4 text-right transition hover:bg-muted",
-                        active && "bg-primary/5 text-primary",
-                      )}
-                      aria-label={`فرز حسب ${column.label} ${active && sortDir === "asc" ? "تنازلي" : "تصاعدي"}`}
-                    >
-                      <span>{column.label}</span>
-                      <SortGlyph active={active} dir={sortDir} />
-                    </button>
-                  </th>
-                );
+                return <SortableTableHeader key={column.key} label={column.label} active={active} direction={sortDir} onSort={() => onSort(column.key)} className="justify-between p-4" />;
               })}
               <th scope="col" className="p-4 text-right font-bold">
                 رقم الهاتف
@@ -174,7 +248,7 @@ export function ConflictResults({
             })}
           </tbody>
         </table>
-      </div>
+      </DataTableViewport>
       <Pager page={page} pageSize={pageSize} total={data.total} onPage={onPage} />
     </>
   );

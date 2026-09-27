@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { EditMappingWizard } from "@/features/files/edit-mapping-wizard";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
@@ -31,12 +31,7 @@ export default function EditMappingPage() {
   }
 
   if (loadingMapping || !mapping) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <LoadingScreen message="جارٍ تحميل ربط الأعمدة…" />;
   }
 
   return (

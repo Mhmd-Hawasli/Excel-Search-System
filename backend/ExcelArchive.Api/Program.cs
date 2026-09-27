@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using ExcelArchive.Api.Common.Context;
@@ -61,7 +61,9 @@ builder.Services.AddScoped<IRecordEditRepository, RecordEditRepository>();
 builder.Services.AddScoped<IDataQualityRepository, DataQualityRepository>();
 builder.Services.AddScoped<IMappingTemplateRepository, MappingTemplateRepository>();
 builder.Services.AddScoped<IFileVersionRepository, FileVersionRepository>();
-builder.Services.AddScoped<ISearchRepository, SearchRepository>();
+builder.Services.AddScoped<SearchRepository>();
+builder.Services.AddScoped<ISearchRepository, CachedSearchRepository>();
+builder.Services.AddSingleton<SearchResultCacheStore>();
 builder.Services.AddScoped<IConflictRepository, ConflictRepository>();
 builder.Services.AddScoped<IBackupRepository, BackupRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -166,9 +168,19 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["http://localhost:3300"];
+// LAN HTTP support: allow extra origins via ALLOWED_ORIGINS_EXTRA (comma/semicolon separated,
+// e.g. "http://192.168.1.10:3300,http://server:3300") or AllowedOrigins__2, __3... without code changes.
+// The frontend proxies /api/* server-side, so LAN access via http://<lan-ip>:3300 keeps working;
+// direct browser→backend calls from a LAN origin only need that origin listed here.
+var extraOriginsRaw = builder.Configuration["ALLOWED_ORIGINS_EXTRA"] ?? string.Empty;
+var extraOrigins = extraOriginsRaw
+    .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Where(o => o.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || o.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    .ToArray();
+var effectiveOrigins = allowedOrigins.Concat(extraOrigins).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 builder.Services.AddCors(options =>
     options.AddPolicy("frontend", policy => policy
-        .WithOrigins(allowedOrigins)
+        .WithOrigins(effectiveOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()));
@@ -200,15 +212,20 @@ builder.Services.AddSwaggerGen();
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
 {
     o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    o.KnownIPNetworks.Clear(); o.KnownProxies.Clear();
+    // Keep the framework's trusted loopback proxy defaults. Untrusted
+    // forwarded addresses must not choose the login rate-limit partition.
 });
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+// Plain HTTP on the internal LAN must keep working: never force HTTPS and never
+// send HSTS over HTTP. UseHsts already skips non-HTTPS requests, but gate it
+// explicitly so a future default change cannot break http://<lan-ip>:<port>.
+// NOTE: no app.UseHttpsRedirection() by design — keep it absent.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseHsts();
+    app.UseWhen(ctx => ctx.Request.IsHttps, branch => branch.UseHsts());
 }
 app.UseResponseCompression();
 app.UseResponseCaching();

@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronsUp, Download, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, ChevronsUp, PencilLine, RefreshCw, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { ExportButton } from "@/components/export-button";
 import { PageHeader } from "@/components/page-header";
 import { MoveFileButton } from "@/components/move-file-button";
 import { TypedDeleteButton } from "@/components/typed-delete-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingScreen } from "@/components/loading-screen";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { STANDARD_FIELD_LABELS, type StandardFieldKey } from "@/lib/standard-fields";
 import { formatUploadDateTime } from "@/lib/format/date";
@@ -22,7 +23,7 @@ import { VersionHistoryCard } from "@/features/files/version-history-card";
 export function FileDetail({ groupId, fileId }: { groupId: string; fileId: string }) {
   const { data: user } = useApiQuery(() => authService.me(), []);
   const { data, loading, error, refetch } = useApiQuery(() => filesService.detail(fileId, groupId), [fileId, groupId]);
-  const { data: versions, refetch: refetchVersions } = useApiQuery(() => filesService.listVersions(fileId), [fileId]);
+  const { data: versions, loading: versionsLoading, refetch: refetchVersions } = useApiQuery(() => filesService.listVersions(fileId), [fileId]);
   const [markEdits, setMarkEdits] = useState(false);
   const [bumpOpen, setBumpOpen] = useState(false);
 
@@ -35,14 +36,8 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
   const canMoveFiles = hasPermission(permissions, "groups.update");
   const showEditedBadge = hasPermission(permissions, "edits.badge");
 
-  if (loading || !data) {
-    return (
-      <div className="space-y-7">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
+  if (loading && !data) {
+    return <LoadingScreen message="جارٍ تحميل تفاصيل الملف…" />;
   }
   if (error) {
     return (
@@ -57,6 +52,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
       </div>
     );
   }
+  if (!data) return <p role="alert" className="text-sm text-destructive">تعذر تحميل تفاصيل الملف.</p>;
 
   const { file, columns, qualityIssueCount, editCount } = data;
   const exportHref = `/api/files/${file.id}/export${markEdits ? "?markEdits=true" : ""}`;
@@ -113,12 +109,7 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
               </Button>
             ) : null}
             {canExport ? (
-              <Button asChild variant="outline">
-                <a href={exportHref}>
-                  <Download className="size-4" />
-                  تصدير Excel
-                </a>
-              </Button>
+              <ExportButton href={exportHref} label="تصدير Excel" />
             ) : null}
             {canMoveFiles ? (
               <MoveFileButton
@@ -178,17 +169,12 @@ export function FileDetail({ groupId, fileId }: { groupId: string; fileId: strin
               </Button>
             ) : null}
             {canExport ? (
-              <Button asChild size="sm">
-                <a href={exportHref}>
-                  <Download className="size-4" />
-                  تصدير Excel بالقيم المعدلة
-                </a>
-              </Button>
+              <ExportButton href={exportHref} label="تصدير Excel بالقيم المعدلة" size="sm" variant="default" />
             ) : null}
           </div>
         </div>
       ) : null}
-      <VersionHistoryCard fileId={file.id} canExport={canExport} canViewHistory={canViewHistory} />
+      <VersionHistoryCard fileId={file.id} versions={versions ?? null} loading={versionsLoading} canExport={canExport} canViewHistory={canViewHistory} />
 
       <div className="grid gap-3 sm:grid-cols-4">
         <Card>

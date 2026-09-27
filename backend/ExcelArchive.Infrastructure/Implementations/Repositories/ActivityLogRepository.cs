@@ -43,9 +43,28 @@ public class ActivityLogRepository(AppDbContext db) : RepositoryBase<ActivityLog
 
     public async Task<(IReadOnlyList<ActivityLog> Rows, int Total)> SearchAsync(
         ActivityAction? action, string? search, ActivityAction? searchedAction,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, ActivityPrivateExclusion? exclusion = null,
+        CancellationToken ct = default)
     {
-        var query = Db.ActivityLogs.AsNoTracking();
+        // The visibility predicate must run in PostgreSQL before Count/Skip.
+        // Filtering a page after retrieval leaks hidden row counts and leaves
+        // otherwise full pages short. All arrays are bound as SQL parameters.
+        IQueryable<ActivityLog> query = exclusion is null
+            ? Db.ActivityLogs.AsNoTracking()
+            : Db.ActivityLogs.FromSqlInterpolated($"""
+                SELECT * FROM activity_log AS a
+                WHERE NOT COALESCE((
+                    a.target_name = ANY({exclusion.GroupNames})
+                    OR lower(a.details ->> 'groupId') = ANY({exclusion.GroupIds})
+                    OR lower(a.details ->> 'movedToGroupId') = ANY({exclusion.GroupIds})
+                    OR lower(a.details ->> 'fileId') = ANY({exclusion.FileIds})
+                    OR lower(a.details ->> 'previousFileId') = ANY({exclusion.FileIds})
+                    OR EXISTS (
+                        SELECT 1 FROM unnest({exclusion.FileSuffixes}) AS suffix
+                        WHERE right(a.target_name, length(suffix)) = suffix
+                    )
+                ), false)
+                """).AsNoTracking();
         if (action.HasValue)
             query = query.Where(x => x.Action == action.Value);
         if (!string.IsNullOrWhiteSpace(search))

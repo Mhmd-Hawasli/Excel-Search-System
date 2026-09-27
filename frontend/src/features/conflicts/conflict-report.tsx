@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExportButton } from "@/components/export-button";
+import { LoadingScreen } from "@/components/loading-screen";
 import { PageHeader } from "@/components/page-header";
 import { ConflictFilters } from "@/features/conflicts/conflict-filters";
 import { ConflictResults } from "@/features/conflicts/conflict-results";
-import { ConflictStats } from "@/features/conflicts/conflict-stats";
 import { authService } from "@/services/auth.service";
 import { conflictsService, type ConflictsResult, type ConflictStats as Stats } from "@/services/conflicts.service";
 import type { CurrentUser } from "@/types/model";
@@ -48,16 +47,7 @@ function hasGlobal(me: CurrentUser | null, key: string): boolean {
 }
 
 function ResultsSkeleton() {
-  return (
-    <div className="space-y-2" aria-hidden="true">
-      <p className="text-sm text-muted-foreground">
-        جارٍ فحص السجلات… يشمل الفحص جميع الملفات المكتملة في الأرشيف
-      </p>
-      {Array.from({ length: 5 }, (_, index) => (
-        <div key={index} className="h-14 animate-pulse rounded-lg bg-muted" />
-      ))}
-    </div>
-  );
+  return <LoadingScreen message="جارٍ فحص السجلات… يشمل الفحص جميع الملفات المكتملة في الأرشيف" />;
 }
 
 /**
@@ -72,6 +62,8 @@ export function ConflictReport() {
   const [me, setMe] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const listRequestId = useRef(0);
+  const statsRequestId = useRef(0);
 
   useEffect(() => {
     // Intentional URL→state hydration on mount (same pattern as use-api-query).
@@ -102,29 +94,32 @@ export function ConflictReport() {
   const [statsLoading, setStatsLoading] = useState(true);
 
   const loadList = useCallback(async () => {
+    const requestId = ++listRequestId.current;
     setLoading(true);
     setError(null);
     try {
       const list = await conflictsService.list(effective);
-      setData(list);
+      if (requestId === listRequestId.current) setData(list);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "تعذر تحميل التقرير.");
+      if (requestId === listRequestId.current)
+        setError(err instanceof Error ? err.message : "تعذر تحميل التقرير.");
     } finally {
-      setLoading(false);
+      if (requestId === listRequestId.current) setLoading(false);
     }
   }, [effective]);
 
   const loadStats = useCallback(async () => {
+    const requestId = ++statsRequestId.current;
     setStatsLoading(true);
     try {
       const summary = await conflictsService.stats();
-      setStats(summary);
+      if (requestId === statsRequestId.current) setStats(summary);
     } catch {
       // Keep previously loaded counts: a slow stats scan must never hide
       // the already-fetched list (previously Promise.all failed the whole
       // page with 500 on stats proxy timeout).
     } finally {
-      setStatsLoading(false);
+      if (requestId === statsRequestId.current) setStatsLoading(false);
     }
   }, []);
 
@@ -133,15 +128,26 @@ export function ConflictReport() {
   }, [loadList, loadStats]);
 
   useEffect(() => {
-    // Intentional reload on hydrated filter change (same pattern as use-api-query).
-    // List follows filters; stats are scope-global so refresh them in the
-    // background without blocking the list.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (hydrated) {
+    if (!hydrated) return;
+    const listCounter = listRequestId;
+    const timer = window.setTimeout(() => {
       void loadList();
-      void loadStats();
-    }
-  }, [hydrated, loadList, loadStats]);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      ++listCounter.current;
+    };
+  }, [hydrated, loadList]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const statsCounter = statsRequestId;
+    const timer = window.setTimeout(() => void loadStats(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      ++statsCounter.current;
+    };
+  }, [hydrated, loadStats]);
 
   function push(next: typeof DEFAULTS) {
     setState(next);
@@ -173,16 +179,10 @@ export function ConflictReport() {
         description="راجع البيانات الخاطئة والناقصة وتشابه الأسماء والتضارب بين سجلات جميع الملفات، مع توضيح المشكلة في كل سجل."
         actions={
           canExport ? (
-            <Button asChild variant="outline">
-              <a href={conflictsService.exportUrl(exportParams)}>
-                <Download className="size-4" />
-                تصدير Excel للحالة الحالية
-              </a>
-            </Button>
+            <ExportButton href={conflictsService.exportUrl(exportParams)} label="تصدير Excel للحالة الحالية" />
           ) : undefined
         }
       />
-      {stats ? <ConflictStats stats={stats} /> : null}
       <ConflictFilters
         value={{ category: state.category, field: state.field, rule: state.rule, pageSize: state.pageSize }}
         onChange={(next, resetPage) =>

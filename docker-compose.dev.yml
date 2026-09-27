@@ -54,6 +54,11 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-secret-with-at-least-32-characters}
       AllowedOrigins__0: http://localhost:3300
       AllowedOrigins__1: http://127.0.0.1:3300
+      # LAN HTTP (internal network, plain http): uncomment and set your server IP/host
+      # so direct browser→backend calls from the LAN origin are accepted.
+      # The Next.js /api/* proxy works without this, but direct API access needs it.
+      # - AllowedOrigins__2=http://192.168.1.10:3300
+      # - ALLOWED_ORIGINS_EXTRA=http://192.168.1.10:3300
     ports:
       - "5005:5000"
 

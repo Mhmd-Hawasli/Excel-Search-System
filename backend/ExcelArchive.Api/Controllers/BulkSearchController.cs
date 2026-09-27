@@ -137,6 +137,10 @@ public class BulkSearchController(IAuthService auth, IBulkSearchService bulk) : 
     {
         var user = await RequirePermissionAsync(Permissions.BulkSearchView);
         if (user is null) return IsAuthenticated ? HiddenNotFound() : UnauthorizedSession();
+        const int maxExportRows = 100_000;
+        if ((long)(request?.Rows?.Count ?? 0) + (request?.Unmatched?.Count ?? 0) > maxExportRows)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                ApiResponse.Failure($"عدد صفوف التصدير يتجاوز الحد المسموح ({maxExportRows})."));
         try
         {
             var rows = new List<BulkSearchRow>(request?.Rows?.Count ?? 0);
@@ -148,6 +152,7 @@ public class BulkSearchController(IAuthService auth, IBulkSearchService bulk) : 
                     var field = (item?.Field ?? "").Trim().ToLowerInvariant();
                     if (item is null || item.Sequence < 1 || item.RowIndex < 0
                         || string.IsNullOrWhiteSpace(item.QueryValue)
+                        || item.QueryValue.Length > BulkSearchMatch.MaxValueLength
                         || !BulkSearchMatch.IsSupportedField(field))
                         return Bad("بيانات التصدير غير صالحة.");
                     exportField ??= field;
@@ -166,6 +171,7 @@ public class BulkSearchController(IAuthService auth, IBulkSearchService bulk) : 
                     var field = (item?.Field ?? "").Trim().ToLowerInvariant();
                     if (item is null || item.Sequence < 1
                         || string.IsNullOrWhiteSpace(item.QueryValue)
+                        || item.QueryValue.Length > BulkSearchMatch.MaxValueLength
                         || !BulkSearchMatch.IsSupportedField(field))
                         return Bad("بيانات التصدير غير صالحة.");
                     exportField ??= field;

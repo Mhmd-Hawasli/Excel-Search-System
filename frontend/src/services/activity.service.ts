@@ -44,7 +44,6 @@ export const activityService = {
     const total = first.total;
     const totalPages = Math.ceil(total / first.pageSize);
     for (let page = 2; page <= totalPages; page += 1) {
-      // eslint-disable-next-line no-await-in-loop
       const next = await this.list(action, page, ACTIVITY_FETCH_PAGE_SIZE);
       items.push(...next.items);
       if (items.length >= next.total) break;

@@ -22,10 +22,13 @@ import { CategorySelector } from "@/features/categories/category-selector";
 import { FieldMappingSelect } from "@/features/fields/field-mapping-select";
 import { WorkbookSheetSelector } from "@/features/upload/workbook-sheet-selector";
 import { Button } from "@/components/ui/button";
+import { DataTableViewport } from "@/components/data-table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { UploadProgressStatus } from "@/components/upload-progress-status";
+import { FilePicker } from "@/components/file-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { useUploadJobPolling } from "@/hooks/use-upload-job-polling";
 import { ApiError } from "@/services/api-client";
@@ -68,6 +71,7 @@ export function UploadWizard({
   const [nameError, setNameError] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
+  const [inspectProgress, setInspectProgress] = useState<number | null>(null);
   const [job, setJob] = useUploadJobPolling({
     doneMessage: "تم حفظ الملف وأصبحت سجلاته جاهزة للبحث.",
     failedFallbackMessage: "فشل حفظ الملف.",
@@ -106,8 +110,9 @@ export function UploadWizard({
   async function inspect() {
     if (!file) return toast.error("اختر ملف Excel أولًا.");
     setBusy(true);
+    setInspectProgress(0);
     try {
-      const result = await uploadService.inspect(file);
+      const result = await uploadService.inspect(file, setInspectProgress);
       setInspection(result);
       applySheet(result.selected);
       setName(file.name.replace(/\.(xlsx|xls)$/i, ""));
@@ -116,6 +121,7 @@ export function UploadWizard({
       toast.error(cause instanceof ApiError ? cause.message : "تعذر فحص الملف.");
     } finally {
       setBusy(false);
+      setInspectProgress(null);
     }
   }
 
@@ -446,10 +452,10 @@ export function UploadWizard({
               <div className="space-y-2">
                 <Label htmlFor="workbook-file">ملف Excel</Label>
                 <div className="flex gap-2">
-                  <Input
+                  <FilePicker
                     id="workbook-file"
-                    type="file"
                     accept=".xlsx,.xls"
+                    fileName={file?.name}
                     disabled={busy}
                     onChange={(event) => {
                       setFile(event.target.files?.[0] ?? null);
@@ -472,6 +478,9 @@ export function UploadWizard({
                   </Button>
                 </div>
               </div>
+              {busy && inspectProgress !== null ? (
+                <UploadProgressStatus percent={inspectProgress} processingLabel="جارٍ فحص المصنف…" className="md:col-span-2" />
+              ) : null}
               {inspection ? (
                 <div className="md:col-span-2">
                   <WorkbookSheetSelector
@@ -545,12 +554,12 @@ export function UploadWizard({
                   </select>
                 </div>
               ) : null}
-              <div className="overflow-x-auto rounded-lg border">
+              <DataTableViewport label="ربط أعمدة Excel">
                 <table className="w-full min-w-[560px] text-sm">
                   <thead className="bg-muted">
                     <tr>
-                      <th className="w-2/5 p-3 text-right">الحقل القياسي في النظام</th>
-                      <th className="p-3 text-right">عمود Excel المرتبط</th>
+                      <th className="w-2/5 whitespace-nowrap p-3 text-right">الحقل القياسي في النظام</th>
+                      <th className="whitespace-nowrap p-3 text-right">عمود Excel المرتبط</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -616,7 +625,7 @@ export function UploadWizard({
                     })}
                   </tbody>
                 </table>
-              </div>
+              </DataTableViewport>
               <p className="text-xs text-muted-foreground">
                 لا يمكن ربط عمود Excel بأكثر من حقل قياسي. الحقول التي لا يقابلها عمود في الملف يمكن
                 تركها «غير مربوط». مفتاح pk الرئيسي يُربط بأي عمود تختاره حسب اسمه لا حسب ترتيبه،

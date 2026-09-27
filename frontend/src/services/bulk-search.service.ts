@@ -1,4 +1,4 @@
-import { apiFetchBinary, apiFetchNDJSON, apiPost } from "./api-client";
+import { apiFetchBinary, apiFetchNDJSON, apiPost, apiUploadForm } from "./api-client";
 import type { NdjsonEvent } from "./misc.service";
 
 export interface BulkInspection {
@@ -83,32 +83,11 @@ export interface BulkRunBody {
 }
 
 async function uploadInspection(file: File, onProgress?: (percent: number) => void): Promise<BulkInspection> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/bulk-search/inspect");
-    xhr.withCredentials = true;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(Math.min(99, Math.round((event.loaded / event.total) * 100)));
-    };
-    xhr.upload.onload = () => onProgress?.(100);
-    xhr.onload = () => {
-      try {
-        const body = JSON.parse(xhr.responseText);
-        if (xhr.status < 200 || xhr.status >= 300) {
-          reject(new Error(body?.error ?? "تعذر فحص الملف."));
-          return;
-        }
-        resolve(body.data ?? body);
-      } catch {
-        reject(new Error("تعذر فحص الملف."));
-      }
-    };
-    xhr.onerror = () => reject(new Error("تعذر الاتصال بالخادم."));
-    xhr.onabort = () => reject(new Error("تم إلغاء رفع الملف."));
-    xhr.send(form);
-  });
+  const form = new FormData();
+  form.append("file", file);
+  const response = await apiUploadForm<{ data?: BulkInspection } & Partial<BulkInspection>>(
+    "/api/bulk-search/inspect", form, onProgress);
+  return (response.data ?? response) as BulkInspection;
 }
 
 export const bulkSearchService = {
@@ -145,13 +124,14 @@ export const bulkSearchService = {
         .catch(reject);
     });
   },
-  async downloadExport(rows: BulkExportRow[], unmatched: BulkExportUnmatched[], signal?: AbortSignal): Promise<void> {
+  async downloadExport(rows: BulkExportRow[], unmatched: BulkExportUnmatched[], signal?: AbortSignal,
+    onProgress?: (receivedBytes: number, totalBytes: number | null) => void): Promise<void> {
     const { blob, filename } = await apiFetchBinary("/api/bulk-search/export", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rows, unmatched }),
       signal,
-    });
+    }, onProgress);
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -159,6 +139,6 @@ export const bulkSearchService = {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   },
 };

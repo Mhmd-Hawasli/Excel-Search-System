@@ -26,6 +26,8 @@ import { WorkbookSheetSelector } from "@/features/upload/workbook-sheet-selector
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { UploadProgressStatus } from "@/components/upload-progress-status";
+import { FilePicker } from "@/components/file-picker";
 import { useUploadJobPolling } from "@/hooks/use-upload-job-polling";
 import { ApiError } from "@/services/api-client";
 import { filesService } from "@/services/files.service";
@@ -63,6 +65,7 @@ export function FileUpdateWizard({
   const [sheet, setSheet] = useState<SheetInspection | null>(null);
   const [columns, setColumns] = useState<MappedColumn[]>([]);
   const [busy, setBusy] = useState(false);
+  const [inspectProgress, setInspectProgress] = useState<number | null>(null);
   const [preview, setPreview] = useState<ReplacePreview | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [manualOnly, setManualOnly] = useState(false);
@@ -166,14 +169,16 @@ export function FileUpdateWizard({
   async function inspect() {
     if (!file) return;
     setBusy(true);
+    setInspectProgress(0);
     try {
-      const result = await uploadService.inspect(file);
+      const result = await uploadService.inspect(file, setInspectProgress);
       setInspection(result);
       applySheet(result.selected);
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : "تعذر فحص الملف.");
     } finally {
       setBusy(false);
+      setInspectProgress(null);
     }
   }
   function updateColumn(
@@ -364,10 +369,10 @@ export function FileUpdateWizard({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              type="file"
+            <FilePicker
               accept=".xlsx,.xls"
               disabled={busy}
+              fileName={file?.name}
               onChange={(event) => {
                 setFile(event.target.files?.[0] ?? null);
                 setInspection(null);
@@ -383,6 +388,9 @@ export function FileUpdateWizard({
               فحص الملف
             </Button>
           </div>
+          {busy && inspectProgress !== null ? (
+            <UploadProgressStatus percent={inspectProgress} processingLabel="جارٍ فحص المصنف الجديد…" />
+          ) : null}
           {inspection ? (
             <WorkbookSheetSelector
               key={inspection.token}

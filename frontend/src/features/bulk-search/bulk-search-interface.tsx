@@ -7,9 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { UploadProgressStatus } from "@/components/upload-progress-status";
+import { FilePicker } from "@/components/file-picker";
 import { FieldMappingSelect } from "@/features/fields/field-mapping-select";
 import { ScopeSelector } from "@/features/search/scope-selector";
 import { groupsService } from "@/services/groups.service";
+import { toast } from "sonner";
+import { useExportLock } from "@/lib/export-lock";
 import { formatShamCash } from "@/lib/conflict-format";
 import { STANDARD_FIELD_LABELS, suggestStandardField } from "@/lib/standard-fields";
 import { cn } from "@/lib/cn";
@@ -82,6 +86,9 @@ export function BulkSearchInterface() {
   const [runDetail, setRunDetail] = useState<string | null>(null);
   const [result, setResult] = useState<BulkSearchResult | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportReceived, setExportReceived] = useState(0);
+  const [exportTotal, setExportTotal] = useState<number | null>(null);
+  const { blocked: exportBlocked, tryAcquire: tryAcquireExport, release: releaseExport } = useExportLock();
   const [error, setError] = useState<string | null>(null);
   const [stopped, setStopped] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -195,9 +202,15 @@ export function BulkSearchInterface() {
 
   async function exportFile() {
     if (!inspection || !result || exporting) return;
+    if (!tryAcquireExport()) {
+      toast.info("يوجد تصدير جارٍ — انتظر انتهاءه ثم أعد المحاولة.");
+      return;
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setExporting(true);
+    setExportReceived(0);
+    setExportTotal(null);
     setError(null);
     setStopped(false);
     try {
@@ -218,7 +231,10 @@ export function BulkSearchInterface() {
         sequence: item.sequence,
         queryValue: item.query,
         field: result.field,
-      })), controller.signal);
+      })), controller.signal, (received, total) => {
+        setExportReceived(received);
+        setExportTotal(total);
+      });
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setStopped(true);
@@ -228,6 +244,7 @@ export function BulkSearchInterface() {
     } finally {
       abortRef.current = null;
       setExporting(false);
+      releaseExport();
     }
   }
 
@@ -261,11 +278,9 @@ export function BulkSearchInterface() {
             <h2 className="font-black">1 — رفع ملف القيم</h2>
             {inspection ? <Badge variant="secondary">{fileName}</Badge> : null}
           </div>
-          <input
-            type="file"
+          <FilePicker
             accept=".xlsx,.xls"
             aria-label="ملف Excel لقيم البحث الجماعي"
-            className="block w-full cursor-pointer text-sm text-muted-foreground file:me-3 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
             disabled={uploading || running}
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -274,16 +289,7 @@ export function BulkSearchInterface() {
             }}
           />
           {uploading ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <LoaderCircle className="size-4 animate-spin" />
-                  {uploadProgress < 100 ? "جارٍ رفع الملف…" : "جارٍ فحص الملف على الخادم…"}
-                </span>
-                <span className="font-bold text-foreground ltr-numbers">{uploadProgress}%</span>
-              </div>
-              <Progress value={uploadProgress} aria-label="نسبة رفع الملف" />
-            </div>
+            <UploadProgressStatus percent={uploadProgress} />
           ) : null}
           {inspection && inspection.sheets.length > 1 ? (
             <div className="space-y-1.5">
@@ -504,14 +510,25 @@ export function BulkSearchInterface() {
               <h2 className="font-black">النتائج — تُكرر كل قيمة بحث لكل نتيجة مطابقة (≥ 80%، أول 10 لكل قيمة)</h2>
               <Button
                 type="button"
-                disabled={exporting}
+                disabled={exporting || exportBlocked}
                 onClick={() => void exportFile()}
-                title="يشمل ملف التصدير جميع القيم المدروسة بالترتيب: المطابقات بتفاصيلها، والقيم بلا نتائج بصفوف فارغة البيانات"
+                title={exportBlocked && !exporting
+                  ? "يوجد تصدير جارٍ — انتظر انتهاءه"
+                  : "يشمل ملف التصدير جميع القيم المدروسة بالترتيب: المطابقات بتفاصيلها، والقيم بلا نتائج بصفوف فارغة البيانات"}
               >
                 {exporting ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}
-                تصدير ملف النتائج (XLSX)
+                {exporting ? "جارٍ تصدير الملف…" : "تصدير ملف النتائج (XLSX)"}
               </Button>
             </div>
+            {exporting ? (
+              <div role="status" className="text-sm text-muted-foreground" aria-live="polite">
+                {exportReceived === 0 ? "جارٍ تجهيز ملف النتائج…" : exportTotal
+                  ? `تم تنزيل ${Math.min(100, Math.round(exportReceived / exportTotal * 100))}%`
+                  : `تم تنزيل ${(exportReceived / 1024 / 1024).toFixed(1)} ميغابايت`}
+                <progress className="mt-1 block h-2 w-full accent-primary"
+                  max={exportTotal ?? undefined} value={exportTotal ? exportReceived : undefined} />
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2 text-sm">
               <Badge variant="secondary">القيم: {result.totalValues.toLocaleString("en-US")}</Badge>
               <Badge variant="default">قيم لها نتائج: {result.matchedValues.toLocaleString("en-US")}</Badge>

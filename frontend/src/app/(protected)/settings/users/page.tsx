@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LoadingScreen } from "@/components/loading-screen";
 import { PageHeader } from "@/components/page-header";
 import { UsersManager, type GroupOption, type ManagedUser } from "@/features/users/users-manager";
 import { hasPermission } from "@/lib/permissions";
@@ -71,7 +72,7 @@ export default function UsersPage() {
     return (
       <div className="space-y-7">
         <PageHeader eyebrow="إدارة النظام" title="إدارة المستخدمين" description="إنشاء المستخدمين وتعديل بياناتهم وحذفهم والتحكم الكامل بصلاحيات كل مستخدم." />
-        <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>
+        <LoadingScreen message="جارٍ تحميل المستخدمين…" />
       </div>
     );
   }

@@ -54,7 +54,7 @@ public class SearchController(ISearchService search, IAuthService auth) : ApiCon
         var files = ParseUuids(fileIds, out var filesValid);
         if (!groupsValid || !filesValid) return Bad("معايير البحث غير صالحة.");
         int pageNum = 1, sizeNum = 25;
-        if (page is not null && (!int.TryParse(page, out pageNum) || pageNum < 1))
+        if (page is not null && (!int.TryParse(page, out pageNum) || pageNum is < 1 or > 1_000_000))
             return Bad("معايير البحث غير صالحة.");
         if (pageSize is not null && (!int.TryParse(pageSize, out sizeNum) || sizeNum is < 10 or > 100))
             return Bad("معايير البحث غير صالحة.");

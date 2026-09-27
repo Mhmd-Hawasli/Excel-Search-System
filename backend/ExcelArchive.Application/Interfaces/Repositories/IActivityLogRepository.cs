@@ -15,7 +15,8 @@ public interface IActivityLogRepository : IRepositoryBase<ActivityLog>
     Task<IReadOnlyList<ActivityLog>> ListByActionAsync(ActivityAction action, string targetName, CancellationToken ct = default);
     Task<(IReadOnlyList<ActivityLog> Rows, int Total)> SearchAsync(
         ActivityAction? action, string? search, ActivityAction? searchedAction,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, ActivityPrivateExclusion? exclusion = null,
+        CancellationToken ct = default);
     /// <summary>
     /// True when this visitor already logged a visit of this record since
     /// <paramref name="cutoff"/> (visit de-duplication: one audit row per
@@ -23,3 +24,9 @@ public interface IActivityLogRepository : IRepositoryBase<ActivityLog>
     /// </summary>
     Task<bool> ExistsRecentVisitAsync(Guid recordId, string visitorUsername, DateTime cutoff, CancellationToken ct = default);
 }
+
+/// <summary>Live private-group identifiers and names to exclude before activity
+/// pagination and counting. Values come from the visibility gate, never from
+/// the HTTP request.</summary>
+public sealed record ActivityPrivateExclusion(
+    string[] GroupIds, string[] GroupNames, string[] FileIds, string[] FileSuffixes);

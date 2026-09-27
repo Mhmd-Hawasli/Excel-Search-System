@@ -79,3 +79,5 @@ v6-*.sql
 *.nupkg
 *.snupkg
 *.tgz
+.obsidian
+plan

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, PlusCircle, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { LoadingScreen } from "@/components/loading-screen";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,7 +57,7 @@ function headerSuggestBlocked(headerRaw: string): boolean {
 }
 
 function shouldSuggest(column: ManualTemplateColumn): boolean {
-  if (column.headerRaw.toLowerCase() === "pk") return false;
+  if (isPkColumn(column)) return false;
   if (column.standardField !== null && NO_SUGGEST_STANDARD.has(column.standardField)) return false;
   if (column.standardField === null && headerSuggestBlocked(column.headerRaw)) return false;
   return true;
@@ -76,8 +77,6 @@ function digitsOnly(value: string): string {
 // فحص صيغة حقل واحد (القيم الفارغة مقبولة دائماً). يرجع رسالة الخطأ أو null.
 function formatError(column: ManualTemplateColumn, rawValue: string): string | null {
   const value = rawValue.trim();
-  if (column.headerRaw.toLowerCase() === "pk")
-    return /^[1-9][0-9]*$/.test(value) ? null : "أدخل مفتاح pk جديدًا موجبًا وغير مكرر.";
   if (!value) return null;
   switch (column.standardField) {
     case "national_id": {
@@ -123,14 +122,20 @@ type CategoryGroup = {
   columns: ManualTemplateColumn[];
 };
 
+function isPkColumn(column: ManualTemplateColumn): boolean {
+  return column.headerRaw.toLowerCase() === "pk";
+}
+
+// مفتاح الربط الرئيسي (pk) يُولّد تلقائيًا (n+1) ولا يظهر في الخطوات.
 function groupByCategory(columns: ManualTemplateColumn[]): CategoryGroup[] {
   const byKey = new Map<string, CategoryGroup>();
   for (const column of columns) {
-    const key = column.headerRaw.toLowerCase() === "pk" ? "pk" : column.categoryId ?? "other";
+    if (isPkColumn(column)) continue;
+    const key = column.categoryId ?? "other";
     const group = byKey.get(key) ?? {
       key,
-      name: key === "pk" ? "مفتاح الربط الرئيسي" : column.categoryName ?? "أخرى",
-      order: key === "pk" ? -1 : column.categoryOrder ?? Number.MAX_SAFE_INTEGER,
+      name: column.categoryName ?? "أخرى",
+      order: column.categoryOrder ?? Number.MAX_SAFE_INTEGER,
       columns: [],
     };
     group.columns.push(column);
@@ -459,7 +464,7 @@ export function InsertRecordForm() {
   }
 
   if (loadingGroups || canInsert === null) {
-    return <p className="text-sm text-muted-foreground">جارٍ التحميل…</p>;
+    return <LoadingScreen message="جارٍ التحميل…" />;
   }
 
   if (!canInsert) {
@@ -528,7 +533,7 @@ export function InsertRecordForm() {
       </Card>
 
       {loadingTemplate ? (
-        <p className="text-sm text-muted-foreground">جارٍ تحميل أعمدة الملف وفئاتها…</p>
+        <LoadingScreen message="جارٍ تحميل أعمدة الملف وفئاتها…" />
       ) : null}
       {templateError ? (
         <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
@@ -542,7 +547,8 @@ export function InsertRecordForm() {
             <CardTitle>2 — تعبئة البيانات حسب الفئات</CardTitle>
             <CardDescription>
               {template.groupName} — {template.fileName} — {template.columns.length} عمود في {categoryGroups.length}{" "}
-              فئات. معبأ {filledCount} حقل.
+              فئات. معبأ {filledCount} حقل. مفتاح الربط (pk) يُولّد تلقائيًا — التالي:{" "}
+              <span className="font-bold ltr-numbers">{template.nextPk.toLocaleString("en-US")}</span>.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -574,7 +580,7 @@ export function InsertRecordForm() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {activeGroup.columns.map((column) => {
                     const isUnique = column.standardField !== null && UNIQUE_FIELDS.has(column.standardField);
-                    const isNumeric = column.headerRaw.toLowerCase() === "pk" || (column.standardField !== null && NUMERIC_FIELDS.has(column.standardField));
+                    const isNumeric = column.standardField !== null && NUMERIC_FIELDS.has(column.standardField);
                     const suggest = shouldSuggest(column);
                     const listId = `suggest-${column.id}`;
                     const opts = suggest ? (suggestions[column.id] ?? []) : [];
@@ -591,7 +597,6 @@ export function InsertRecordForm() {
                           <span className="font-bold">{column.headerRaw}</span>
                           <span className="text-xs font-normal text-muted-foreground">
                             {fieldLabel(column)}
-                            {column.headerRaw.toLowerCase() === "pk" ? ` — اختر رقمًا جديدًا لا يقل عن ${template.nextPk}` : ""}
                             {isUnique && column.standardField ? ` — ${UNIQUE_HINT[column.standardField]}` : ""}
                           </span>
                         </Label>

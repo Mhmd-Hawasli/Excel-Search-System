@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { FilePicker } from "@/components/file-picker";
 import { SheetMergeResults } from "@/features/sheet-merge/sheet-merge-results";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission } from "@/lib/permissions";
@@ -204,11 +205,9 @@ export default function SheetMergePage() {
                   </div>
                 ) : null}
               </div>
-              <input
-                type="file"
+              <FilePicker
                 accept=".xlsx"
                 aria-label="ملف الإكسل الذي يحتوي على عدة صفحات"
-                className="block w-full cursor-pointer text-sm text-muted-foreground file:me-3 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
                 disabled={uploading || running}
                 onChange={(event) => {
                   const file = event.target.files?.[0];

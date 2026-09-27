@@ -1,6 +1,6 @@
 import type { ApiEnvelope } from "@/types/api";
 import type { LinkedSheetsConfig, SheetInspection, UploadJobDto, WorkbookInspection } from "@/types/model";
-import { apiFetch, apiGet, apiPost } from "./api-client";
+import { apiGet, apiPost, apiUploadForm } from "./api-client";
 
 export interface UploadJobEnvelope {
   jobId: string;
@@ -14,13 +14,11 @@ export interface MappingTemplate {
 }
 
 export const uploadService = {
-  async inspect(file: File): Promise<WorkbookInspection> {
+  async inspect(file: File, onProgress?: (percent: number) => void): Promise<WorkbookInspection> {
     const form = new FormData();
     form.append("file", file);
-    const envelope = await apiFetch<ApiEnvelope<WorkbookInspection>>("/api/workbooks/inspect", {
-      method: "POST",
-      body: form,
-    });
+    const envelope = await apiUploadForm<ApiEnvelope<WorkbookInspection>>(
+      "/api/workbooks/inspect", form, onProgress);
     if (!envelope.data) throw new Error("تعذر فحص الملف.");
     return envelope.data;
   },

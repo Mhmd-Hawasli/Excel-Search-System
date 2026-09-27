@@ -28,4 +28,17 @@ public interface IRecordRepository : IRepositoryBase<Record>
     Task<bool> ExistsPhoneAsync(Guid fileId, string dPhone, CancellationToken ct = default);
     Task<bool> ExistsRawAsync(Guid fileId, string headerRaw, string value, CancellationToken ct = default);
     Task<IReadOnlyList<string>> ListDistinctValuesAsync(Guid fileId, string headerRaw, int take, CancellationToken ct = default);
+
+    // Narrow projection for duplicate-quality scanning: row index + the six
+    // raw values only (previously whole Record entities with full jsonb were
+    // materialized, which made the file-detail page take a minute on files
+    // with a few thousand rows).
+    Task<IReadOnlyList<DuplicateScanRow>> ListDuplicateScanRowsAsync(Guid fileId,
+        string? shamHeader, string? fullHeader, string? firstHeader, string? fatherHeader,
+        string? lastHeader, string? motherHeader, CancellationToken ct = default);
 }
+
+/// <summary>One row of raw values for duplicate-quality scanning.</summary>
+public sealed record DuplicateScanRow(int RowIndex, string Sham, string Full,
+    string First, string Father, string Last, string Mother);
+

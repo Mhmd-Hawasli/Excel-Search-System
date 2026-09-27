@@ -19,6 +19,7 @@ import { FileCard } from "@/components/file-card";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingScreen } from "@/components/loading-screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApiQuery } from "@/hooks/use-api-query";
 import { hasPermission, canBrowseGroups } from "@/lib/permissions";
@@ -145,9 +146,8 @@ export function Dashboard() {
             {error ? (
               <CardContent><p role="alert" className="text-sm text-destructive">{error}</p></CardContent>
             ) : loading ? (
-              <CardContent className="space-y-2">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
+              <CardContent>
+                <LoadingScreen message="جارٍ تحميل أحدث الملفات…" />
               </CardContent>
             ) : recentFiles.length ? (
               <div>

@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { UploadProgressStatus } from "@/components/upload-progress-status";
+import { FilePicker } from "@/components/file-picker";
 import { MappingForm } from "@/features/merge/mapping-form";
 import { ResultsView, type MergeClientResult } from "@/features/merge/results-view";
 import { ChevronDown, ChevronUp, GripVertical, LoaderCircle, Play, Plus, RefreshCw, RotateCcw, Trash2, Upload } from "lucide-react";
@@ -149,11 +151,9 @@ function UploadPanel({
             <Badge variant="secondary">{state.rowCount.toLocaleString("en-US")} صف</Badge>
           ) : null}
         </div>
-        <input
-          type="file"
+        <FilePicker
           accept=".xlsx,.xls"
           aria-label={`ملف Excel للـ${title}`}
-          className="block w-full cursor-pointer text-sm text-muted-foreground file:me-3 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary-foreground hover:file:bg-primary/90"
           disabled={disabled || state.uploading}
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -161,16 +161,7 @@ function UploadPanel({
           }}
         />
         {state.uploading ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-2">
-                <LoaderCircle className="size-4 animate-spin" />
-                {state.progress < 100 ? "جارٍ رفع الملف…" : "جارٍ فحص الملف على الخادم…"}
-              </span>
-              <span className="font-bold text-foreground ltr-numbers">{state.progress}%</span>
-            </div>
-            <Progress value={state.progress} aria-label="نسبة رفع الملف" />
-          </div>
+          <UploadProgressStatus percent={state.progress} />
         ) : null}
         {state.inspection && state.inspection.sheets.length > 1 ? (
           <label className="block space-y-1.5">
