@@ -52,19 +52,25 @@ public static class Permissions
 
     public const string VersionsBump = "versions.bump";
 
+    public const string StatsView = "stats.view";
+
+    public const string CustomExportView = "customExport.view";
+    public const string CustomExportRun = "customExport.run";
+
     // Architecture-only extras (not part of the 24 canonical V1 keys).
     // groups.manage was introduced during the ASP.NET split; search.view is a
     // legacy alias resolved at check time, not a stored global grant.
     public const string GroupsManage = "groups.manage";
     public const string SearchView = "search.view";
 
-    /// <summary>33 canonical keys in thirteen groups (docs/07.2 + groups create/update + records/bulk/default-search + versions + private-groups).</summary>
+    /// <summary>36 canonical keys in fifteen groups (docs/07.2 + groups create/update + records/bulk/default-search + versions + private-groups + stats + custom-export).</summary>
     public static readonly string[] Canonical = [UsersView, UsersCreate, UsersUpdate, UsersDelete,
         BackupView, BackupExport, BackupRestore, ActivityView, ActivityBrowse,
         MergeView, SheetMergeView, ExportView, ExportRun, EditsView, EditsBadge, EditsUpdate,
         UploadView, UploadRun, ConflictsView, ConflictsFilters, CategoriesView, CategoriesManage,
         GroupsView, GroupsViewScoped, GroupsCreate, GroupsUpdate, GroupsDefaultSearch, GroupsViewPrivate,
-        RecordsView, RecordsCreate, RecordsDelete, BulkSearchView, VersionsBump];
+        RecordsView, RecordsCreate, RecordsDelete, BulkSearchView, VersionsBump,
+        StatsView, CustomExportView, CustomExportRun];
 
     /// <summary>Global owner grants: canonical minus the scoped key.</summary>
     public static readonly string[] OwnerGlobals = Canonical.Where(k => k != GroupsViewScoped).ToArray();

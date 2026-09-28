@@ -169,6 +169,12 @@ public class RecordRepository(AppDbContext db) : RepositoryBase<Record>(db), IRe
             .ToList();
     }
 
+    public async Task<IReadOnlyList<RowPkMap>> ListPkMapAsync(Guid fileId, CancellationToken ct = default)
+        => await Db.Records.AsNoTracking()
+            .Where(r => r.FileId == fileId)
+            .Select(r => new RowPkMap(r.RowIndex, r.Pk))
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<string>> ListDistinctValuesAsync(Guid fileId, string headerRaw, int take, CancellationToken ct = default)
     {
         var limit = Math.Clamp(take, 1, 200);

@@ -48,7 +48,7 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
         if (file is null) return null;
         var quality = await uow.DataQuality.CountByFileAsync(fileId, ct)
-            + (await DuplicateQualityIssuesAsync(fileId, file.Columns, ct)).Count;
+            + (await DuplicateQualityIssuesAsync(fileId, file.Columns, row => row, ct)).Count;
         var edits = includeEdits ? await uow.RecordEdits.CountByFileAsync(fileId, ct) : 0;
         var dto = new FileDto(file.Id, file.GroupId, file.Name, file.Description,
             file.OriginalFilename, file.SheetName, file.RowCount, file.ColumnSignature, file.Version,
@@ -64,7 +64,12 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         var file = await uow.Files.FindWithColumnsAsync(fileId, ct);
         if (file is null) return null;
         var issues = await uow.DataQuality.ListByFileAsync(fileId, ct);
-        var duplicateIssues = await DuplicateQualityIssuesAsync(fileId, file.Columns, ct);
+        // Stable pk per Excel row (falls back to RowIndex for legacy rows
+        // without pk) so the report can show pk instead of the row number.
+        var pkByRow = (await uow.Records.ListPkMapAsync(fileId, ct))
+            .ToDictionary(r => r.RowIndex, r => r.Pk, EqualityComparer<int>.Default);
+        long PkOf(int row) => pkByRow.TryGetValue(row, out var pk) ? pk ?? row : row;
+        var duplicateIssues = await DuplicateQualityIssuesAsync(fileId, file.Columns, PkOf, ct);
         var counts = Enum.GetValues<DataQualityIssueType>()
             .Select(t => new QualityTypeCount(ToIssueKey(t), issues.LongCount(i => i.IssueType == t)))
             .ToList();
@@ -73,12 +78,12 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         counts.Add(new QualityTypeCount("DUPLICATE_FULL_NAME_MOTHER",
             duplicateIssues.LongCount(i => i.IssueType == "DUPLICATE_FULL_NAME_MOTHER")));
         return new FileQualityDto(file.Id, file.Name, file.RowCount, counts,
-            issues.Select(i => new QualityIssueDto(i.RowIndex, ToIssueKey(i.IssueType), i.ColumnName, i.RawValue))
+            issues.Select(i => new QualityIssueDto(i.RowIndex, ToIssueKey(i.IssueType), i.ColumnName, i.RawValue, PkOf(i.RowIndex)))
                 .Concat(duplicateIssues).OrderBy(i => i.RowIndex).ToList());
     }
 
     private async Task<List<QualityIssueDto>> DuplicateQualityIssuesAsync(
-        Guid fileId, IEnumerable<FileColumn> columns, CancellationToken ct)
+        Guid fileId, IEnumerable<FileColumn> columns, Func<int, long> pkOf, CancellationToken ct)
     {
         var sham = columns.FirstOrDefault(c => c.StandardField == StandardField.ShamCash)?.HeaderRaw;
         var full = columns.FirstOrDefault(c => c.StandardField == StandardField.FullName)?.HeaderRaw;
@@ -123,9 +128,9 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
         }
         var result = new List<QualityIssueDto>();
         foreach (var rows in shamRows.Values.Where(r => r.Count > 1))
-            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_SHAM_CASH", sham, r.Raw)));
+            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_SHAM_CASH", sham, r.Raw, pkOf(r.Row))));
         foreach (var rows in personRows.Values.Where(r => r.Count > 1))
-            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_FULL_NAME_MOTHER", "الاسم الثلاثي واسم الأم", r.Raw)));
+            result.AddRange(rows.Select(r => new QualityIssueDto(r.Row, "DUPLICATE_FULL_NAME_MOTHER", "الاسم الثلاثي واسم الأم", r.Raw, pkOf(r.Row))));
         return result;
     }
 
@@ -509,6 +514,12 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                 || string.IsNullOrWhiteSpace(k.HeaderRaw) || k.HeaderRaw.Length > 500
                 || (k.MatchKey is not null && k.MatchKey.Length > 64)))
             throw new InvalidDataException("إعدادات الاستبدال غير مكتملة.");
+        // Row-level choices for pk conflicts:
+        // KeepDeletedPks = new-only pks (resurrected or brand-new) to SKIP.
+        // ConfirmRemovePks = old pks missing from the workbook the user allows
+        // to delete. Both are validated again by the worker against live data.
+        var keepDeleted = (request.KeepDeletedPks ?? []).Where(p => p >= 1).Distinct().Take(100000).ToList();
+        var confirmRemove = (request.ConfirmRemovePks ?? []).Where(p => p >= 1).Distinct().Take(100000).ToList();
         // Smart name-based structure check (NOT positional): columns are matched
         // by normalized header name. Added/reordered columns keep the direct
         // update path; only REMOVED columns require the alternate-version path.
@@ -599,6 +610,8 @@ public class FileService(IUnitOfWork uow, IActivityService activity, IColumnOrde
                     headerRaw = k.HeaderRaw,
                     matchKey = k.MatchKey,
                 }),
+                keepDeletedPks = keepDeleted,
+                confirmRemovePks = confirmRemove,
                 linkedSheets = request.LinkedSheets is null ? null : new
                 {
                     sheetNames = request.LinkedSheets.SheetNames,

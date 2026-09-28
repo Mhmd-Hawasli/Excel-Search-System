@@ -23,4 +23,5 @@ public class File
     public ICollection<RecordEdit> RecordEdits { get; set; } = new List<RecordEdit>();
     public ICollection<UserPermission> ScopedPermissions { get; set; } = new List<UserPermission>();
     public ICollection<FileVersion> Versions { get; set; } = new List<FileVersion>();
+    public ICollection<ExportTemplate> ExportTemplates { get; set; } = new List<ExportTemplate>();
 }

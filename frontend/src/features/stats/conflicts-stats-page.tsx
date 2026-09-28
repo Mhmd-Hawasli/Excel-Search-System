@@ -9,8 +9,11 @@ import { PageHeader } from "@/components/page-header";
 import { ConflictStats } from "@/features/conflicts/conflict-stats";
 import { CONFLICT_CATEGORIES } from "@/lib/conflicts-catalog";
 import { cn } from "@/lib/cn";
+import { hasPermission } from "@/lib/permissions";
 import { ApiError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { conflictsService, type ConflictStats as Stats } from "@/services/conflicts.service";
+import { useApiQuery } from "@/hooks/use-api-query";
 
 const CATEGORY_STYLE: Record<string, { icon: typeof ScanSearch; highlight?: boolean }> = {
   invalid: { icon: TriangleAlert, highlight: true },
@@ -19,11 +22,12 @@ const CATEGORY_STYLE: Record<string, { icon: typeof ScanSearch; highlight?: bool
   conflicting: { icon: ScanSearch },
 };
 
-/** احصائيات تضارب البيانات: 4 بطاقات فئات (كالصورة) ثم التفاصيل. */
+/** احصائيات تضارب البيانات: 4 بطاقات فئات (كالصورة) ثم التفاصيل. الدخول يتطلب stats.view مع conflicts.view. */
 export function ConflictsStatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { data: user } = useApiQuery(() => authService.me(), []);
 
   useEffect(() => {
     let active = true;
@@ -45,6 +49,25 @@ export function ConflictsStatsPage() {
   const byCategory = new Map<string, number>();
   for (const rule of stats?.rules ?? []) {
     byCategory.set(rule.category, (byCategory.get(rule.category) ?? 0) + rule.instances);
+  }
+
+  if (
+    user &&
+    (!hasPermission(user.permissions, "stats.view") ||
+      !hasPermission(user.permissions, "conflicts.view"))
+  ) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="الاحصائيات"
+          title="احصائيات تضارب البيانات"
+          description="4 فئات رئيسية للاحصائيات — انقر أي بطاقة لفتح سجلاتها في تقرير التضارب."
+        />
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+          لا تملك صلاحية عرض هذه الصفحة.
+        </p>
+      </div>
+    );
   }
 
   return (

@@ -24,6 +24,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
         public List<ActivityLog> Logs { get; } = [];
         public List<RecordEdit> Edits { get; } = [];
         public List<FileVersion> Versions { get; } = [];
+        public List<ExportTemplate> ExportTemplates { get; } = [];
 
         public static ArchivePlan Parse(JsonElement root)
         {
@@ -202,6 +203,21 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 Note = ReqText(v, "note"), Kind = OptText(v, "kind") ?? "manual",
                 CreatedBy = OptText(v, "createdBy"), CreatedAt = ReqDate(v, "createdAt"),
             });
+            // Custom export templates are optional so older backups restore
+            // cleanly; unknown source columns are rejected per-row below in
+            // ValidateReferences only by file existence (columns may evolve).
+            foreach (var t in Rows(data, "exportTemplates", optional: true))
+            {
+                var cols = ReqJson(t, "columns");
+                if (cols.RootElement.ValueKind != JsonValueKind.Array)
+                    throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
+                plan.ExportTemplates.Add(new ExportTemplate
+                {
+                    Id = Uuid(t, "id"), FileId = Uuid(t, "fileId"), Name = ReqText(t, "name"),
+                    Columns = cols, CreatedBy = OptText(t, "createdBy"),
+                    CreatedAt = ReqDate(t, "createdAt"), UpdatedAt = OptDate(t, "updatedAt") ?? ReqDate(t, "createdAt"),
+                });
+            }
 
             plan.ValidateReferences();
             return plan;
@@ -272,7 +288,8 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
                 || Templates.Any(t => !groups.Contains(t.GroupId))
                 || Jobs.Any(j => j.FileId is not null && !files.Contains(j.FileId.Value))
                 || Edits.Any(e => (e.RecordId is not null && !records.Contains(e.RecordId.Value)) || !files.Contains(e.FileId))
-                || Versions.Any(v => !files.Contains(v.FileId)))
+                || Versions.Any(v => !files.Contains(v.FileId))
+                || ExportTemplates.Any(t => !files.Contains(t.FileId)))
                 throw new InvalidOperationException("ملف النسخة الاحتياطية غير صالح أو غير متوافق.");
             static void NoDuplicateIds<T>(IReadOnlyList<T> rows, Func<T, Guid> id)
             {
@@ -292,6 +309,7 @@ namespace ExcelArchive.Application.DTOs.BackupDto;
             NoDuplicateIds(Logs, a => a.Id);
             NoDuplicateIds(Edits, e => e.Id);
             NoDuplicateIds(Versions, v => v.Id);
+            NoDuplicateIds(ExportTemplates, t => t.Id);
         }
 
         public static List<JsonElement> Rows(JsonElement data, string name, bool optional = false)

@@ -30,9 +30,9 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
     public async Task<byte[]> ExportAsync(CancellationToken ct = default)
     {
         var snap = await backups.ReadArchiveAsync(ct);
-        var (groups, categories, files, columns, records, issues, templates, jobs, logs, edits, versions) = (
+        var (groups, categories, files, columns, records, issues, templates, jobs, logs, edits, versions, exportTemplates) = (
             snap.Groups, snap.Categories, snap.Files, snap.Columns, snap.Records,
-            snap.Issues, snap.Templates, snap.Jobs, snap.Logs, snap.Edits, snap.Versions);
+            snap.Issues, snap.Templates, snap.Jobs, snap.Logs, snap.Edits, snap.Versions, snap.ExportTemplates);
 
         var payload = new
         {
@@ -122,6 +122,12 @@ public class BackupService(IBackupRepository backups, IUnitOfWork uow, IActivity
                     id = v.Id, fileId = v.FileId, version = v.Version,
                     note = v.Note, kind = v.Kind, createdBy = v.CreatedBy,
                     createdAt = v.CreatedAt,
+                }).ToList(),
+                exportTemplates = exportTemplates.Select(t => new
+                {
+                    id = t.Id, fileId = t.FileId, name = t.Name,
+                    columns = t.Columns, createdBy = t.CreatedBy,
+                    createdAt = t.CreatedAt, updatedAt = t.UpdatedAt,
                 }).ToList(),
             },
         };

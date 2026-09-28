@@ -190,6 +190,13 @@ public class ReplacePreviewService(
         var useKey = false;
         var pkColumn = mapped.FirstOrDefault(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
         var targetHasPk = target.Columns.Any(c => string.Equals(c.HeaderRaw, "pk", StringComparison.OrdinalIgnoreCase));
+        // Resurrected = deleted from the system (hard delete) but still present
+        // in the workbook. Old code threw here ("pk الجديد يجب ألا يقل عن ...")
+        // and for any missing old pk ("لا يجوز حذف ..."). Now both cases are
+        // reported so the UI can offer: restore (re-add) or keep deleted.
+        var resurrectedAll = new List<(long Pk, int NewIdx, int ExcelRow)>();
+        var removedPkList = new List<long>();
+        var keepDeletedSet = new HashSet<long>((request.KeepDeletedPks ?? []).Where(p => p >= 1));
         if (pkColumn is null && targetHasPk)
             throw new InvalidDataException("تحديث الملف يتطلب عمود pk.");
         if (pkColumn is not null)
@@ -198,6 +205,7 @@ public class ReplacePreviewService(
             for (var i = 0; i < currentRows.Count; i++)
                 currentPk.Add(currentRows[i].Data["pk"], i);
             var nextPk = new Dictionary<string, int>(StringComparer.Ordinal);
+            var nextPkValue = new Dictionary<string, long>(StringComparer.Ordinal);
             var minimumNewPk = Math.Max(target.NextPk,
                 currentRows.Count == 0 ? 1 : currentRows.Max(r => long.Parse(r.Data["pk"])) + 1);
             for (var i = 0; i < newRows.Count; i++)
@@ -206,13 +214,26 @@ public class ReplacePreviewService(
                     || !long.TryParse(raw, System.Globalization.NumberStyles.None,
                         System.Globalization.CultureInfo.InvariantCulture, out var key) || key < 1 || key == long.MaxValue)
                     throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk مفقود أو غير صالح.");
-                if (!currentPk.ContainsKey(key.ToString()) && key < minimumNewPk)
-                    throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk الجديد يجب ألا يقل عن {minimumNewPk}.");
                 if (!nextPk.TryAdd(key.ToString(), i))
                     throw new InvalidDataException($"الصف {newRows[i].RowIndex}: مفتاح pk مكرر.");
+                nextPkValue[key.ToString()] = key;
             }
-            if (targetHasPk && currentPk.Keys.Except(nextPk.Keys).Any())
-                throw new InvalidDataException("لا يجوز حذف أو تغيير مفتاح pk قديم عند تحديث الملف؛ أعد جميع المفاتيح الأصلية.");
+            // Split new-only keys: pk < minimumNewPk = previously deleted
+            // (NextPk never decreases, so any gap below it is a deletion),
+            // pk >= minimumNewPk = genuinely new. Neither throws anymore.
+            foreach (var kv in nextPk)
+            {
+                if (currentPk.ContainsKey(kv.Key)) continue;
+                var pkVal = nextPkValue[kv.Key];
+                if (pkVal < minimumNewPk)
+                    resurrectedAll.Add((pkVal, kv.Value, newRows[kv.Value].RowIndex));
+            }
+            foreach (var kv in currentPk)
+            {
+                if (nextPk.TryGetValue(kv.Key, out _)) continue;
+                if (long.TryParse(kv.Key, out var oldPk))
+                    removedPkList.Add(oldPk);
+            }
             useKey = true;
             matchMode = "pk";
             currentKeyToIdx = currentPk;
@@ -278,11 +299,28 @@ public class ReplacePreviewService(
         var pairs = new List<(int DisplayRow, int CurrentIdx, int NewIdx, string? Key)>();
         var addedRowIndices = new List<int>();
         var removedRowIndices = new List<int>();
+        // Effective kept-skipped count (resurrected/new-only rows the user chose
+        // to keep deleted). Those rows are excluded from added counts and from
+        // the effective new total, so the preview matches what the import will do.
+        var keptDeletedCount = 0;
         if (useKey)
         {
+            HashSet<string>? keepDeletedKeys = null;
+            if (pkColumn is not null && keepDeletedSet.Count > 0)
+                keepDeletedKeys = new HashSet<string>(
+                    keepDeletedSet.Select(p => p.ToString()), StringComparer.Ordinal);
             foreach (var kv in newKeyToIdx!)
-                if (!currentKeyToIdx!.ContainsKey(kv.Key))
-                    addedRowIndices.Add(newRows[kv.Value].RowIndex);
+            {
+                if (currentKeyToIdx!.ContainsKey(kv.Key)) continue;
+                // New-only pk (resurrected or genuinely new): skip when the user
+                // chose to keep it deleted.
+                if (keepDeletedKeys is not null && keepDeletedKeys.Contains(kv.Key))
+                {
+                    keptDeletedCount++;
+                    continue;
+                }
+                addedRowIndices.Add(newRows[kv.Value].RowIndex);
+            }
             foreach (var kv in currentKeyToIdx!)
             {
                 if (!newKeyToIdx!.TryGetValue(kv.Key, out var ni))
@@ -388,7 +426,7 @@ public class ReplacePreviewService(
             formattingPerColumn[p.TargetRaw])).ToList();
 
         var summary = new ReplacePreviewSummary(
-            currentRows.Count, newRows.Count, pairs.Count,
+            currentRows.Count, newRows.Count - keptDeletedCount, pairs.Count,
             addedRowIndices.Count, removedRowIndices.Count,
             (long)pairs.Count * commonPairs.Count,
             changedCells, changedRows.Count,
@@ -397,6 +435,15 @@ public class ReplacePreviewService(
             changedCells > changes.Count,
             formattingCells);
 
+        var resurrectedRows = resurrectedAll
+            .OrderBy(r => r.Pk)
+            .Take(5000)
+            .Select(r => new ReplacePreviewResurrectedRow(r.Pk, r.ExcelRow))
+            .ToList();
+        var removedPksCapped = matchMode == "pk"
+            ? removedPkList.OrderBy(p => p).Take(5000).ToList()
+            : new List<long>();
+
         return new ReplacePreviewResponse(
             identical, addedColumns, removedColumns,
             summary, columnStats, changes,
@@ -404,7 +451,9 @@ public class ReplacePreviewService(
             removedRowIndices.Take(MaxRowSample).ToList(),
             changedCells > changes.Count,
             matchMode, nationalIdHeader, target.Version, newColumnStats,
-            pendingEditCount, nextVersion);
+            pendingEditCount, nextVersion,
+            resurrectedRows, removedPksCapped,
+            resurrectedAll.Count, keptDeletedCount);
     }
 
     private static string Fit(string value)

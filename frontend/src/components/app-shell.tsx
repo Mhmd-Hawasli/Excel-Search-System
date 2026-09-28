@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   DatabaseBackup,
   Download,
+  FileDown,
   FilePlus2,
   FileUp,
   FolderKanban,
@@ -39,7 +40,7 @@ const fullNavigation: NavigationSection[] = [
     label: "مساحة العمل",
     links: [
       { href: "/", label: "الرئيسية", icon: LayoutDashboard },
-      { href: "/stats", label: "الاحصائيات", icon: BarChart3 },
+      { href: "/stats", label: "الاحصائيات", icon: BarChart3, permission: "stats.view" },
       { href: "/search", label: "البحث", icon: Search, permission: "search.view" },
       { href: "/groups", label: "المجموعات", icon: FolderKanban, permission: "groups.browse" },
       { href: "/settings/categories", label: "الفئات", icon: Settings2, permission: "categories.view" },
@@ -52,6 +53,7 @@ const fullNavigation: NavigationSection[] = [
     links: [
       { href: "/upload", label: "رفع ملف", icon: FileUp, permission: "upload.view" },
       { href: "/edits", label: "تصدير ملفات الإكسل", icon: Download, permission: "export.view" },
+      { href: "/custom-export", label: "تصدير مخصص", icon: FileDown, permission: "customExport.view" },
     ],
   },
   {

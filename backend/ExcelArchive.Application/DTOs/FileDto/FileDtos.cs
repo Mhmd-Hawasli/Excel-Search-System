@@ -29,7 +29,7 @@ public record FileDetailDto(
     int QualityIssueCount,
     long EditCount);
 
-public record QualityIssueDto(int RowIndex, string IssueType, string? ColumnName, string? RawValue);
+public record QualityIssueDto(int RowIndex, string IssueType, string? ColumnName, string? RawValue, long? Pk = null);
 public record QualityTypeCount(string IssueType, long Count);
 
 /// <summary>Stored quality report read model (docs/05: GET files/[id]/quality).</summary>
@@ -84,4 +84,11 @@ public record ReplaceLinkedSheetsDto(IReadOnlyList<string> SheetNames, int Natio
 /// match mode: national-id key when matched by national id, else Excel row.
 /// HeaderRaw is the system's (current) header name.</summary>
 public record KeepOldCellDto(int RowIndex, string HeaderRaw, string? MatchKey);
-public record ReplaceFileRequest(string OriginalFilename, string SheetName, int SheetIndex, int TotalRows, string? ColumnSignature, string Mode, IReadOnlyList<ReplaceColumnDto>? Columns, ReplaceLinkedSheetsDto? LinkedSheets, Guid? Token, IReadOnlyList<KeepOldCellDto>? KeepOldCells = null);
+/// <summary>Replace choice for rows deleted from the system but still present
+/// in the new workbook (resurrected pks) + rows present in the system but
+/// missing from the workbook (removed pks).
+/// KeepDeletedPks: resurrected/new-only pks to SKIP (keep deleted).
+///   Absent/empty = restore everything from the workbook.
+/// ConfirmRemovePks: old pks missing from the workbook that the user explicitly
+///   confirms to delete. The replace job refuses to delete unconfirmed pks.</summary>
+public record ReplaceFileRequest(string OriginalFilename, string SheetName, int SheetIndex, int TotalRows, string? ColumnSignature, string Mode, IReadOnlyList<ReplaceColumnDto>? Columns, ReplaceLinkedSheetsDto? LinkedSheets, Guid? Token, IReadOnlyList<KeepOldCellDto>? KeepOldCells = null, IReadOnlyList<long>? KeepDeletedPks = null, IReadOnlyList<long>? ConfirmRemovePks = null);

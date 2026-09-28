@@ -7,16 +7,20 @@ import { Card, CardContent } from "@/components/ui/card";
 import { LoadingScreen } from "@/components/loading-screen";
 import { PageHeader } from "@/components/page-header";
 import { ApiError } from "@/services/api-client";
+import { authService } from "@/services/auth.service";
 import { dashboardService } from "@/services/dashboard.service";
 import { groupsService } from "@/services/groups.service";
+import { useApiQuery } from "@/hooks/use-api-query";
+import { hasPermission } from "@/lib/permissions";
 import type { DashboardData, Group } from "@/types/model";
 
-/** احصائيات الملفات: إجماليات + كل مجموعة تفتح تفاصيلها. */
+/** احصائيات الملفات: إجماليات + كل مجموعة تفتح تفاصيلها. الدخول يتطلب stats.view. */
 export function FilesStatsPage() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { data: user } = useApiQuery(() => authService.me(), []);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +46,21 @@ export function FilesStatsPage() {
     { icon: FileSpreadsheet, label: "الملفات", value: dashboard?.fileCount ?? 0 },
     { icon: Rows3, label: "السجلات", value: dashboard?.recordCount ?? 0 },
   ];
+
+  if (user && !hasPermission(user.permissions, "stats.view")) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="الاحصائيات"
+          title="احصائيات الملفات"
+          description="انقر أي مجموعة لفتح ملفاتها وتفاصيلها."
+        />
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+          لا تملك صلاحية عرض قسم الاحصائيات.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

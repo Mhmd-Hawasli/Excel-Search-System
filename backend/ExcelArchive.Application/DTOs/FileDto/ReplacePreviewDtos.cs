@@ -17,6 +17,10 @@ public record ReplacePreviewNewColumn(
     int ColumnIndex,
     long FilledValues);
 
+public record ReplacePreviewResurrectedRow(
+    long Pk,
+    int RowIndex);
+
 public record ReplacePreviewChange(
     int RowIndex,
     string HeaderRaw,
@@ -63,4 +67,17 @@ public record ReplacePreviewResponse(
     // version take their own separate version at update time, so the update
     // lands on N+2 instead of N+1.
     int PendingEditCount = 0,
-    int NextVersion = 0);
+    int NextVersion = 0,
+    // Rows deleted from the system (hard delete) that still exist in the new
+    // workbook: pk < NextPk and missing from current rows. The UI must offer
+    // a choice per row (or bulk): restore it (re-add) or keep it deleted
+    // (skip it during the replace). Capped to MaxRowSample for payload size.
+    IReadOnlyList<ReplacePreviewResurrectedRow>? ResurrectedRows = null,
+    // Old pks present in the system but missing from the new workbook: the
+    // replace would delete them. The UI must ask for explicit confirmation
+    // before starting the job. Capped to MaxRowSample.
+    IReadOnlyList<long>? RemovedPks = null,
+    // Effective counts AFTER applying the requested KeepDeletedPks choice:
+    // how many resurrected rows will be restored vs kept deleted (skipped).
+    int ResurrectedCount = 0,
+    int KeptDeletedCount = 0);

@@ -26,7 +26,8 @@ public class BackupRepository(AppDbContext db) : IBackupRepository
         var logs = await db.ActivityLogs.AsNoTracking().OrderBy(a => a.CreatedAt).ToListAsync(ct);
         var edits = await db.RecordEdits.AsNoTracking().OrderBy(e => e.CreatedAt).ToListAsync(ct);
         var versions = await db.FileVersions.AsNoTracking().OrderBy(v => v.CreatedAt).ToListAsync(ct);
-        return new BackupSnapshot(groups, categories, files, columns, records, issues, templates, jobs, logs, edits, versions);
+        var exportTemplates = await db.ExportTemplates.AsNoTracking().OrderBy(t => t.CreatedAt).ToListAsync(ct);
+        return new BackupSnapshot(groups, categories, files, columns, records, issues, templates, jobs, logs, edits, versions, exportTemplates);
     }
 
     public async Task ReplaceArchiveAsync(ArchivePlan plan, CancellationToken ct = default)
@@ -39,6 +40,7 @@ public class BackupRepository(AppDbContext db) : IBackupRepository
                 db.Model.FindEntityType(typeof(UploadJob))!,
                 db.Model.FindEntityType(typeof(RecordEdit))!,
                 db.Model.FindEntityType(typeof(FileVersion))!,
+                db.Model.FindEntityType(typeof(ExportTemplate))!,
                 db.Model.FindEntityType(typeof(DataQualityIssue))!,
                 db.Model.FindEntityType(typeof(Record))!,
                 db.Model.FindEntityType(typeof(FileColumn))!,
@@ -74,6 +76,7 @@ public class BackupRepository(AppDbContext db) : IBackupRepository
         {
             // InMemory test provider: FK-ordered removals instead of TRUNCATE.
             db.FileVersions.RemoveRange(db.FileVersions);
+            db.ExportTemplates.RemoveRange(db.ExportTemplates);
             db.RecordEdits.RemoveRange(db.RecordEdits);
             db.DataQualityIssues.RemoveRange(db.DataQualityIssues);
             db.Records.RemoveRange(db.Records);
@@ -115,6 +118,7 @@ public class BackupRepository(AppDbContext db) : IBackupRepository
         if (plan.Jobs.Count > 0) await db.UploadJobs.AddRangeAsync(plan.Jobs, ct);
         if (plan.Edits.Count > 0) await db.RecordEdits.AddRangeAsync(plan.Edits, ct);
         if (plan.Versions.Count > 0) await db.FileVersions.AddRangeAsync(plan.Versions, ct);
+        if (plan.ExportTemplates.Count > 0) await db.ExportTemplates.AddRangeAsync(plan.ExportTemplates, ct);
         if (plan.Logs.Count > 0) await db.ActivityLogs.AddRangeAsync(plan.Logs, ct);
         await db.SaveChangesAsync(ct);
         // Reconcile archive-cascade effects explicitly so every provider

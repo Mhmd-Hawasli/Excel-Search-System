@@ -102,6 +102,16 @@ public static class DbSeeder
         await db.Database.ExecuteSqlRawAsync(
             "INSERT INTO file_versions (id, file_id, version, note, kind, created_at) SELECT gen_random_uuid(), f.id, gs.v, 'إصدار سابق محفوظ قبل تفعيل سجل الإصدارات.', 'seed', f.updated_at FROM files f CROSS JOIN LATERAL generate_series(2, f.version) AS gs(v) WHERE f.version >= 2 AND NOT EXISTS (SELECT 1 FROM file_versions v WHERE v.file_id = f.id AND v.version = gs.v)");
 
+        // Custom export templates: per-file saved column order/aliases for
+        // quick re-export (تصدير مخصص). Idempotent DDL for existing
+        // databases (EnsureCreated covers fresh installs).
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE TABLE IF NOT EXISTS export_templates (id uuid NOT NULL PRIMARY KEY, file_id uuid NOT NULL REFERENCES files (id) ON DELETE CASCADE, name text NOT NULL, columns jsonb NOT NULL, created_by text NULL, created_at timestamptz(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at timestamptz(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_export_templates_file_id_name ON export_templates (file_id, name)");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_export_templates_file_id ON export_templates (file_id)");
+
         // Install pg_trgm + trigram search indexes idempotently.
         // Required index/cache setup failure must be visible in readiness
         // (docs/04), not merely logged: seeder warns here, /health/ready must

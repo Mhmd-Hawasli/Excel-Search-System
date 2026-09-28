@@ -23,7 +23,9 @@ public sealed record UploadJobConfig(
     string? ReplaceMode,
     LinkedJobSheets? Linked,
     IReadOnlyList<KeepOldCell> KeepOldCells,
-    string? RequestedBy = null)
+    string? RequestedBy = null,
+    IReadOnlyList<long> KeepDeletedPks = null!,
+    IReadOnlyList<long> ConfirmRemovePks = null!)
 {
     public static UploadJobConfig Parse(JsonDocument payload)
     {
@@ -103,8 +105,37 @@ public sealed record UploadJobConfig(
                     requestedBy = v;
             }
 
+            var keepDeleted = new List<long>();
+            if (root.TryGetProperty("keepDeletedPks", out var kd) && kd.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var e in kd.EnumerateArray())
+                {
+                    if (e.ValueKind == JsonValueKind.Number && e.TryGetInt64(out var pk) && pk >= 1)
+                        keepDeleted.Add(pk);
+                    else if (e.ValueKind == JsonValueKind.String
+                        && long.TryParse(e.GetString(), System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture, out var spk) && spk >= 1)
+                        keepDeleted.Add(spk);
+                }
+            }
+
+            var confirmRemove = new List<long>();
+            if (root.TryGetProperty("confirmRemovePks", out var cr) && cr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var e in cr.EnumerateArray())
+                {
+                    if (e.ValueKind == JsonValueKind.Number && e.TryGetInt64(out var pk) && pk >= 1)
+                        confirmRemove.Add(pk);
+                    else if (e.ValueKind == JsonValueKind.String
+                        && long.TryParse(e.GetString(), System.Globalization.NumberStyles.None,
+                            System.Globalization.CultureInfo.InvariantCulture, out var spk) && spk >= 1)
+                        confirmRemove.Add(spk);
+                }
+            }
+
             return new UploadJobConfig(tokenGuid, groupId, name, description, original, sheet,
-                sheetIndex, total, columns, mode, fileId, replaceMode, linked, keepOld, requestedBy);
+                sheetIndex, total, columns, mode, fileId, replaceMode, linked, keepOld, requestedBy,
+                keepDeleted, confirmRemove);
         }
         catch (InvalidDataException) { throw; }
         catch { throw new InvalidDataException("إعدادات مهمة الرفع غير صالحة."); }

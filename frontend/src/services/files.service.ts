@@ -15,6 +15,7 @@ export interface QualityIssue {
   issueType: string;
   columnName: string | null;
   rawValue: string | null;
+  pk?: number | null;
 }
 
 export interface FileQuality {

@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<RecordEdit> RecordEdits => Set<RecordEdit>();
     public DbSet<MappingTemplate> MappingTemplates => Set<MappingTemplate>();
+    public DbSet<ExportTemplate> ExportTemplates => Set<ExportTemplate>();
     public DbSet<IgnoredConflict> IgnoredConflicts => Set<IgnoredConflict>();
     public DbSet<ConflictCacheState> ConflictCacheStates => Set<ConflictCacheState>();
     public DbSet<ConflictQueryCache> ConflictQueryCaches => Set<ConflictQueryCache>();
@@ -68,6 +69,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .Property(a => a.Details).HasColumnType("jsonb");
         modelBuilder.Entity<MappingTemplate>()
             .Property(t => t.Mapping).HasColumnType("jsonb");
+        modelBuilder.Entity<ExportTemplate>()
+            .Property(t => t.Columns).HasColumnType("jsonb");
 
         modelBuilder.Entity<Group>(e =>
         {
@@ -174,6 +177,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.GroupId, x.Name }).IsUnique();
             e.HasIndex(x => new { x.GroupId, x.HeaderSignature });
+        });
+
+        modelBuilder.Entity<ExportTemplate>(e =>
+        {
+            e.HasOne(x => x.File)
+                .WithMany(f => f.ExportTemplates)
+                .HasForeignKey(x => x.FileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.FileId, x.Name }).IsUnique();
+            e.HasIndex(x => x.FileId);
         });
 
         modelBuilder.Entity<IgnoredConflict>(e =>

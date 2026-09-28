@@ -36,7 +36,14 @@ public interface IRecordRepository : IRepositoryBase<Record>
     Task<IReadOnlyList<DuplicateScanRow>> ListDuplicateScanRowsAsync(Guid fileId,
         string? shamHeader, string? fullHeader, string? firstHeader, string? fatherHeader,
         string? lastHeader, string? motherHeader, CancellationToken ct = default);
+
+    // Narrow projection for quality-report pk display: row index + pk only
+    // (no jsonb), so issue rows can show the stable pk instead of RowIndex.
+    Task<IReadOnlyList<RowPkMap>> ListPkMapAsync(Guid fileId, CancellationToken ct = default);
 }
+
+/// <summary>Row index to stable pk mapping (no payload).</summary>
+public sealed record RowPkMap(int RowIndex, long? Pk);
 
 /// <summary>One row of raw values for duplicate-quality scanning.</summary>
 public sealed record DuplicateScanRow(int RowIndex, string Sham, string Full,

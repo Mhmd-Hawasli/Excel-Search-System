@@ -172,6 +172,11 @@ export interface ReplacePreviewSummary {
   formattingOnlyCells?: number;
 }
 
+export interface ReplacePreviewResurrectedRow {
+  pk: number;
+  rowIndex: number;
+}
+
 export interface ReplacePreview {
   identical: boolean;
   addedColumns: string[];
@@ -188,6 +193,10 @@ export interface ReplacePreview {
   newColumns: ReplacePreviewNewColumn[] | null;
   pendingEditCount: number;
   nextVersion: number;
+  resurrectedRows?: ReplacePreviewResurrectedRow[] | null;
+  removedPks?: number[] | null;
+  resurrectedCount?: number;
+  keptDeletedCount?: number;
 }
 
 export interface CategoryOption {

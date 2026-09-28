@@ -1,7 +1,8 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CircleCheck } from "lucide-react";
+import { ArrowRight, CircleCheck, FunnelX } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,17 @@ const labels: Record<string, string> = {
 
 export function FileQuality({ groupId, fileId }: { groupId: string; fileId: string }) {
   const { data, loading, error } = useApiQuery(() => filesService.quality(fileId, groupId), [fileId, groupId]);
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  const filteredIssues = useMemo(() => {
+    if (!data) return [];
+    if (!activeFilter) return data.issues;
+    return data.issues.filter((issue) => issue.issueType === activeFilter);
+  }, [data, activeFilter]);
+
+  function toggleFilter(issueType: string) {
+    setActiveFilter((current) => (current === issueType ? null : issueType));
+  }
 
   if (loading && !data) {
     return <LoadingScreen message="جارٍ تحميل تقرير الجودة…" />;
@@ -57,14 +69,37 @@ export function FileQuality({ groupId, fileId }: { groupId: string; fileId: stri
         description={`استُورد ${data.rowCount.toLocaleString("en-US")} سجل. الرقم الوطني الصحيح يتكون من 9 إلى 11 رقماً قبل تعبئة أصفار العرض. يُعد وجود محارف أو رقم من 8 أرقام أو أقل أو 12 رقماً أو أكثر مشكلة تكامل. القيم الأصلية محفوظة أدناه لتوضيح الخطأ.`}
       />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        {data.counts.map(({ issueType, count }) => (
-          <Card key={issueType}>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{labels[issueType] ?? issueType}</p>
-              <p className="mt-2 text-2xl font-black">{count.toLocaleString("en-US")}</p>
-            </CardContent>
-          </Card>
-        ))}
+        {data.counts.map(({ issueType, count }) => {
+          const active = activeFilter === issueType;
+          return (
+            <Card
+              key={issueType}
+              role="button"
+              tabIndex={0}
+              aria-pressed={active}
+              aria-label={`فلترة حسب: ${labels[issueType] ?? issueType}`}
+              title="اضغط للفلترة على هذا النوع"
+              onClick={() => toggleFilter(issueType)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleFilter(issueType);
+                }
+              }}
+              className={`cursor-pointer transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary ${
+                active ? "border-primary bg-primary/10 ring-2 ring-primary/40" : ""
+              }`}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{labels[issueType] ?? issueType}</p>
+                <p className="mt-2 text-2xl font-black">{count.toLocaleString("en-US")}</p>
+                {active ? (
+                  <p className="mt-1 text-xs font-bold text-primary">مفعّل — اضغط مجددًا للإلغاء</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
       {data.issues.length === 0 ? (
         <div className="rounded-xl border bg-primary/5 p-8 text-center">
@@ -74,22 +109,45 @@ export function FileQuality({ groupId, fileId }: { groupId: string; fileId: stri
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>تفاصيل المشكلات</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="ms-auto">تفاصيل المشكلات</CardTitle>
+              {activeFilter ? (
+                <>
+                  <Badge className="bg-primary/15 text-primary">
+                    {labels[activeFilter] ?? activeFilter} — {filteredIssues.length.toLocaleString("en-US")} من{" "}
+                    {data.issues.length.toLocaleString("en-US")}
+                  </Badge>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setActiveFilter(null)}>
+                    <FunnelX className="size-4" />
+                    إلغاء الفلتر
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  اضغط على أي مربع أعلاه للفلترة حسب النوع ({data.issues.length.toLocaleString("en-US")} مشكلة)
+                </p>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
+            {filteredIssues.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">
+                لا توجد مشكلات من نوع «{labels[activeFilter ?? ""] ?? activeFilter}».
+              </p>
+            ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted">
                 <tr>
-                  <th className="p-3 text-right">الصف</th>
+                  <th className="p-3 text-right">pk</th>
                   <th className="p-3 text-right">النوع</th>
                   <th className="p-3 text-right">العمود</th>
                   <th className="p-3 text-right">القيمة الأصلية</th>
                 </tr>
               </thead>
               <tbody>
-                {data.issues.map((issue, index) => (
+                {filteredIssues.map((issue, index) => (
                   <tr key={`${issue.rowIndex}-${issue.issueType}-${index}`} className="border-t">
-                    <td className="p-3">{issue.rowIndex}</td>
+                    <td className="p-3 text-right"><span className="ltr-numbers inline-block">{(issue.pk ?? issue.rowIndex).toLocaleString("en-US")}</span></td>
                     <td className="p-3">
                       <Badge variant="outline">{labels[issue.issueType] ?? issue.issueType}</Badge>
                     </td>
@@ -99,6 +157,7 @@ export function FileQuality({ groupId, fileId }: { groupId: string; fileId: stri
                 ))}
               </tbody>
             </table>
+            )}
           </CardContent>
         </Card>
       )}

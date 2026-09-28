@@ -32,15 +32,31 @@ const PARTS = [
   },
 ];
 
-/** قسم الاحصائيات: كل بطاقة تفتح احصائية جديدة. */
+/** قسم الاحصائيات: كل بطاقة تفتح احصائية جديدة. الدخول يتطلب stats.view،
+ * وكل بطاقة تظهر حسب صلاحية بياناتها الخاصة. */
 export function StatsOverview() {
   const { data: user } = useApiQuery(() => authService.me(), []);
   const permissions = user?.permissions ?? [];
+  const canViewStats = !user || hasPermission(permissions, "stats.view");
   const visible = PARTS.filter(({ permission }) =>
     permission === "groups.browse"
       ? canBrowseGroups(permissions)
       : hasPermission(permissions, permission),
   );
+  if (user && !canViewStats) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="مساحة العمل"
+          title="الاحصائيات"
+          description="اختر جزءًا لفتح احصائيته التفصيلية."
+        />
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm font-semibold text-destructive">
+          لا تملك صلاحية عرض قسم الاحصائيات.
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <PageHeader

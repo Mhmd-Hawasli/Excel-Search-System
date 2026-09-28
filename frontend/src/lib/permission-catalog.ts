@@ -53,6 +53,21 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    key: "customExport",
+    label: "التصدير المخصص",
+    permissions: [
+      { key: "customExport.view", label: "إظهار قسم التصدير المخصص" },
+      { key: "customExport.run", label: "حفظ قوالب التصدير المخصص والتصدير بها" },
+    ],
+  },
+  {
+    key: "stats",
+    label: "الاحصائيات",
+    permissions: [
+      { key: "stats.view", label: "إظهار قسم الاحصائيات" },
+    ],
+  },
+  {
     key: "edits",
     label: "التعديلات",
     permissions: [

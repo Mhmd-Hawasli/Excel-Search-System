@@ -164,10 +164,15 @@ public class UploadJobProcessor(
         var existingKeys = replace is null ? new HashSet<long>()
             : (await uow.Records.ListExportRowsAsync(replace.Id, ct))
                 .Select(r => r.Pk ?? r.RowIndex).ToHashSet();
+        // User choice for resurrected rows (deleted from system, still in the
+        // workbook): skip pks the user chose to keep deleted, restore the rest.
+        // KeepDeleted may also cover brand-new pks (skip any Excel-only row).
+        var keepDeletedSet = new HashSet<long>(config.KeepDeletedPks ?? []);
+        var confirmRemoveSet = new HashSet<long>(config.ConfirmRemovePks ?? []);
         var seenPk = new HashSet<long>();
         var nextPk = replace is null ? 1L
             : Math.Max(replace.NextPk, existingKeys.Count == 0 ? 1 : existingKeys.Max() + 1);
-        var minimumNewPk = nextPk;
+        var skippedDeleted = 0;
         var batch = new List<Record>(BatchSize);
         var issues = new List<DataQualityIssue>();
         var processed = 0;
@@ -188,10 +193,16 @@ public class UploadJobProcessor(
                 if (!long.TryParse(rawPk, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var parsedPk)
                     || parsedPk < 1 || parsedPk == long.MaxValue)
                     throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk مطلوب ويجب أن يكون عددًا صحيحًا موجبًا.");
-                if (replace is not null && !existingKeys.Contains(parsedPk) && parsedPk < minimumNewPk)
-                    throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk جديد أصغر من التسلسل التالي المسموح ({minimumNewPk}).");
                 if (!seenPk.Add(parsedPk))
                     throw new InvalidDataException($"الصف {row.RowIndex}: مفتاح pk مكرر داخل الملف.");
+                // Excel-only pk (resurrected deleted or brand-new): skip when the
+                // user chose "keep deleted / ignore". No minimum-pk error anymore;
+                // restoring a deleted pk (< NextPk) is explicitly allowed.
+                if (replace is not null && !existingKeys.Contains(parsedPk) && keepDeletedSet.Contains(parsedPk))
+                {
+                    skippedDeleted++;
+                    continue;
+                }
                 nextPk = Math.Max(nextPk, parsedPk + 1);
                 data[pkHeader] = parsedPk.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 pk = parsedPk;
@@ -219,7 +230,17 @@ public class UploadJobProcessor(
             }
         }
         if (targetHasPk && existingKeys.Except(seenPk).Any())
-            throw new InvalidDataException("لا يجوز حذف أو تغيير مفتاح pk قديم عند تحديث الملف؛ أعد جميع المفاتيح الأصلية.");
+        {
+            var removed = existingKeys.Except(seenPk).OrderBy(p => p).ToList();
+            var unconfirmed = removed.Where(p => !confirmRemoveSet.Contains(p)).ToList();
+            if (unconfirmed.Count > 0)
+            {
+                var sample = string.Join("، ", unconfirmed.Take(10));
+                throw new InvalidDataException(
+                    $"الملف الجديد يفتقد {unconfirmed.Count} مفتاح pk موجود في النظام (مثال: {sample}). " +
+                    "أكّد حذف هذه الصفوف من النظام أو أعدها إلى ملف Excel قبل المتابعة.");
+            }
+        }
         await FlushAsync(jobId, batch, issues, processed, ct);
 
         await uow.ExecuteInTransactionAsync(async () =>
@@ -530,7 +551,7 @@ public class UploadJobProcessor(
                 });
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileUpdated, target.Name,
-                    new { fileId = target.Id, version = target.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
+                    new { fileId = target.Id, version = target.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows = replace.RowCount, newRows = tempRowCount, keptOldCells = config.KeepOldCells.Count, keepDeletedPks = (config.KeepDeletedPks ?? []).Count, confirmRemovePks = (config.ConfirmRemovePks ?? []).Count, bulkEditCount = auditEdits.Count }, ct);
             }
             else
             {
@@ -582,7 +603,7 @@ public class UploadJobProcessor(
                 });
                 await uow.SaveChangesAsync(ct);
                 await activity.WriteAsync(ActivityAction.FileReplaced, target.Name,
-                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows, newRows = newRowsCount, keptOldCells = config.KeepOldCells.Count, bulkEditCount = auditEdits.Count }, ct);
+                    new { previousFileId = target.Id, fileId = temporary.Id, version = temporary.Version, previousVersion = replace.Version, manualVersion = pendingManualCount > 0 ? manualVersion : (int?)null, archivedManualEdits = pendingManualCount, previousRows, newRows = newRowsCount, keptOldCells = config.KeepOldCells.Count, keepDeletedPks = (config.KeepDeletedPks ?? []).Count, confirmRemovePks = (config.ConfirmRemovePks ?? []).Count, bulkEditCount = auditEdits.Count }, ct);
             }
         }, ct);
     }

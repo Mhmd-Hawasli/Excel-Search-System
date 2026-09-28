@@ -76,6 +76,13 @@ export function FileUpdateWizard({
   // Per-cell choices: which changed cells keep their OLD value instead of the
   // new one. Default (absent from the map) is always the NEW value.
   const [overrides, setOverrides] = useState<Map<string, ReplacePreviewChange>>(new Map());
+  // Resurrected rows: pks deleted from the system but still present in the new
+  // workbook. Default (empty set) = restore everything. Adding a pk to the set
+  // means "keep it deleted" (skip it during the replace).
+  const [keepDeleted, setKeepDeleted] = useState<Set<number>>(new Set());
+  // Removed rows: old pks missing from the workbook. The replace deletes them,
+  // so the user must explicitly confirm before starting.
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   function overrideKey(row: Pick<ReplacePreviewChange, "rowIndex" | "headerRaw">) {
     return JSON.stringify([row.rowIndex, row.headerRaw]);
@@ -115,22 +122,47 @@ export function FileUpdateWizard({
     setFilterText("");
     setPage(1);
     setOverrides(new Map());
+    setKeepDeleted(new Set());
+    setConfirmRemove(false);
     autoPreviewKey.current = null;
     if (!next) {
       setColumns([]);
       return;
     }
-    setColumns(
-      ensureUniqueStandardFields(
-        next.columns.map((column) => {
+    // دمج الربط القديم أولاً (بالاسم المطبّع)، ثم إزالة تكرار تعطي الأولوية
+    // للروابط الموروثة على اقتراحات المحرك: اقتراح يصطدم بحقل مربوط مسبقًا
+    // (مثل "الفئة العمرية" المقترح لها الفئة الوظيفية بينما عمود آخر يحملها
+    // فعلاً) يُرفض ويبقى الرابط السابق — لا تنكسر الرابطة عند التحديث.
+    const merged = next.columns.map((column) => {
+      const old = existingColumns.find(
+        (item) => item.headerNormalized === column.headerNormalized,
+      );
+      return {
+        ...column,
+        standardField: column.headerRaw.toLowerCase() === "pk" ? null : old?.standardField ?? column.suggestedField,
+        categoryId: column.headerRaw.toLowerCase() === "pk" ? null : old?.categoryId ?? null,
+      };
+    });
+    const inherited = new Set(
+      merged
+        .map((column) => {
           const old = existingColumns.find(
             (item) => item.headerNormalized === column.headerNormalized,
           );
-          return {
-            ...column,
-            standardField: column.headerRaw.toLowerCase() === "pk" ? null : old?.standardField ?? column.suggestedField,
-            categoryId: column.headerRaw.toLowerCase() === "pk" ? null : old?.categoryId ?? null,
-          };
+          return old?.standardField ?? null;
+        })
+        .filter((field): field is StandardFieldKey => field != null),
+    );
+    setColumns(
+      ensureUniqueStandardFields(
+        merged.map((column) => {
+          const old = existingColumns.find(
+            (item) => item.headerNormalized === column.headerNormalized,
+          );
+          if (!old?.standardField && column.standardField && inherited.has(column.standardField)) {
+            return { ...column, standardField: null };
+          }
+          return column;
         }),
         next.linkedSheets?.nationalIdColumnIndex,
       ),
@@ -211,6 +243,14 @@ export function FileUpdateWizard({
               matchKey: row.matchKey,
             }))
           : undefined,
+      // Resurrected rows choice: pks to SKIP (keep deleted). Empty = restore all.
+      keepDeletedPks: keepDeleted.size > 0 ? [...keepDeleted] : undefined,
+      // Removed rows confirmation: the replace deletes old pks missing from the
+      // workbook, so the user must explicitly confirm with the full pk list.
+      confirmRemovePks:
+        confirmRemove && (preview?.removedPks?.length ?? 0) > 0
+          ? preview?.removedPks
+          : undefined,
       columns: columns.map(
         ({ headerRaw, headerNormalized, columnIndex, standardField, categoryId }) => ({
           headerRaw,
@@ -258,6 +298,22 @@ export function FileUpdateWizard({
       setPreview(result);
       setPage(1);
       setOverrides(new Map());
+      // Prune stale keep-deleted choices when the file changed: keep only pks
+      // still reported as resurrected.
+      const valid = new Set((result.resurrectedRows ?? []).map((r) => r.pk));
+      setKeepDeleted((current) => {
+        if (current.size === 0) return current;
+        const next = new Set<number>();
+        current.forEach((pk) => {
+          if (valid.has(pk)) next.add(pk);
+        });
+        return next;
+      });
+      if ((result.resurrectedRows?.length ?? 0) > 0 || (result.resurrectedCount ?? 0) > 0) {
+        toast.info(
+          `يوجد ${(result.resurrectedCount ?? result.resurrectedRows?.length ?? 0).toLocaleString("en-US")} صف محذوف من النظام وما زال في ملف الإكسل — اختر below: إرجاعه أو إبقاؤه محذوفًا.`,
+        );
+      }
       if ((result.summary?.changedCells ?? 0) === 0) {
         const shaping = result.summary?.formattingOnlyCells ?? 0;
         toast.success(
@@ -288,6 +344,12 @@ export function FileUpdateWizard({
   async function start() {
     const body = buildReplaceBody();
     if (!body || !sheet) return;
+    const removedCount = preview?.summary?.removedRows ?? 0;
+    const removedPksCount = preview?.removedPks?.length ?? 0;
+    if ((removedCount > 0 || removedPksCount > 0) && !confirmRemove) {
+      toast.error("الملف الجديد يفتقد صفوفًا موجودة في النظام — أكّد حذفها من النظام قبل بدء الاستبدال، أو أعدها إلى ملف الإكسل.");
+      return;
+    }
     setBusy(true);
     try {
       const { jobId } = await uploadService.replace(fileId, body);
@@ -622,6 +684,166 @@ export function FileUpdateWizard({
                         <p className="mt-1 text-xl font-black">{preview.summary.unchangedRows.toLocaleString("en-US")}</p>
                       </div>
                     </div>
+
+                    {(preview.resurrectedRows?.length ?? 0) > 0 || (preview.resurrectedCount ?? 0) > 0 ? (
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 text-sm">
+                        <p className="font-bold">
+                          صفوف محذوفة من النظام وما زالت في ملف الإكسل (
+                          {(preview.resurrectedCount ?? preview.resurrectedRows?.length ?? 0).toLocaleString("en-US")}):
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          حذفت هذه الصفوف من النظام سابقًا لكنها ما زالت موجودة في الملف الجديد.
+                          اختر لكل صف: <span className="font-bold">إرجاعه</span> (يُعاد إضافته للنظام)
+                          أو <span className="font-bold">إبقاؤه محذوفًا</span> (يُتجاهل عند الاستبدال).
+                          الافتراضي هو الإرجاع.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setKeepDeleted(new Set());
+                              toast.success("سيُعاد إضافة كل الصفوف المحذوفة.");
+                            }}
+                          >
+                            إرجاع الكل ({((preview.resurrectedRows ?? []).length).toLocaleString("en-US")})
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setKeepDeleted(new Set((preview.resurrectedRows ?? []).map((r) => r.pk)));
+                              toast.success("ستبقى كل الصفوف المحذوفة محذوفة (تُتجاهل عند الاستبدال).");
+                            }}
+                          >
+                            إبقاء الكل محذوفًا
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void runPreview()}
+                            disabled={previewBusy}
+                          >
+                            {previewBusy ? (
+                              <LoaderCircle className="size-4 animate-spin" />
+                            ) : (
+                              <Eye className="size-4" />
+                            )}
+                            معاينة مع الاختيار ({keepDeleted.size.toLocaleString("en-US")} مستثنى)
+                          </Button>
+                        </div>
+                        <div className="mt-2 max-h-48 overflow-auto rounded-lg border bg-background">
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted">
+                              <tr>
+                                <th className="p-2 text-right">pk</th>
+                                <th className="p-2 text-right">صف الإكسل</th>
+                                <th className="p-2 text-right">الاختيار</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(preview.resurrectedRows ?? []).slice(0, 200).map((row) => {
+                                const kept = keepDeleted.has(row.pk);
+                                return (
+                                  <tr key={row.pk} className="border-t">
+                                    <td className="p-2 font-bold">{row.pk.toLocaleString("en-US")}</td>
+                                    <td className="p-2">{row.rowIndex.toLocaleString("en-US")}</td>
+                                    <td className="p-2">
+                                      <div
+                                        role="group"
+                                        aria-label={`اختيار الصف المحذوف pk ${row.pk}`}
+                                        className="flex w-fit overflow-hidden rounded-md border text-xs font-bold"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setKeepDeleted((current) => {
+                                              const next = new Set(current);
+                                              next.delete(row.pk);
+                                              return next;
+                                            })
+                                          }
+                                          aria-pressed={!kept}
+                                          className={
+                                            !kept
+                                              ? "bg-primary px-2.5 py-1.5 text-primary-foreground"
+                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                          }
+                                        >
+                                          إرجاعه
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setKeepDeleted((current) => {
+                                              const next = new Set(current);
+                                              next.add(row.pk);
+                                              return next;
+                                            })
+                                          }
+                                          aria-pressed={kept}
+                                          className={
+                                            kept
+                                              ? "bg-amber-500 px-2.5 py-1.5 text-white"
+                                              : "px-2.5 py-1.5 text-muted-foreground hover:bg-muted"
+                                          }
+                                        >
+                                          إبقاؤه محذوفًا
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        {(preview.resurrectedRows ?? []).length < (preview.resurrectedCount ?? 0) ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            يُعرض {(preview.resurrectedRows ?? []).length.toLocaleString("en-US")} من{" "}
+                            {(preview.resurrectedCount ?? 0).toLocaleString("en-US")} — استخدم زرّي الإرجاع/الإبقاء الشاملين للبقية.
+                          </p>
+                        ) : null}
+                        {keepDeleted.size > 0 ? (
+                          <p className="mt-2 text-xs font-bold text-amber-700 dark:text-amber-300">
+                            {keepDeleted.size.toLocaleString("en-US")} صف سيبقى محذوفًا ويُتجاهل عند الاستبدال.
+                            أعد المعاينة لرؤية الأعداد النهائية قبل التأكيد.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {(preview.removedPks?.length ?? 0) > 0 || (preview.summary?.removedRows ?? 0) > 0 ? (
+                      <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                        <p className="font-bold text-destructive">
+                          صفوف موجودة في النظام ومفقودة من ملف الإكسل (
+                          {(preview.summary?.removedRows ?? preview.removedPks?.length ?? 0).toLocaleString("en-US")}):
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          الاستبدال سيحذف هذه الصفوف من النظام نهائيًا.
+                          {(preview.removedPks ?? []).length > 0
+                            ? ` مفاتيح pk (مثال): ${(preview.removedPks ?? []).slice(0, 10).map((p) => p.toLocaleString("en-US")).join("، ")}${(preview.removedPks ?? []).length > 10 ? "…" : ""}.`
+                            : ""}
+                        </p>
+                        <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-bold">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-destructive"
+                            checked={confirmRemove}
+                            onChange={(e) => setConfirmRemove(e.target.checked)}
+                          />
+                          أؤكد حذف هذه الصفوف من النظام ({(preview.summary?.removedRows ?? 0).toLocaleString("en-US")} صف)
+                        </label>
+                        {!confirmRemove ? (
+                          <p className="mt-1 text-xs text-destructive">
+                            لن يبدأ الاستبدال قبل التأكيد، أو أعد الصفوف الناقصة إلى ملف الإكسل.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     {preview.summary.manualOverwriteCount > 0 ? (
                       <div className="flex gap-2 rounded-xl border border-amber-400/60 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
@@ -1013,6 +1235,18 @@ export function FileUpdateWizard({
                     ? `سيُحذف ${currentRows.toLocaleString("en-US")} صف حالي ويُستبدل بـ ${sheet.rowCount.toLocaleString("en-US")} صف جديد بعد نجاح الاستيراد، ويصبح الملف الإصدار ${preview ? preview.nextVersion || preview.currentVersion + 1 : "الجديد"}. كل الخلايا المتغيرة (${preview?.summary?.changedCells.toLocaleString("en-US") ?? "—"}) ستُحفظ في سجل التعديلات تحت هذا الإصدار الجديد، وتعديلاتك اليدوية السابقة تُحفظ مؤرشفة ولا تُمسح.${(preview && (preview.pendingEditCount ?? 0) > 0) ? ` تنبيه: تعديلاتك اليدوية (${preview.pendingEditCount}) ستُحفظ في إصدار منفصل (${preview.currentVersion + 1}).` : ""}${
                         overrides.size > 0
                           ? ` وسيُحتفظ بـ ${overrides.size.toLocaleString("en-US")} خلية بقيمها القديمة حسب اختيارك أعلاه.`
+                          : ""
+                      }${
+                        (preview?.resurrectedCount ?? 0) > 0
+                          ? keepDeleted.size > 0
+                            ? ` وسيبقى ${keepDeleted.size.toLocaleString("en-US")} صف محذوف محذوفًا (يُتجاهل)، وسيُعاد إضافة ${((preview?.resurrectedCount ?? 0) - keepDeleted.size).toLocaleString("en-US")} صف.`
+                            : ` وسيُعاد إضافة ${(preview?.resurrectedCount ?? 0).toLocaleString("en-US")} صف محذوف من النظام.`
+                          : ""
+                      }${
+                        (preview?.summary?.removedRows ?? 0) > 0
+                          ? confirmRemove
+                            ? ` وسيُحذف ${(preview?.summary?.removedRows ?? 0).toLocaleString("en-US")} صف مفقود من الإكسل من النظام (مؤكد).`
+                            : ` تنبيه: ${(preview?.summary?.removedRows ?? 0).toLocaleString("en-US")} صف مفقود من الإكسل سيُحذف من النظام — يجب التأكيد أعلاه قبل البدء.`
                           : ""
                       }`
                     : `سيُستورد إصدار بديل من ${sheet.rowCount.toLocaleString("en-US")} صف بدل ${currentRows.toLocaleString("en-US")} صف حالي. بعد نجاحه فقط، سيُحذف الملف القديم ويصبح الإصدار ${preview ? preview.nextVersion || preview.currentVersion + 1 : "الجديد"}.${preview?.summary ? ` الأعمدة المشتركة: ${preview.summary.changedCells.toLocaleString("en-US")} خلية متغيرة في ${preview.summary.changedRows.toLocaleString("en-US")} صف (قديم مقابل جديد كما في المعاينة أعلاه)، و${preview.summary.addedRows.toLocaleString("en-US")} صف مضاف و${preview.summary.removedRows.toLocaleString("en-US")} صف محذوف.` : ""}${preview?.removedColumns?.length ? ` الأعمدة المفقودة نهائيًا (${preview.removedColumns.length}): ${preview.removedColumns.join("، ")}.` : ""}${preview?.addedColumns?.length ? ` الأعمدة الجديدة: ${preview.addedColumns.join("، ")}.` : ""} تعديلاتك اليدوية السابقة تُحفظ مؤرشفة في سجل التعديلات ولا تُمسح.`}

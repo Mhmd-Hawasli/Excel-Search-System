@@ -21,6 +21,7 @@ public sealed class UnitOfWork(
     IRecordEditRepository recordEdits,
     IDataQualityRepository dataQuality,
     IMappingTemplateRepository mappingTemplates,
+    IExportTemplateRepository exportTemplates,
     IFileVersionRepository fileVersions) : IUnitOfWork
 {
     public IUserRepository Users => users;
@@ -34,6 +35,7 @@ public sealed class UnitOfWork(
     public IRecordEditRepository RecordEdits => recordEdits;
     public IDataQualityRepository DataQuality => dataQuality;
     public IMappingTemplateRepository MappingTemplates => mappingTemplates;
+    public IExportTemplateRepository ExportTemplates => exportTemplates;
     public IFileVersionRepository FileVersions => fileVersions;
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
